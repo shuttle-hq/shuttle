@@ -86,6 +86,8 @@ mod needs_docker {
             let logs = client
                 .get_logs(Request::new(LogsRequest {
                     deployment_id: deployment_id.into(),
+                    head: None,
+                    tail: None,
                 }))
                 .await
                 .unwrap()
@@ -156,6 +158,8 @@ mod needs_docker {
             let mut response = client
                 .get_logs_stream(Request::new(LogsRequest {
                     deployment_id: deployment_id.into(),
+                    head: None,
+                    tail: None,
                 }))
                 .await
                 .unwrap()

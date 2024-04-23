@@ -40,6 +40,7 @@ use shuttle_common::{
         SHUTTLE_INSTALL_DOCS_URL, SHUTTLE_LOGIN_URL, STORAGE_DIRNAME, TEMPLATES_SCHEMA_VERSION,
     },
     deployment::{DEPLOYER_END_MESSAGES_BAD, DEPLOYER_END_MESSAGES_GOOD},
+    log::LogsRange,
     models::{
         deployment::{
             get_deployments_table, DeploymentRequest, CREATE_SERVICE_BODY_LIMIT,
@@ -839,7 +840,7 @@ impl Shuttle {
         let client = self.client.as_ref().unwrap();
         let mut stream = client
             // TODO: use something else than a fake Uuid
-            .get_logs_ws(self.ctx.project_name(), &Uuid::new_v4())
+            .get_logs_ws(self.ctx.project_name(), &Uuid::new_v4(), LogsRange::All)
             .await
             .map_err(|err| {
                 suggestions::logs::get_logs_failure(err, "Connecting to the logs stream failed")
@@ -868,6 +869,12 @@ impl Shuttle {
     }
 
     async fn logs(&self, args: LogsArgs) -> Result<CommandOutcome> {
+        let range = match (args.head, args.tail, args.all) {
+            (Some(num), _, _) => LogsRange::Head(num),
+            (_, Some(num), _) => LogsRange::Tail(num),
+            (_, _, true) => LogsRange::All,
+            _ => LogsRange::Tail(1000),
+        };
         let client = self.client.as_ref().unwrap();
         let id = if let Some(id) = args.id {
             id
@@ -903,7 +910,7 @@ impl Shuttle {
 
         if args.follow {
             let mut stream = client
-                .get_logs_ws(self.ctx.project_name(), &id)
+                .get_logs_ws(self.ctx.project_name(), &id, range)
                 .await
                 .map_err(|err| {
                     suggestions::logs::get_logs_failure(err, "Connecting to the logs stream failed")
@@ -935,7 +942,7 @@ impl Shuttle {
             }
         } else {
             let logs = client
-                .get_logs(self.ctx.project_name(), &id)
+                .get_logs(self.ctx.project_name(), &id, range)
                 .await
                 .map_err(|err| {
                     suggestions::logs::get_logs_failure(err, "Fetching the deployment failed")
@@ -1819,7 +1826,7 @@ impl Shuttle {
             .map_err(suggestions::deploy::deploy_request_failure)?;
 
         let mut stream = client
-            .get_logs_ws(self.ctx.project_name(), &deployment.id)
+            .get_logs_ws(self.ctx.project_name(), &deployment.id, LogsRange::All)
             .await
             .map_err(|err| {
                 suggestions::deploy::deployment_setup_failure(
@@ -1939,7 +1946,7 @@ impl Shuttle {
                 // the terminal isn't completely spammed
                 sleep(Duration::from_millis(100)).await;
                 stream = client
-                    .get_logs_ws(self.ctx.project_name(), &deployment.id)
+                    .get_logs_ws(self.ctx.project_name(), &deployment.id, LogsRange::All)
                     .await
                     .map_err(|err| {
                         suggestions::deploy::deployment_setup_failure(
@@ -2091,7 +2098,28 @@ impl Shuttle {
         })?;
         let projects_table = project::get_projects_table(&projects, raw);
 
+        println!("{}", "Personal Projects".bold());
         println!("{projects_table}");
+
+        let orgs = client.get_organizations_list().await?;
+
+        for org in orgs {
+            let org_projects = client
+                .get_organization_projects_list(&org.id)
+                .await
+                .map_err(|err| {
+                    suggestions::project::project_request_failure(
+                        err,
+                        "Getting organization projects list failed",
+                        false,
+                        "getting the organization projects list fails repeatedly",
+                    )
+                })?;
+            let org_projects_table = project::get_projects_table(&org_projects, raw);
+
+            println!("{}", format!("{}'s Projects", org.display_name).bold());
+            println!("{org_projects_table}");
+        }
 
         Ok(CommandOutcome::Ok)
     }

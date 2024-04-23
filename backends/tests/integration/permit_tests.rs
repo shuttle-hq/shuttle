@@ -8,7 +8,7 @@ mod needs_docker {
     };
     use serial_test::serial;
     use shuttle_backends::client::{
-        permit::{Client, Error, Organization, ResponseContent},
+        permit::{Client, Error, Organization, Owner, ResponseContent},
         PermissionsDal,
     };
     use shuttle_common::{claims::AccountTier, models::organization};
@@ -171,31 +171,31 @@ mod needs_docker {
         const SLEEP: u64 = 500;
 
         tokio::time::sleep(tokio::time::Duration::from_millis(SLEEP)).await;
-        let p1 = client.get_user_projects(u1).await.unwrap();
+        let p1 = client.get_personal_projects(u1).await.unwrap();
 
         assert!(p1.is_empty());
 
         client.create_project(u1, "proj1").await.unwrap();
         tokio::time::sleep(tokio::time::Duration::from_millis(SLEEP)).await;
-        let p1 = client.get_user_projects(u1).await.unwrap();
+        let p1 = client.get_personal_projects(u1).await.unwrap();
 
         assert_eq!(p1.len(), 1);
-        assert_eq!(p1[0].resource.as_ref().unwrap().key, "proj1");
+        assert_eq!(p1[0], "proj1");
 
         client.create_project(u1, "proj2").await.unwrap();
         tokio::time::sleep(tokio::time::Duration::from_millis(SLEEP)).await;
-        let p1 = client.get_user_projects(u1).await.unwrap();
+        let p1 = client.get_personal_projects(u1).await.unwrap();
 
         assert_eq!(p1.len(), 2);
 
         client.delete_project("proj1").await.unwrap();
         tokio::time::sleep(tokio::time::Duration::from_millis(SLEEP)).await;
-        let p1 = client.get_user_projects(u1).await.unwrap();
+        let p1 = client.get_personal_projects(u1).await.unwrap();
 
         assert_eq!(p1.len(), 1);
-        assert_eq!(p1[0].resource.as_ref().unwrap().key, "proj2");
+        assert_eq!(p1[0], "proj2");
 
-        let p2 = client.get_user_projects(u2).await.unwrap();
+        let p2 = client.get_personal_projects(u2).await.unwrap();
 
         assert!(p2.is_empty());
     }
@@ -240,6 +240,17 @@ mod needs_docker {
             }]
         );
 
+        let o = client.get_organization(u1, "org_123").await.unwrap();
+
+        assert_eq!(
+            o,
+            organization::Response {
+                id: "org_123".to_string(),
+                display_name: "Test organization".to_string(),
+                is_admin: true,
+            }
+        );
+
         let err = client
             .create_organization(
                 u1,
@@ -257,20 +268,25 @@ mod needs_docker {
 
         client.create_project(u1, "proj-o-1").await.unwrap();
         tokio::time::sleep(tokio::time::Duration::from_millis(SLEEP)).await;
-        let p1 = client.get_user_projects(u1).await.unwrap();
+        let p1 = client.get_personal_projects(u1).await.unwrap();
 
         assert_eq!(p1.len(), 1);
-        assert_eq!(p1[0].resource.as_ref().unwrap().key, "proj-o-1");
+        assert_eq!(p1[0], "proj-o-1");
+
+        let own = client.get_project_owner(u1, "proj-o-1").await.unwrap();
+        assert_eq!(own, Owner::User(u1.to_string()));
 
         client
             .transfer_project_to_org(u1, "proj-o-1", "org_123")
             .await
             .unwrap();
         tokio::time::sleep(tokio::time::Duration::from_millis(SLEEP)).await;
-        let p1 = client.get_user_projects(u1).await.unwrap();
+        let p1 = client.get_personal_projects(u1).await.unwrap();
 
-        assert_eq!(p1.len(), 1);
-        assert_eq!(p1[0].resource.as_ref().unwrap().key, "proj-o-1");
+        assert_eq!(p1.len(), 0);
+
+        let own = client.get_project_owner(u1, "proj-o-1").await.unwrap();
+        assert_eq!(own, Owner::Organization("org_123".to_string()));
 
         let err = client
             .get_organization_projects(u2, "org_123")
@@ -289,10 +305,10 @@ mod needs_docker {
 
         client.create_project(u2, "proj-o-2").await.unwrap();
         tokio::time::sleep(tokio::time::Duration::from_millis(SLEEP)).await;
-        let p2 = client.get_user_projects(u2).await.unwrap();
+        let p2 = client.get_personal_projects(u2).await.unwrap();
 
         assert_eq!(p2.len(), 1);
-        assert_eq!(p2[0].resource.as_ref().unwrap().key, "proj-o-2");
+        assert_eq!(p2[0], "proj-o-2");
 
         let err = client
             .transfer_project_to_org(u2, "proj-o-2", "org_123")
@@ -332,10 +348,13 @@ mod needs_docker {
             .await
             .unwrap();
         tokio::time::sleep(tokio::time::Duration::from_millis(SLEEP)).await;
-        let p1 = client.get_user_projects(u1).await.unwrap();
+        let p1 = client.get_personal_projects(u1).await.unwrap();
 
         assert_eq!(p1.len(), 1);
-        assert_eq!(p1[0].resource.as_ref().unwrap().key, "proj-o-1");
+        assert_eq!(p1[0], "proj-o-1");
+
+        let own = client.get_project_owner(u1, "proj-o-1").await.unwrap();
+        assert_eq!(own, Owner::User(u1.to_string()));
 
         let err = client.delete_organization(u2, "org_123").await.unwrap_err();
         assert!(
@@ -441,11 +460,25 @@ mod needs_docker {
             }]
         );
 
+        let o = client.get_organization(u2, "org_345").await.unwrap();
+
+        assert_eq!(
+            o,
+            organization::Response {
+                id: "org_345".to_string(),
+                display_name: "Blazingly fast team".to_string(),
+                is_admin: false,
+            }
+        );
+
         let ps2 = client
             .get_organization_projects(u2, "org_345")
             .await
             .unwrap();
         assert_eq!(ps2, vec!["proj-om-1"]);
+
+        let own = client.get_project_owner(u2, "proj-om-1").await.unwrap();
+        assert_eq!(own, Owner::Organization("org_345".to_string()));
 
         let err = client
             .add_organization_member(u2, "org_345", u3)

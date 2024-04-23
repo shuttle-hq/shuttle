@@ -36,7 +36,7 @@ impl ProjectName {
 
         fn is_profanity_free(name: &str) -> bool {
             let (_censored, analysis) = Censor::from_str(name).censor_and_analyze();
-            !analysis.is(Type::SEVERE) // based on existing names, MODERATE_OR_HIGHER seems too strict
+            !analysis.is(Type::MODERATE_OR_HIGHER)
         }
 
         fn is_reserved(name: &str) -> bool {
@@ -118,7 +118,7 @@ mod tests {
             "another-valid-project-name",
             "x",
         ] {
-            assert!(ProjectName::is_valid(name));
+            assert!(ProjectName::is_valid(name), "'{}' should be valid", name);
         }
     }
 
@@ -151,7 +151,7 @@ mod tests {
             "shuttleapp",
             "",
         ] {
-            assert!(!ProjectName::is_valid(name));
+            assert!(!ProjectName::is_valid(name), "'{}' should be invalid", name);
         }
     }
 }

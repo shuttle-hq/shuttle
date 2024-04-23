@@ -45,8 +45,13 @@ where
         Self { dal, logs_tx }
     }
 
-    async fn get_logs(&self, deployment_id: String) -> Result<Vec<LogLine>, Error> {
-        let logs = self.dal.get_logs(deployment_id).await?;
+    async fn get_logs(
+        &self,
+        deployment_id: String,
+        head: Option<u32>,
+        tail: Option<u32>,
+    ) -> Result<Vec<LogLine>, Error> {
+        let logs = self.dal.get_logs(deployment_id, head, tail).await?;
 
         Ok(logs.into_iter().map(Into::into).collect())
     }
@@ -94,7 +99,9 @@ where
         request.verify(Scope::Logs)?;
 
         let request = request.into_inner();
-        let log_items = self.get_logs(request.deployment_id).await?;
+        let log_items = self
+            .get_logs(request.deployment_id, request.head, request.tail)
+            .await?;
         let result = LogsResponse { log_items };
 
         Ok(Response::new(result))
@@ -111,11 +118,15 @@ where
 
         // Subscribe as soon as possible
         let mut logs_rx = self.logs_tx.subscribe();
-        let LogsRequest { deployment_id } = request.into_inner();
+        let LogsRequest {
+            deployment_id,
+            head,
+            tail,
+        } = request.into_inner();
         let (tx, rx) = mpsc::channel(1);
 
         // Get logs before stream was started
-        let logs = self.get_logs(deployment_id.clone()).await?;
+        let logs = self.get_logs(deployment_id.clone(), head, tail).await?;
 
         tokio::spawn(async move {
             let mut last = Default::default();

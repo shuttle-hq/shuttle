@@ -270,7 +270,7 @@ pub fn deployments_table_beta(
 }
 
 pub fn get_deployments_table(
-    deployments: &Vec<Response>,
+    deployments: &[Response],
     service_name: &str,
     page: u32,
     raw: bool,

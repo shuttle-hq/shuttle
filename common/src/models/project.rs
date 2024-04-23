@@ -17,6 +17,9 @@ pub struct Response {
     pub name: String,
     pub state: State,
     pub idle_minutes: Option<u64>,
+    #[serde(flatten)]
+    pub owner: Owner,
+    pub is_admin: bool,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, EnumString)]
@@ -164,7 +167,14 @@ pub struct Config {
     pub idle_minutes: u64,
 }
 
-pub fn get_projects_table(projects: &Vec<Response>, raw: bool) -> String {
+#[derive(Clone, Deserialize, Serialize, Debug, PartialEq)]
+#[serde(tag = "owner_type", content = "owner_id", rename_all = "lowercase")]
+pub enum Owner {
+    User(String),
+    Organization(String),
+}
+
+pub fn get_projects_table(projects: &[Response], raw: bool) -> String {
     if projects.is_empty() {
         let mut s = "No projects are linked to this account\n".to_string();
         if !raw {

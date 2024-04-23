@@ -82,11 +82,11 @@ impl From<InvalidProjectName> for ApiError {
 }
 
 #[derive(Debug, Clone, PartialEq, Error)]
-#[error("Invalid organization name. Must not be more than 30 characters long.")]
-pub struct InvalidOrganizationName;
+#[error("Invalid team name. Must not be more than 30 characters long.")]
+pub struct InvalidTeamName;
 
-impl From<InvalidOrganizationName> for ApiError {
-    fn from(err: InvalidOrganizationName) -> Self {
+impl From<InvalidTeamName> for ApiError {
+    fn from(err: InvalidTeamName) -> Self {
         Self::bad_request(err)
     }
 }

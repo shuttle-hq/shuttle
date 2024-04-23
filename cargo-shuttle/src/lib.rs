@@ -2107,28 +2107,28 @@ impl Shuttle {
         println!("{projects_table}");
 
         if self.beta {
-            println!("Not listing org projects (not implemented yet on beta)");
+            println!("Not listing team projects (not implemented yet on beta)");
             return Ok(CommandOutcome::Ok);
         }
 
-        let orgs = client.get_organizations_list().await?;
+        let teams = client.get_teams_list().await?;
 
-        for org in orgs {
-            let org_projects = client
-                .get_organization_projects_list(&org.id)
+        for team in teams {
+            let team_projects = client
+                .get_team_projects_list(&team.id)
                 .await
                 .map_err(|err| {
                     suggestions::project::project_request_failure(
                         err,
-                        "Getting organization projects list failed",
+                        "Getting teams projects list failed",
                         false,
-                        "getting the organization projects list fails repeatedly",
+                        "getting the team projects list fails repeatedly",
                     )
                 })?;
-            let org_projects_table = project::get_projects_table(&org_projects, raw);
+            let team_projects_table = project::get_projects_table(&team_projects, raw);
 
-            println!("{}", format!("{}'s Projects", org.display_name).bold());
-            println!("{org_projects_table}");
+            println!("{}", format!("{}'s Projects", team.display_name).bold());
+            println!("{team_projects_table}");
         }
 
         Ok(CommandOutcome::Ok)

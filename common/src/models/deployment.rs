@@ -412,7 +412,7 @@ pub struct DeploymentRequest {
     pub data: Vec<u8>,
     /// The cargo package name to compile and run. Required on beta.
     pub package_name: Option<String>,
-    /// The deployment's secrets, extracted from Secrets.toml if it exists.
+    /// Secrets to add before this deployment. Ignored on alpha.
     pub secrets: Option<HashMap<String, String>>,
     /// Ignored on beta.
     pub no_test: bool,

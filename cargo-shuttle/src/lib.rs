@@ -1724,9 +1724,34 @@ impl Shuttle {
 
         if self.beta {
             let manifest_path = working_directory.join("Cargo.toml");
-            if !manifest_path.exists() {
-                bail!("Cargo manifest file not found: {}", manifest_path.display());
-            }
+
+            // Look for a secrets file, first in the command args, and if it isn't there look
+            // in the root of the crate or workspace.
+            let secrets_file = args.secret_args.secrets.clone().or_else(|| {
+                let secrets_file = manifest_path.parent().unwrap().join("Secrets.toml");
+
+                if secrets_file.exists() && secrets_file.is_file() {
+                    Some(secrets_file)
+                } else {
+                    None
+                }
+            });
+
+            if let Some(secrets_file) = secrets_file {
+                trace!("Loading secrets from {}", secrets_file.display());
+                if let Ok(secrets_str) = read_to_string(&secrets_file) {
+                    let secrets = toml::from_str::<HashMap<String, String>>(&secrets_str)?;
+
+                    trace!(keys = ?secrets.keys(), "available secrets");
+
+                    deployment_req.secrets = Some(secrets);
+                } else {
+                    trace!("No secrets were loaded");
+                }
+            } else {
+                trace!("No secrets file was found");
+            };
+
             let metadata = async_cargo_metadata(manifest_path.as_path()).await?;
             let packages = find_shuttle_packages(&metadata)?;
             let package_name = packages

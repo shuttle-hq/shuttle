@@ -6,7 +6,7 @@ use comfy_table::{
 };
 use crossterm::style::Stylize;
 use serde::{Deserialize, Serialize};
-use std::{fmt::Display, str::FromStr};
+use std::{collections::HashMap, fmt::Display, str::FromStr};
 use uuid::Uuid;
 
 use crate::deployment::{EcsState, State};
@@ -412,6 +412,8 @@ pub struct DeploymentRequest {
     pub data: Vec<u8>,
     /// The cargo package name to compile and run. Required on beta.
     pub package_name: Option<String>,
+    /// Secrets to add before this deployment. Ignored on alpha.
+    pub secrets: Option<HashMap<String, String>>,
     /// Ignored on beta.
     pub no_test: bool,
     pub git_commit_id: Option<String>,

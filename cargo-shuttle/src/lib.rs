@@ -1092,6 +1092,7 @@ impl Shuttle {
     }
 
     async fn spin_local_runtime(
+        beta: bool,
         run_args: &RunArgs,
         service: &BuiltService,
         idx: u16,
@@ -1155,9 +1156,13 @@ impl Shuttle {
         }
         let runtime_executable = service.executable_path.clone();
 
+        let port =
+            portpicker::pick_unused_port().expect("unable to find available port for gRPC server");
         // Child process and gRPC client for sending requests to it
         let (mut runtime, mut runtime_client) = runner::start(
-            portpicker::pick_unused_port().expect("unable to find available port for gRPC server"),
+            beta,
+            port,
+            SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port),
             runtime_executable,
             service.workspace_path.as_path(),
         )
@@ -1502,7 +1507,7 @@ impl Shuttle {
             // We must cover the case of starting multiple workspace services and receiving a signal in parallel.
             // This must stop all the existing runtimes and creating new ones.
             signal_received = tokio::select! {
-                res = Shuttle::spin_local_runtime(&run_args, service, i as u16) => {
+                res = Shuttle::spin_local_runtime(self.beta, &run_args, service, i as u16) => {
                     match res {
                         Ok(runtime) => {
                             Shuttle::add_runtime_info(runtime, &mut runtimes).await?;

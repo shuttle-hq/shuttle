@@ -8,10 +8,10 @@ mod needs_docker {
     };
     use serial_test::serial;
     use shuttle_backends::client::{
-        permit::{Client, Error, Organization, Owner, ResponseContent},
+        permit::{Client, Error, Owner, ResponseContent, Team},
         PermissionsDal,
     };
-    use shuttle_common::{claims::AccountTier, models::organization};
+    use shuttle_common::{claims::AccountTier, models::team};
     use shuttle_common_tests::permit_pdp::DockerInstance;
     use test_context::{test_context, AsyncTestContext};
     use uuid::Uuid;
@@ -203,7 +203,7 @@ mod needs_docker {
     #[test_context(Wrap)]
     #[tokio::test]
     #[serial]
-    async fn test_organizations(Wrap(client): &mut Wrap) {
+    async fn test_teams(Wrap(client): &mut Wrap) {
         let u1 = "user-o-1";
         let u2 = "user-o-2";
         client.new_user(u1).await.unwrap();
@@ -213,57 +213,57 @@ mod needs_docker {
 
         tokio::time::sleep(tokio::time::Duration::from_millis(SLEEP)).await;
 
-        let org = Organization {
-            id: "org_123".to_string(),
-            display_name: "Test organization".to_string(),
+        let team = Team {
+            id: "team_123".to_string(),
+            display_name: "Test team".to_string(),
         };
 
-        let err = client.create_organization(u1, &org).await.unwrap_err();
+        let err = client.create_team(u1, &team).await.unwrap_err();
         assert!(
             matches!(err, Error::ResponseError(ResponseContent { status, .. }) if status == StatusCode::FORBIDDEN),
-            "Only Pro users can create organizations"
+            "Only Pro users can create teams"
         );
 
         client.make_pro(u1).await.unwrap();
         tokio::time::sleep(tokio::time::Duration::from_millis(SLEEP)).await;
 
-        client.create_organization(u1, &org).await.unwrap();
+        client.create_team(u1, &team).await.unwrap();
         tokio::time::sleep(tokio::time::Duration::from_millis(SLEEP)).await;
-        let o1 = client.get_organizations(u1).await.unwrap();
+        let o1 = client.get_teams(u1).await.unwrap();
 
         assert_eq!(
             o1,
-            vec![organization::Response {
-                id: "org_123".to_string(),
-                display_name: "Test organization".to_string(),
+            vec![team::Response {
+                id: "team_123".to_string(),
+                display_name: "Test team".to_string(),
                 is_admin: true,
             }]
         );
 
-        let o = client.get_organization(u1, "org_123").await.unwrap();
+        let o = client.get_team(u1, "team_123").await.unwrap();
 
         assert_eq!(
             o,
-            organization::Response {
-                id: "org_123".to_string(),
-                display_name: "Test organization".to_string(),
+            team::Response {
+                id: "team_123".to_string(),
+                display_name: "Test team".to_string(),
                 is_admin: true,
             }
         );
 
         let err = client
-            .create_organization(
+            .create_team(
                 u1,
-                &Organization {
-                    id: "org_987".to_string(),
-                    display_name: "Second organization".to_string(),
+                &Team {
+                    id: "team_987".to_string(),
+                    display_name: "Second team".to_string(),
                 },
             )
             .await
             .unwrap_err();
         assert!(
             matches!(err, Error::ResponseError(ResponseContent { status, .. }) if status == StatusCode::BAD_REQUEST),
-            "User cannot create more than one organization"
+            "User cannot create more than one team"
         );
 
         client.create_project(u1, "proj-o-1").await.unwrap();
@@ -277,7 +277,7 @@ mod needs_docker {
         assert_eq!(own, Owner::User(u1.to_string()));
 
         client
-            .transfer_project_to_org(u1, "proj-o-1", "org_123")
+            .transfer_project_to_team(u1, "proj-o-1", "team_123")
             .await
             .unwrap();
         tokio::time::sleep(tokio::time::Duration::from_millis(SLEEP)).await;
@@ -286,21 +286,15 @@ mod needs_docker {
         assert_eq!(p1.len(), 0);
 
         let own = client.get_project_owner(u1, "proj-o-1").await.unwrap();
-        assert_eq!(own, Owner::Organization("org_123".to_string()));
+        assert_eq!(own, Owner::Team("team_123".to_string()));
 
-        let err = client
-            .get_organization_projects(u2, "org_123")
-            .await
-            .unwrap_err();
+        let err = client.get_team_projects(u2, "team_123").await.unwrap_err();
         assert!(
             matches!(err, Error::ResponseError(ResponseContent { status, .. }) if status == StatusCode::FORBIDDEN),
-            "User cannot view projects on an organization it does not belong to"
+            "User cannot view projects on a team it does not belong to"
         );
 
-        let ps = client
-            .get_organization_projects(u1, "org_123")
-            .await
-            .unwrap();
+        let ps = client.get_team_projects(u1, "team_123").await.unwrap();
         assert_eq!(ps, vec!["proj-o-1"]);
 
         client.create_project(u2, "proj-o-2").await.unwrap();
@@ -311,16 +305,16 @@ mod needs_docker {
         assert_eq!(p2[0], "proj-o-2");
 
         let err = client
-            .transfer_project_to_org(u2, "proj-o-2", "org_123")
+            .transfer_project_to_team(u2, "proj-o-2", "team_123")
             .await
             .unwrap_err();
         assert!(
             matches!(err, Error::ResponseError(ResponseContent { status, .. }) if status == StatusCode::FORBIDDEN),
-            "Cannot transfer to organization that user is not admin of"
+            "Cannot transfer to team that user is not admin of"
         );
 
         let err = client
-            .transfer_project_to_org(u1, "proj-o-2", "org_123")
+            .transfer_project_to_team(u1, "proj-o-2", "team_123")
             .await
             .unwrap_err();
         assert!(
@@ -328,23 +322,23 @@ mod needs_docker {
             "Cannot transfer a project that user does not own"
         );
 
-        let err = client.delete_organization(u1, "org_123").await.unwrap_err();
+        let err = client.delete_team(u1, "team_123").await.unwrap_err();
         assert!(
             matches!(err, Error::ResponseError(ResponseContent { status, .. }) if status == StatusCode::BAD_REQUEST),
-            "Cannot delete organization with projects in it"
+            "Cannot delete team with projects in it"
         );
 
         let err = client
-            .transfer_project_from_org(u2, "proj-o-1", "org_123")
+            .transfer_project_from_team(u2, "proj-o-1", "team_123")
             .await
             .unwrap_err();
         assert!(
             matches!(err, Error::ResponseError(ResponseContent { status, .. }) if status == StatusCode::FORBIDDEN),
-            "Cannot transfer from organization that user is not admin of"
+            "Cannot transfer from team that user is not admin of"
         );
 
         client
-            .transfer_project_from_org(u1, "proj-o-1", "org_123")
+            .transfer_project_from_team(u1, "proj-o-1", "team_123")
             .await
             .unwrap();
         tokio::time::sleep(tokio::time::Duration::from_millis(SLEEP)).await;
@@ -356,15 +350,15 @@ mod needs_docker {
         let own = client.get_project_owner(u1, "proj-o-1").await.unwrap();
         assert_eq!(own, Owner::User(u1.to_string()));
 
-        let err = client.delete_organization(u2, "org_123").await.unwrap_err();
+        let err = client.delete_team(u2, "team_123").await.unwrap_err();
         assert!(
             matches!(err, Error::ResponseError(ResponseContent { status, .. }) if status == StatusCode::FORBIDDEN),
-            "Cannot delete organization that user does not own"
+            "Cannot delete team that user does not own"
         );
 
-        client.delete_organization(u1, "org_123").await.unwrap();
+        client.delete_team(u1, "team_123").await.unwrap();
         tokio::time::sleep(tokio::time::Duration::from_millis(SLEEP)).await;
-        let o1 = client.get_organizations(u1).await.unwrap();
+        let o1 = client.get_teams(u1).await.unwrap();
 
         assert_eq!(o1, vec![]);
     }
@@ -372,7 +366,7 @@ mod needs_docker {
     #[test_context(Wrap)]
     #[tokio::test]
     #[serial]
-    async fn test_organization_members(Wrap(client): &mut Wrap) {
+    async fn test_team_members(Wrap(client): &mut Wrap) {
         let u1 = "user-om-1";
         let u2 = "user-om-2";
         let u3 = "user-om-3";
@@ -388,19 +382,19 @@ mod needs_docker {
         client.make_pro(u3).await.unwrap();
         tokio::time::sleep(tokio::time::Duration::from_millis(SLEEP)).await;
 
-        let org = Organization {
-            id: "org_345".to_string(),
+        let team = Team {
+            id: "team_345".to_string(),
             display_name: "Blazingly fast team".to_string(),
         };
 
-        client.create_organization(u1, &org).await.unwrap();
+        client.create_team(u1, &team).await.unwrap();
         tokio::time::sleep(tokio::time::Duration::from_millis(SLEEP)).await;
-        let o1 = client.get_organizations(u1).await.unwrap();
+        let o1 = client.get_teams(u1).await.unwrap();
 
         assert_eq!(
             o1,
-            vec![organization::Response {
-                id: "org_345".to_string(),
+            vec![team::Response {
+                id: "team_345".to_string(),
                 display_name: "Blazingly fast team".to_string(),
                 is_admin: true,
             }]
@@ -409,168 +403,138 @@ mod needs_docker {
         client.create_project(u1, "proj-om-1").await.unwrap();
         tokio::time::sleep(tokio::time::Duration::from_millis(SLEEP)).await;
         client
-            .transfer_project_to_org(u1, "proj-om-1", "org_345")
+            .transfer_project_to_team(u1, "proj-om-1", "team_345")
             .await
             .unwrap();
         tokio::time::sleep(tokio::time::Duration::from_millis(SLEEP)).await;
 
-        let ps = client
-            .get_organization_projects(u1, "org_345")
-            .await
-            .unwrap();
+        let ps = client.get_team_projects(u1, "team_345").await.unwrap();
         assert_eq!(ps, vec!["proj-om-1"]);
 
-        let o2 = client.get_organizations(u2).await.unwrap();
+        let o2 = client.get_teams(u2).await.unwrap();
         assert_eq!(o2, vec![]);
 
-        let err = client
-            .get_organization_projects(u2, "org_345")
-            .await
-            .unwrap_err();
+        let err = client.get_team_projects(u2, "team_345").await.unwrap_err();
         assert!(
             matches!(err, Error::ResponseError(ResponseContent { status, .. }) if status == StatusCode::FORBIDDEN),
-            "Cannot view projects of an organization that user is not a member of"
+            "Cannot view projects of a team that user is not a member of"
         );
 
         let err = client
-            .add_organization_member(u1, "org_345", u2)
+            .add_team_member(u1, "team_345", u2)
             .await
             .unwrap_err();
         assert!(
             matches!(err, Error::ResponseError(ResponseContent { status, .. }) if status == StatusCode::BAD_REQUEST),
-            "Can only add Pro users to organizations"
+            "Can only add Pro users to teams"
         );
 
         client.make_pro(u2).await.unwrap();
         tokio::time::sleep(tokio::time::Duration::from_millis(SLEEP)).await;
 
-        client
-            .add_organization_member(u1, "org_345", u2)
-            .await
-            .unwrap();
+        client.add_team_member(u1, "team_345", u2).await.unwrap();
         tokio::time::sleep(tokio::time::Duration::from_millis(SLEEP)).await;
 
-        let o2 = client.get_organizations(u2).await.unwrap();
+        let o2 = client.get_teams(u2).await.unwrap();
         assert_eq!(
             o2,
-            vec![organization::Response {
-                id: "org_345".to_string(),
+            vec![team::Response {
+                id: "team_345".to_string(),
                 display_name: "Blazingly fast team".to_string(),
                 is_admin: false,
             }]
         );
 
-        let o = client.get_organization(u2, "org_345").await.unwrap();
+        let o = client.get_team(u2, "team_345").await.unwrap();
 
         assert_eq!(
             o,
-            organization::Response {
-                id: "org_345".to_string(),
+            team::Response {
+                id: "team_345".to_string(),
                 display_name: "Blazingly fast team".to_string(),
                 is_admin: false,
             }
         );
 
-        let ps2 = client
-            .get_organization_projects(u2, "org_345")
-            .await
-            .unwrap();
+        let ps2 = client.get_team_projects(u2, "team_345").await.unwrap();
         assert_eq!(ps2, vec!["proj-om-1"]);
 
         let own = client.get_project_owner(u2, "proj-om-1").await.unwrap();
-        assert_eq!(own, Owner::Organization("org_345".to_string()));
+        assert_eq!(own, Owner::Team("team_345".to_string()));
 
         let err = client
-            .add_organization_member(u2, "org_345", u3)
+            .add_team_member(u2, "team_345", u3)
             .await
             .unwrap_err();
         assert!(
             matches!(err, Error::ResponseError(ResponseContent { status, .. }) if status == StatusCode::FORBIDDEN),
-            "Only organization admin can add members"
+            "Only team admin can add members"
         );
 
-        let err = client
-            .get_organization_members(u3, "org_345")
-            .await
-            .unwrap_err();
+        let err = client.get_team_members(u3, "team_345").await.unwrap_err();
         assert!(
             matches!(err, Error::ResponseError(ResponseContent { status, .. }) if status == StatusCode::FORBIDDEN),
-            "Only organization members can view members"
+            "Only team members can view members"
         );
 
-        let members = client
-            .get_organization_members(u1, "org_345")
-            .await
-            .unwrap();
+        let members = client.get_team_members(u1, "team_345").await.unwrap();
         assert_eq!(members.len(), 2);
-        assert!(members.contains(&organization::MemberResponse {
+        assert!(members.contains(&team::MemberResponse {
             id: u1.to_string(),
-            role: organization::MemberRole::Admin,
+            role: team::MemberRole::Admin,
         }));
-        assert!(members.contains(&organization::MemberResponse {
+        assert!(members.contains(&team::MemberResponse {
             id: u2.to_string(),
-            role: organization::MemberRole::Member,
+            role: team::MemberRole::Member,
         }));
 
-        let members = client
-            .get_organization_members(u2, "org_345")
-            .await
-            .unwrap();
+        let members = client.get_team_members(u2, "team_345").await.unwrap();
         assert_eq!(members.len(), 2);
-        assert!(members.contains(&organization::MemberResponse {
+        assert!(members.contains(&team::MemberResponse {
             id: u1.to_string(),
-            role: organization::MemberRole::Admin,
+            role: team::MemberRole::Admin,
         }));
-        assert!(members.contains(&organization::MemberResponse {
+        assert!(members.contains(&team::MemberResponse {
             id: u2.to_string(),
-            role: organization::MemberRole::Member,
+            role: team::MemberRole::Member,
         }));
 
         let err = client
-            .remove_organization_member(u1, "org_345", u1)
+            .remove_team_member(u1, "team_345", u1)
             .await
             .unwrap_err();
         assert!(
             matches!(err, Error::ResponseError(ResponseContent { status, .. }) if status == StatusCode::BAD_REQUEST),
-            "User cannot remove themselves from organizations"
+            "User cannot remove themselves from teams"
         );
 
         let err = client
-            .remove_organization_member(u2, "org_345", u1)
+            .remove_team_member(u2, "team_345", u1)
             .await
             .unwrap_err();
         assert!(
             matches!(err, Error::ResponseError(ResponseContent { status, .. }) if status == StatusCode::FORBIDDEN),
-            "Only organization admin can remove members"
+            "Only team admin can remove members"
         );
 
-        client
-            .remove_organization_member(u1, "org_345", u2)
-            .await
-            .unwrap();
+        client.remove_team_member(u1, "team_345", u2).await.unwrap();
         tokio::time::sleep(tokio::time::Duration::from_millis(SLEEP)).await;
 
-        let o2 = client.get_organizations(u2).await.unwrap();
+        let o2 = client.get_teams(u2).await.unwrap();
         assert_eq!(o2, vec![]);
 
-        let err = client
-            .get_organization_projects(u2, "org_345")
-            .await
-            .unwrap_err();
+        let err = client.get_team_projects(u2, "team_345").await.unwrap_err();
         assert!(
             matches!(err, Error::ResponseError(ResponseContent { status, .. }) if status == StatusCode::FORBIDDEN),
-            "Cannot view projects of an organization that user is not a member of"
+            "Cannot view projects of a team that user is not a member of"
         );
 
-        let members = client
-            .get_organization_members(u1, "org_345")
-            .await
-            .unwrap();
+        let members = client.get_team_members(u1, "team_345").await.unwrap();
         assert_eq!(
             members,
-            vec![organization::MemberResponse {
+            vec![team::MemberResponse {
                 id: u1.to_string(),
-                role: organization::MemberRole::Admin,
+                role: team::MemberRole::Admin,
             },]
         );
     }

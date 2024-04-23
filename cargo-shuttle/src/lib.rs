@@ -1980,31 +1980,32 @@ impl Shuttle {
         println!("{}", "Personal Projects".bold());
         println!("{projects_table}");
 
-        let orgs = client.get_organizations_list().await?;
+        let teams = client.get_teams_list().await?;
 
-        for org in orgs {
-            let mut org_projects = client
-                .get_organization_projects_list(&org.id)
-                .await
-                .map_err(|err| {
-                    suggestions::project::project_request_failure(
-                        err,
-                        "Getting organization projects list failed",
-                        false,
-                        "getting the organization projects list fails repeatedly",
-                    )
-                })?;
-            let page_hint = if org_projects.len() == limit as usize {
-                org_projects.pop();
+        for team in teams {
+            let mut team_projects =
+                client
+                    .get_team_projects_list(&team.id)
+                    .await
+                    .map_err(|err| {
+                        suggestions::project::project_request_failure(
+                            err,
+                            "Getting teams projects list failed",
+                            false,
+                            "getting the team projects list fails repeatedly",
+                        )
+                    })?;
+            let page_hint = if team_projects.len() == limit as usize {
+                team_projects.pop();
                 true
             } else {
                 false
             };
-            let org_projects_table =
-                project::get_projects_table(&org_projects, page, raw, page_hint);
+            let team_projects_table =
+                project::get_projects_table(&team_projects, page, raw, page_hint);
 
-            println!("{}", format!("{}'s Projects", org.display_name).bold());
-            println!("{org_projects_table}");
+            println!("{}", format!("{}'s Projects", team.display_name).bold());
+            println!("{team_projects_table}");
         }
 
         Ok(CommandOutcome::Ok)

@@ -1,11 +1,11 @@
 pub mod admin;
 pub mod deployment;
 pub mod error;
-pub mod organization;
 pub mod project;
 pub mod resource;
 pub mod service;
 pub mod stats;
+pub mod team;
 pub mod user;
 
 use anyhow::{Context, Result};

@@ -3,7 +3,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use permit_client_rs::models::UserRead;
 use serde::Serialize;
-use shuttle_common::models::organization;
+use shuttle_common::models::team;
 use tokio::sync::Mutex;
 use wiremock::{
     http,
@@ -12,7 +12,7 @@ use wiremock::{
 };
 
 use crate::client::{
-    permit::{Organization, Owner, Result},
+    permit::{Owner, Result, Team},
     PermissionsDal,
 };
 
@@ -171,47 +171,40 @@ impl PermissionsDal for PermissionsMock {
         Ok(true)
     }
 
-    async fn create_organization(&self, user_id: &str, org: &Organization) -> Result<()> {
+    async fn create_team(&self, user_id: &str, team: &Team) -> Result<()> {
         self.calls.lock().await.push(format!(
-            "create_organization {user_id} {} {}",
-            org.id, org.display_name
+            "create_team {user_id} {} {}",
+            team.id, team.display_name
         ));
         Ok(())
     }
 
-    async fn delete_organization(&self, user_id: &str, org_id: &str) -> Result<()> {
+    async fn delete_team(&self, user_id: &str, team_id: &str) -> Result<()> {
         self.calls
             .lock()
             .await
-            .push(format!("delete_organization {user_id} {org_id}"));
+            .push(format!("delete_team {user_id} {team_id}"));
         Ok(())
     }
 
-    async fn get_organization(
-        &self,
-        user_id: &str,
-        org_id: &str,
-    ) -> Result<organization::Response> {
+    async fn get_team(&self, user_id: &str, team_id: &str) -> Result<team::Response> {
         self.calls
             .lock()
             .await
-            .push(format!("get_organization {user_id} {org_id}"));
+            .push(format!("get_team {user_id} {team_id}"));
         Ok(Default::default())
     }
 
-    async fn get_organization_projects(&self, user_id: &str, org_id: &str) -> Result<Vec<String>> {
+    async fn get_team_projects(&self, user_id: &str, team_id: &str) -> Result<Vec<String>> {
         self.calls
             .lock()
             .await
-            .push(format!("get_organization_projects {user_id} {org_id}"));
+            .push(format!("get_team_projects {user_id} {team_id}"));
         Ok(Default::default())
     }
 
-    async fn get_organizations(&self, user_id: &str) -> Result<Vec<organization::Response>> {
-        self.calls
-            .lock()
-            .await
-            .push(format!("get_organizations {user_id}"));
+    async fn get_teams(&self, user_id: &str) -> Result<Vec<team::Response>> {
+        self.calls.lock().await.push(format!("get_teams {user_id}"));
         Ok(Default::default())
     }
 
@@ -228,63 +221,59 @@ impl PermissionsDal for PermissionsMock {
         Ok(())
     }
 
-    async fn transfer_project_to_org(
+    async fn transfer_project_to_team(
         &self,
         user_id: &str,
         project_id: &str,
-        org_id: &str,
+        team_id: &str,
     ) -> Result<()> {
         self.calls.lock().await.push(format!(
-            "transfer_project_to_org {user_id} {project_id} {org_id}"
+            "transfer_project_to_team {user_id} {project_id} {team_id}"
         ));
         Ok(())
     }
 
-    async fn transfer_project_from_org(
+    async fn transfer_project_from_team(
         &self,
         user_id: &str,
         project_id: &str,
-        org_id: &str,
+        team_id: &str,
     ) -> Result<()> {
         self.calls.lock().await.push(format!(
-            "transfer_project_from_org {user_id} {project_id} {org_id}"
+            "transfer_project_from_team {user_id} {project_id} {team_id}"
         ));
         Ok(())
     }
 
-    async fn add_organization_member(
-        &self,
-        admin_user: &str,
-        org_id: &str,
-        user_id: &str,
-    ) -> Result<()> {
-        self.calls.lock().await.push(format!(
-            "add_organization_member {admin_user} {org_id} {user_id}"
-        ));
-        Ok(())
-    }
-
-    async fn remove_organization_member(
-        &self,
-        admin_user: &str,
-        org_id: &str,
-        user_id: &str,
-    ) -> Result<()> {
-        self.calls.lock().await.push(format!(
-            "remove_organization_member {admin_user} {org_id} {user_id}"
-        ));
-        Ok(())
-    }
-
-    async fn get_organization_members(
-        &self,
-        user_id: &str,
-        org_id: &str,
-    ) -> Result<Vec<organization::MemberResponse>> {
+    async fn add_team_member(&self, admin_user: &str, team_id: &str, user_id: &str) -> Result<()> {
         self.calls
             .lock()
             .await
-            .push(format!("get_organization_members {user_id} {org_id}"));
+            .push(format!("add_team_member {admin_user} {team_id} {user_id}"));
+        Ok(())
+    }
+
+    async fn remove_team_member(
+        &self,
+        admin_user: &str,
+        team_id: &str,
+        user_id: &str,
+    ) -> Result<()> {
+        self.calls.lock().await.push(format!(
+            "remove_team_member {admin_user} {team_id} {user_id}"
+        ));
+        Ok(())
+    }
+
+    async fn get_team_members(
+        &self,
+        user_id: &str,
+        team_id: &str,
+    ) -> Result<Vec<team::MemberResponse>> {
+        self.calls
+            .lock()
+            .await
+            .push(format!("get_team_members {user_id} {team_id}"));
         Ok(Default::default())
     }
 

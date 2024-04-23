@@ -171,7 +171,7 @@ pub struct Config {
 #[serde(tag = "owner_type", content = "owner_id", rename_all = "lowercase")]
 pub enum Owner {
     User(String),
-    Organization(String),
+    Team(String),
 }
 
 pub fn get_projects_table(projects: &[Response], page: u32, raw: bool, page_hint: bool) -> String {

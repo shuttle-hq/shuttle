@@ -11,11 +11,17 @@ use crossterm::style::Stylize;
 use serde::{Deserialize, Serialize};
 use strum::EnumString;
 
+use crate::deployment::EcsState;
+
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 pub struct Response {
     pub id: String,
     pub name: String,
+    // Ignored on beta.
     pub state: State,
+    // Ignored on alpha. Present on beta if an ECS service exists (something has been deployed).
+    pub deployment_state: Option<EcsState>,
+    // Always None on beta.
     pub idle_minutes: Option<u64>,
     #[serde(flatten)]
     pub owner: Owner,
@@ -174,7 +180,7 @@ pub enum Owner {
     Team(String),
 }
 
-pub fn get_projects_table(projects: &[Response], raw: bool) -> String {
+pub fn get_projects_table(beta: bool, projects: &[Response], raw: bool) -> String {
     if projects.is_empty() {
         let mut s = "No projects are linked to this account\n".to_string();
         if !raw {
@@ -191,7 +197,8 @@ pub fn get_projects_table(projects: &[Response], raw: bool) -> String {
                 .set_content_arrangement(ContentArrangement::Disabled)
                 .set_header(vec![
                     Cell::new("Project Name").set_alignment(CellAlignment::Left),
-                    Cell::new("Status").set_alignment(CellAlignment::Left),
+                    Cell::new(if beta { "Deployment Status" } else { "Status" })
+                        .set_alignment(CellAlignment::Left),
                 ]);
         } else {
             table
@@ -202,7 +209,7 @@ pub fn get_projects_table(projects: &[Response], raw: bool) -> String {
                     Cell::new("Project Name")
                         .set_alignment(CellAlignment::Center)
                         .add_attribute(Attribute::Bold),
-                    Cell::new("Status")
+                    Cell::new(if beta { "Deployment Status" } else { "Status" })
                         .set_alignment(CellAlignment::Center)
                         .add_attribute(Attribute::Bold),
                 ]);
@@ -214,10 +221,24 @@ pub fn get_projects_table(projects: &[Response], raw: bool) -> String {
             } else {
                 table.add_row(vec![
                     Cell::new(&project.name),
-                    Cell::new(&project.state)
-                        // Unwrap is safe because Color::from_str returns the color white if the argument is not a Color.
-                        .fg(Color::from_str(project.state.get_color()).unwrap())
-                        .set_alignment(CellAlignment::Center),
+                    Cell::new(if beta {
+                        project
+                            .deployment_state
+                            .as_ref()
+                            .map(|s| s.to_string())
+                            .unwrap_or_default()
+                    } else {
+                        project.state.to_string()
+                    })
+                    // Unwrap is safe because Color::from_str returns the color white if the argument is not a Color.
+                    .fg(Color::from_str(if beta {
+                        // TODO: Color for EcsState
+                        ""
+                    } else {
+                        project.state.get_color()
+                    })
+                    .unwrap())
+                    .set_alignment(CellAlignment::Center),
                 ]);
             }
         }

@@ -19,8 +19,8 @@ mod alpha;
 
 const NAME: &str = env!("CARGO_PKG_NAME");
 const VERSION: &str = env!("CARGO_PKG_VERSION");
-fn print_version() {
-    println!("{} {}", crate::NAME, crate::VERSION);
+fn version() -> String {
+    format!("{} {}", crate::NAME, crate::VERSION)
 }
 
 // Not part of public API

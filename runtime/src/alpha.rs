@@ -12,13 +12,10 @@ use anyhow::Context;
 use async_trait::async_trait;
 use core::future::Future;
 use shuttle_common::{extract_propagation::ExtractPropagationLayer, secrets::Secret};
-use shuttle_proto::{
-    runtime::{
-        runtime_server::{Runtime, RuntimeServer},
-        LoadRequest, LoadResponse, StartRequest, StartResponse, StopReason, StopRequest,
-        StopResponse, SubscribeStopRequest, SubscribeStopResponse,
-    },
-    runtime::{Ping, Pong},
+use shuttle_proto::runtime::{
+    runtime_server::{Runtime, RuntimeServer},
+    LoadRequest, LoadResponse, Ping, Pong, StartRequest, StartResponse, StopReason, StopRequest,
+    StopResponse, SubscribeStopRequest, SubscribeStopResponse, VersionInfo,
 };
 use shuttle_service::{ResourceFactory, Service};
 use tokio::sync::{
@@ -29,7 +26,7 @@ use tokio_stream::wrappers::ReceiverStream;
 use tokio_util::sync::CancellationToken;
 use tonic::{transport::Server, Request, Response, Status};
 
-use crate::print_version;
+use crate::version;
 
 #[derive(Default)]
 struct Args {
@@ -89,7 +86,7 @@ impl Args {
 pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + Send + 'static) {
     // `--version` overrides any other arguments. Used by cargo-shuttle to check compatibility on local runs.
     if std::env::args().any(|arg| arg == "--version") {
-        print_version();
+        println!("{}", version());
         return;
     }
 
@@ -500,6 +497,10 @@ where
         });
 
         Ok(Response::new(ReceiverStream::new(rx)))
+    }
+
+    async fn version(&self, _requset: Request<Ping>) -> Result<Response<VersionInfo>, Status> {
+        Ok(Response::new(VersionInfo { version: version() }))
     }
 
     async fn health_check(&self, _request: Request<Ping>) -> Result<Response<Pong>, Status> {

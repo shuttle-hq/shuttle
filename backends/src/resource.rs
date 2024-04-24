@@ -20,8 +20,8 @@ pub struct SharedDbRequest {
 /// service.
 #[derive(Deserialize, Serialize)]
 pub struct RdsRequest {
-    pub database_engine: AwsRdsEngine,
+    pub db_engine: AwsRdsEngine,
     /// Extracted from the resource config if it exists.
-    pub database_name: Option<String>,
+    pub db_name: Option<String>,
     pub project_id: String,
 }

@@ -853,7 +853,7 @@ impl Shuttle {
                         if args.raw {
                             println!("{}", log.line);
                         } else {
-                            println!("[{}] ({}) {}", log.timestamp, log.source, log.line);
+                            println!("{log}");
                         }
                     }
                     Err(err) => {

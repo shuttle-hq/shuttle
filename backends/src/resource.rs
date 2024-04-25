@@ -24,4 +24,9 @@ pub struct RdsRequest {
     /// Extracted from the resource config if it exists.
     pub db_name: Option<String>,
     pub project_id: String,
+    /// Must contain from 1 to 63 letters, numbers, or hyphens.
+    /// First character must be a letter.
+    /// Can't end with a hyphen or contain two consecutive hyphens.
+    /// TODO: newtype
+    pub instance_name: String,
 }

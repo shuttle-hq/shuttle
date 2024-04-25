@@ -41,7 +41,8 @@ pub struct ServicesApiClient {
 impl ServicesApiClient {
     pub fn builder() -> ClientBuilder {
         // The timeout is set to the same as the ALB idle timeout.
-        Client::builder().timeout(Duration::from_secs(180))
+        // TODO: make this configurable, not all clients will need this long of a timeout.
+        Client::builder().timeout(Duration::from_secs(300))
     }
 
     pub fn new(base: Uri) -> Self {

@@ -311,7 +311,7 @@ where
             // it has sent a load response, so that the ECS task will fail.
             tokio::spawn(async move {
                 // Note: The timeout is quite long since RDS can take a long time to provision.
-                tokio::time::sleep(Duration::from_secs(180)).await;
+                tokio::time::sleep(Duration::from_secs(300)).await;
                 if !matches!(state.lock().unwrap().deref(), State::Running) {
                     println!("the runtime failed to enter the running state before timing out");
 

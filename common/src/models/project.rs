@@ -25,6 +25,7 @@ pub struct Response {
     pub idle_minutes: Option<u64>,
     #[serde(flatten)]
     pub owner: Owner,
+    /// Whether the calling user is an admin in this project
     pub is_admin: bool,
 }
 
@@ -216,29 +217,30 @@ pub fn get_projects_table(beta: bool, projects: &[Response], raw: bool) -> Strin
         }
 
         for project in projects.iter() {
+            let state = if beta {
+                project
+                    .deployment_state
+                    .as_ref()
+                    .map(|s| s.to_string())
+                    .unwrap_or_default()
+            } else {
+                project.state.to_string()
+            };
             if raw {
-                table.add_row(vec![Cell::new(&project.name), Cell::new(&project.state)]);
+                table.add_row(vec![Cell::new(&project.name), Cell::new(state)]);
             } else {
                 table.add_row(vec![
                     Cell::new(&project.name),
-                    Cell::new(if beta {
-                        project
-                            .deployment_state
-                            .as_ref()
-                            .map(|s| s.to_string())
-                            .unwrap_or_default()
-                    } else {
-                        project.state.to_string()
-                    })
-                    // Unwrap is safe because Color::from_str returns the color white if the argument is not a Color.
-                    .fg(Color::from_str(if beta {
-                        // TODO: Color for EcsState
-                        ""
-                    } else {
-                        project.state.get_color()
-                    })
-                    .unwrap())
-                    .set_alignment(CellAlignment::Center),
+                    Cell::new(state)
+                        // Unwrap is safe because Color::from_str returns the color white if the argument is not a Color.
+                        .fg(Color::from_str(if beta {
+                            // TODO: Color for EcsState
+                            ""
+                        } else {
+                            project.state.get_color()
+                        })
+                        .unwrap())
+                        .set_alignment(CellAlignment::Center),
                 ]);
             }
         }

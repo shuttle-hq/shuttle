@@ -2101,7 +2101,7 @@ impl Shuttle {
                 "getting the projects list fails repeatedly",
             )
         })?;
-        let projects_table = project::get_projects_table(&projects, raw);
+        let projects_table = project::get_projects_table(self.beta, &projects, raw);
 
         println!("{}", "Personal Projects".bold());
         println!("{projects_table}");
@@ -2125,7 +2125,7 @@ impl Shuttle {
                         "getting the team projects list fails repeatedly",
                     )
                 })?;
-            let team_projects_table = project::get_projects_table(&team_projects, raw);
+            let team_projects_table = project::get_projects_table(self.beta, &team_projects, raw);
 
             println!("{}", format!("{}'s Projects", team.display_name).bold());
             println!("{team_projects_table}");

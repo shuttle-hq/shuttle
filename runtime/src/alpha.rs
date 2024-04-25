@@ -2,9 +2,9 @@ use std::{
     collections::BTreeMap,
     iter::FromIterator,
     net::{Ipv4Addr, SocketAddr},
-    ops::DerefMut,
+    ops::{Deref, DerefMut},
     str::FromStr,
-    sync::Mutex,
+    sync::{Arc, Mutex},
     time::Duration,
 };
 
@@ -14,8 +14,8 @@ use core::future::Future;
 use shuttle_common::{extract_propagation::ExtractPropagationLayer, secrets::Secret};
 use shuttle_proto::runtime::{
     runtime_server::{Runtime, RuntimeServer},
-    LoadRequest, LoadResponse, StartRequest, StartResponse, StopReason, StopRequest, StopResponse,
-    SubscribeStopRequest, SubscribeStopResponse,
+    LoadRequest, LoadResponse, Ping, Pong, StartRequest, StartResponse, StopReason, StopRequest,
+    StopResponse, SubscribeStopRequest, SubscribeStopResponse, VersionInfo,
 };
 use shuttle_service::{ResourceFactory, Service};
 use tokio::sync::{
@@ -23,24 +23,70 @@ use tokio::sync::{
     mpsc, oneshot,
 };
 use tokio_stream::wrappers::ReceiverStream;
+use tokio_util::sync::CancellationToken;
 use tonic::{transport::Server, Request, Response, Status};
 
-use crate::args::args;
-use crate::print_version;
+use crate::version;
 
-// uses custom macro instead of clap to reduce dependency weight
-args! {
-    pub struct Args {
-        // The port to open the gRPC control layer on.
-        // The address to expose for the service is given in the StartRequest.
-        "--port" => pub port: u16,
+#[derive(Default)]
+struct Args {
+    /// Enable compatibility with beta platform
+    beta: bool,
+    /// Alpha (required): Port to open gRPC server on
+    port: Option<u16>,
+    /// Beta (required): Address to bind the gRPC server to
+    address: Option<SocketAddr>,
+}
+
+impl Args {
+    // uses simple arg parsing logic instead of clap to reduce dependency weight
+    fn parse() -> anyhow::Result<Self> {
+        let mut args = Self::default();
+
+        // The first argument is the path of the executable
+        let mut args_iter = std::env::args().skip(1);
+
+        while let Some(arg) = args_iter.next() {
+            match arg.as_str() {
+                "--beta" => {
+                    args.beta = true;
+                }
+                "--port" => {
+                    let port = args_iter
+                        .next()
+                        .context("missing port value")?
+                        .parse()
+                        .context("invalid port value")?;
+                    args.port = Some(port);
+                }
+                "--address" => {
+                    let address = args_iter
+                        .next()
+                        .context("missing address value")?
+                        .parse()
+                        .context("invalid address value")?;
+                    args.address = Some(address);
+                }
+                _ => {}
+            }
+        }
+
+        if args.beta {
+            if args.address.is_none() {
+                return Err(anyhow::anyhow!("--address is required with --beta"));
+            }
+        } else if args.port.is_none() {
+            return Err(anyhow::anyhow!("--port is required"));
+        }
+
+        Ok(args)
     }
 }
 
 pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + Send + 'static) {
-    // `--version` overrides any other arguments.
+    // `--version` overrides any other arguments. Used by cargo-shuttle to check compatibility on local runs.
     if std::env::args().any(|arg| arg == "--version") {
-        print_version();
+        println!("{}", version());
         return;
     }
 
@@ -84,42 +130,73 @@ pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + S
     }
 
     // where to serve the gRPC control layer
-    let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), args.port);
+    let addr = if args.beta {
+        args.address.unwrap()
+    } else {
+        SocketAddr::new(Ipv4Addr::LOCALHOST.into(), args.port.unwrap())
+    };
 
     let mut server_builder = Server::builder()
         .http2_keepalive_interval(Some(Duration::from_secs(60)))
         .layer(ExtractPropagationLayer);
 
+    // A cancellation token we can use to kill the runtime if it does not start in time.
+    let token = CancellationToken::new();
+    let cloned_token = token.clone();
+
     let router = {
-        let alpha = Alpha::new(loader, runner);
+        let alpha = Alpha::new(args.beta, loader, runner, token);
 
         let svc = RuntimeServer::new(alpha);
         server_builder.add_service(svc)
     };
 
-    match router.serve(addr).await {
-        Ok(_) => {}
-        Err(e) => panic!("Error while serving address {addr}: {e}"),
-    };
+    tokio::select! {
+        res = router.serve(addr) => {
+            match res{
+                Ok(_) => println!("router completed on its own"),
+                Err(e) => panic!("Error while serving address {addr}: {e}")
+            }
+        }
+        _ = cloned_token.cancelled() => {
+            panic!("runtime future was cancelled")
+        }
+    }
+}
+
+pub enum State {
+    Unhealthy,
+    Loading,
+    Running,
 }
 
 pub struct Alpha<L, R> {
+    /// alter behaviour to interact with the new platform
+    beta: bool,
     // Mutexes are for interior mutability
     stopped_tx: Sender<(StopReason, String)>,
     kill_tx: Mutex<Option<oneshot::Sender<String>>>,
     loader: Mutex<Option<L>>,
     runner: Mutex<Option<R>>,
+    /// The current state of the runtime, which is used by the ECS task to determine if the runtime
+    /// is healthy.
+    state: Arc<Mutex<State>>,
+    // A cancellation token we can use to kill the runtime if it does not start in time.
+    cancellation_token: CancellationToken,
 }
 
 impl<L, R> Alpha<L, R> {
-    pub fn new(loader: L, runner: R) -> Self {
+    pub fn new(beta: bool, loader: L, runner: R, cancellation_token: CancellationToken) -> Self {
         let (stopped_tx, _stopped_rx) = broadcast::channel(10);
 
         Self {
+            beta,
             stopped_tx,
             kill_tx: Mutex::new(None),
             loader: Mutex::new(Some(loader)),
             runner: Mutex::new(Some(runner)),
+            state: Arc::new(Mutex::new(State::Unhealthy)),
+            cancellation_token,
         }
     }
 }
@@ -222,6 +299,26 @@ where
                 }
             }
         };
+
+        *self.state.lock().unwrap() = State::Loading;
+
+        let state = self.state.clone();
+        let cancellation_token = self.cancellation_token.clone();
+
+        // State and cancellation is not used in alpha
+        if self.beta {
+            // Ensure that the runtime is set to unhealthy if it doesn't reach the running state after
+            // it has sent a load response, so that the ECS task will fail.
+            tokio::spawn(async move {
+                // Note: The timeout is quite long since RDS can take a long time to provision.
+                tokio::time::sleep(Duration::from_secs(180)).await;
+                if !matches!(state.lock().unwrap().deref(), State::Running) {
+                    println!("the runtime failed to enter the running state before timing out");
+
+                    cancellation_token.cancel();
+                }
+            });
+        }
 
         Ok(Response::new(LoadResponse {
             success: true,
@@ -355,6 +452,8 @@ where
             ..Default::default()
         };
 
+        *self.state.lock().unwrap() = State::Running;
+
         Ok(Response::new(message))
     }
 
@@ -397,5 +496,20 @@ where
         });
 
         Ok(Response::new(ReceiverStream::new(rx)))
+    }
+
+    async fn version(&self, _requset: Request<Ping>) -> Result<Response<VersionInfo>, Status> {
+        Ok(Response::new(VersionInfo { version: version() }))
+    }
+
+    async fn health_check(&self, _request: Request<Ping>) -> Result<Response<Pong>, Status> {
+        if matches!(self.state.lock().unwrap().deref(), State::Unhealthy) {
+            println!("runtime health check failed");
+            return Err(Status::unavailable(
+                "runtime has not reached a healthy state",
+            ));
+        }
+
+        Ok(Response::new(Pong {}))
     }
 }

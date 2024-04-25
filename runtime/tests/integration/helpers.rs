@@ -45,8 +45,14 @@ pub async fn spawn_runtime(project_path: &str) -> Result<TestRuntime> {
 
     let runtime_executable = service.executable_path.clone();
 
-    let (runtime, runtime_client) =
-        runner::start(runtime_port, runtime_executable, Path::new(project_path)).await?;
+    let (runtime, runtime_client) = runner::start(
+        false,
+        runtime_port,
+        runtime_address,
+        runtime_executable,
+        Path::new(project_path),
+    )
+    .await?;
 
     Ok(TestRuntime {
         runtime_client,

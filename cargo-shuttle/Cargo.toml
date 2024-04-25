@@ -4,7 +4,7 @@ version = "0.44.0"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "A cargo command for the shuttle platform (https://www.shuttle.rs/)"
+description = "A cargo command for the Shuttle platform (https://www.shuttle.rs/)"
 homepage = "https://www.shuttle.rs"
 
 [dependencies]
@@ -32,10 +32,10 @@ gix = { version = "0.62.0", default-features = false, features = [
   "worktree-mutation",
 ] }
 globset = "0.4.13"
-home = { workspace = true }
 headers = { workspace = true }
-indicatif = "0.17.3"
+home = { workspace = true }
 ignore = "0.4.20"
+indicatif = "0.17.3"
 indoc = "2.0.1"
 percent-encoding = { workspace = true }
 portpicker = { workspace = true }
@@ -65,6 +65,7 @@ url = { workspace = true }
 uuid = { workspace = true, features = ["v4"] }
 walkdir = "2.3.3"
 webbrowser = "0.8.2"
+zip = "0.6.6"
 
 [dev-dependencies]
 assert_cmd = "2.0.6"

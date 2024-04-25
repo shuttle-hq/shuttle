@@ -39,6 +39,9 @@ pub struct ShuttleArgs {
     /// Turn on tracing output for cargo-shuttle and shuttle libraries.
     #[arg(long, env = "SHUTTLE_DEBUG")]
     pub debug: bool,
+    /// Target Shuttle's development environment
+    #[arg(long, env = "SHUTTLE_BETA", hide = true)]
+    pub beta: bool,
 
     #[command(subcommand)]
     pub cmd: Command,
@@ -158,13 +161,13 @@ pub enum DeploymentCommand {
         limit: u32,
 
         #[arg(long, default_value_t = false)]
-        /// Output table in `raw` format
+        /// Output table without borders
         raw: bool,
     },
     /// View status of a deployment
     Status {
         /// ID of deployment to get status for
-        id: Uuid,
+        id: String,
     },
 }
 
@@ -173,7 +176,7 @@ pub enum ResourceCommand {
     /// List all the resources for a project
     List {
         #[arg(long, default_value_t = false)]
-        /// Output table in `raw` format
+        /// Output table without borders
         raw: bool,
 
         #[arg(
@@ -219,7 +222,7 @@ pub enum ProjectCommand {
         limit: u32,
 
         #[arg(long, default_value_t = false)]
-        /// Output table in `raw` format
+        /// Output table without borders
         raw: bool,
     },
     /// Delete a project and all linked data

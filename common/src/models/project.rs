@@ -13,7 +13,7 @@ use strum::EnumString;
 
 use crate::deployment::EcsState;
 
-#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 pub struct Response {
     pub id: String,
     pub name: String,
@@ -27,17 +27,6 @@ pub struct Response {
     pub owner: Owner,
     /// Whether the calling user is an admin in this project
     pub is_admin: bool,
-}
-
-impl PartialOrd for Response {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
-}
-impl Ord for Response {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.id.cmp(&other.id)
-    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, EnumString)]
@@ -185,7 +174,7 @@ pub struct Config {
     pub idle_minutes: u64,
 }
 
-#[derive(Clone, Deserialize, Serialize, Debug, PartialEq, Eq)]
+#[derive(Clone, Deserialize, Serialize, Debug, PartialEq)]
 #[serde(tag = "owner_type", content = "owner_id", rename_all = "lowercase")]
 pub enum Owner {
     User(String),

@@ -31,7 +31,7 @@ pub struct Response {
 
 impl PartialOrd for Response {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.id.partial_cmp(&other.id)
+        Some(self.cmp(other))
     }
 }
 impl Ord for Response {

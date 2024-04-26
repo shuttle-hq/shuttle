@@ -184,8 +184,7 @@ impl Shuttle {
                 | Command::Clean
                 | Command::Project(..)
         ) {
-            let client =
-                ShuttleApiClient::new(self.ctx.api_url(), self.ctx.api_key().ok(), self.beta);
+            let client = ShuttleApiClient::new(self.ctx.api_url(), self.ctx.api_key().ok());
             self.client = Some(client);
             if !args.offline && !self.beta {
                 // TODO: re-implement version checking in control to use the c-s version http header
@@ -1032,10 +1031,14 @@ impl Shuttle {
 
     async fn resources_list(&self, raw: bool, show_secrets: bool) -> Result<CommandOutcome> {
         let client = self.client.as_ref().unwrap();
-        let resources = client
-            .get_service_resources(self.ctx.project_name())
-            .await
-            .map_err(suggestions::resources::get_service_resources_failure)?;
+        let resources = if self.beta {
+            client
+                .get_service_resources_beta(self.ctx.project_name())
+                .await
+        } else {
+            client.get_service_resources(self.ctx.project_name()).await
+        }
+        .map_err(suggestions::resources::get_service_resources_failure)?;
         let table = get_resource_tables(&resources, self.ctx.project_name(), raw, show_secrets);
 
         println!("{table}");
@@ -1073,9 +1076,15 @@ impl Shuttle {
             }
         }
 
-        client
-            .delete_service_resource(self.ctx.project_name(), resource_type)
-            .await?;
+        if self.beta {
+            client
+                .delete_service_resource_beta(self.ctx.project_name(), resource_type)
+                .await?;
+        } else {
+            client
+                .delete_service_resource(self.ctx.project_name(), resource_type)
+                .await?;
+        }
 
         println!("Deleted resource {resource_type}");
         println!(
@@ -2256,17 +2265,19 @@ impl Shuttle {
             }
         }
 
-        client
-            .delete_project(self.ctx.project_name())
-            .await
-            .map_err(|err| {
-                suggestions::project::project_request_failure(
-                    err,
-                    "Project delete failed",
-                    true,
-                    "deleting the project or getting project status fails repeatedly",
-                )
-            })?;
+        if self.beta {
+            client.delete_project_beta(self.ctx.project_name()).await
+        } else {
+            client.delete_project(self.ctx.project_name()).await
+        }
+        .map_err(|err| {
+            suggestions::project::project_request_failure(
+                err,
+                "Project delete failed",
+                true,
+                "deleting the project or getting project status fails repeatedly",
+            )
+        })?;
 
         println!("Deleted project");
 

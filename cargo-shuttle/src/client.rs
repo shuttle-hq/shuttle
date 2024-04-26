@@ -182,9 +182,14 @@ impl ShuttleApiClient {
         project: &str,
         config: &project::Config,
     ) -> Result<project::Response> {
-        let path = format!("/projects/{project}");
-
-        self.post(path, Some(config))
+        self.post(format!("/projects/{project}"), Some(config))
+            .await
+            .context("failed to make create project request")?
+            .to_json()
+            .await
+    }
+    pub async fn create_project_beta(&self, name: &str) -> Result<project::ResponseBeta> {
+        self.post(format!("/projects/{name}"), None::<()>)
             .await
             .context("failed to make create project request")?
             .to_json()
@@ -202,12 +207,16 @@ impl ShuttleApiClient {
     }
 
     pub async fn get_project(&self, project: &str) -> Result<project::Response> {
-        let path = format!("/projects/{project}");
-
-        self.get(path).await
+        self.get(format!("/projects/{project}")).await
+    }
+    pub async fn get_project_beta(&self, project: &str) -> Result<project::ResponseBeta> {
+        self.get(format!("/projects/{project}")).await
     }
 
     pub async fn get_projects_list(&self) -> Result<Vec<project::Response>> {
+        self.get("/projects".to_owned()).await
+    }
+    pub async fn get_projects_list_beta(&self) -> Result<Vec<project::ResponseBeta>> {
         self.get("/projects".to_owned()).await
     }
 
@@ -229,9 +238,7 @@ impl ShuttleApiClient {
     }
 
     pub async fn get_team_projects_list(&self, team_id: &str) -> Result<Vec<project::Response>> {
-        let path = format!("/teams/{team_id}/projects");
-
-        self.get(path).await
+        self.get(format!("/teams/{team_id}/projects")).await
     }
 
     pub async fn get_logs(

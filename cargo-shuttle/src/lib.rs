@@ -235,13 +235,21 @@ impl Shuttle {
                 confirmation: ConfirmationArgs { yes },
             }) => self.resource_delete(&resource_type, yes).await,
             Command::Project(ProjectCommand::Start(ProjectStartArgs { idle_minutes })) => {
-                self.project_start(idle_minutes).await
+                if self.beta {
+                    self.project_start_beta().await
+                } else {
+                    self.project_start(idle_minutes).await
+                }
             }
             Command::Project(ProjectCommand::Restart(ProjectStartArgs { idle_minutes })) => {
                 self.project_restart(idle_minutes).await
             }
             Command::Project(ProjectCommand::Status { follow }) => {
-                self.project_status(follow).await
+                if self.beta {
+                    self.project_status_beta().await
+                } else {
+                    self.project_status(follow).await
+                }
             }
             Command::Project(ProjectCommand::List { raw, .. }) => self.projects_list(raw).await,
             Command::Project(ProjectCommand::Stop) => self.project_stop().await,
@@ -558,11 +566,6 @@ impl Shuttle {
             }
         };
 
-        let serenity_idle_hint = template
-            .subfolder
-            .as_ref()
-            .is_some_and(|s| s.contains("serenity") || s.contains("poise"));
-
         // 5. Initialize locally
         init::generate_project(
             path.clone(),
@@ -570,13 +573,15 @@ impl Shuttle {
                 .name
                 .as_ref()
                 .expect("to have a project name provided"),
-            template,
+            &template,
             no_git,
         )?;
         println!();
 
         // 6. Confirm that the user wants to create the project environment on Shuttle
-        let should_create_environment = if !interactive {
+        let should_create_environment = if self.beta {
+            false
+        } else if !interactive {
             args.create_env
         } else if args.create_env {
             true
@@ -615,16 +620,24 @@ impl Shuttle {
         }
         println!("Run `cargo shuttle run` to run the app locally.");
         if !should_create_environment {
-            println!(
-                "Run `cargo shuttle project start` to create a project environment on Shuttle."
-            );
-            if serenity_idle_hint {
-                printdoc!(
-                    "
-                    Hint: Discord bots might want to use `--idle-minutes 0` when starting the
-                    project so that they don't go offline: {SHUTTLE_IDLE_DOCS_URL}
-                    "
+            if self.beta {
+                println!("Run `cargo shuttle deploy --allow-dirty` to deploy it to Shuttle.");
+            } else {
+                println!(
+                    "Run `cargo shuttle project start` to create a project environment on Shuttle."
                 );
+                let serenity_idle_hint = template
+                    .subfolder
+                    .as_ref()
+                    .is_some_and(|s| s.contains("serenity") || s.contains("poise"));
+                if serenity_idle_hint {
+                    printdoc!(
+                        "
+                        Hint: Discord bots might want to use `--idle-minutes 0` when starting the
+                        project so that they don't go offline: {SHUTTLE_IDLE_DOCS_URL}
+                        "
+                    );
+                }
             }
         }
 
@@ -2088,6 +2101,23 @@ impl Shuttle {
         Ok(CommandOutcome::Ok)
     }
 
+    async fn project_start_beta(&self) -> Result<CommandOutcome> {
+        let client = self.client.as_ref().unwrap();
+        let name = self.ctx.project_name();
+        let project = client.create_project_beta(name).await.map_err(|err| {
+            suggestions::project::project_request_failure(
+                err,
+                "Project creation failed",
+                true,
+                "the project creation fails repeatedly",
+            )
+        })?;
+
+        println!("Created project '{}' with id {}", project.name, project.id);
+
+        Ok(CommandOutcome::Ok)
+    }
+
     async fn project_restart(&self, idle_minutes: u64) -> Result<CommandOutcome> {
         self.project_stop()
             .await
@@ -2102,18 +2132,33 @@ impl Shuttle {
     async fn projects_list(&self, raw: bool) -> Result<CommandOutcome> {
         let client = self.client.as_ref().unwrap();
 
-        let projects = client.get_projects_list().await.map_err(|err| {
-            suggestions::project::project_request_failure(
-                err,
-                "Getting projects list failed",
-                false,
-                "getting the projects list fails repeatedly",
+        let projects_table = if self.beta {
+            project::get_projects_table_beta(&client.get_projects_list_beta().await.map_err(
+                |err| {
+                    suggestions::project::project_request_failure(
+                        err,
+                        "Getting projects list failed",
+                        false,
+                        "getting the projects list fails repeatedly",
+                    )
+                },
+            )?)
+        } else {
+            project::get_projects_table(
+                &client.get_projects_list().await.map_err(|err| {
+                    suggestions::project::project_request_failure(
+                        err,
+                        "Getting projects list failed",
+                        false,
+                        "getting the projects list fails repeatedly",
+                    )
+                })?,
+                raw,
             )
-        })?;
-        let projects_table = project::get_projects_table(self.beta, &projects, raw);
+        };
 
         println!("{}", "Personal Projects".bold());
-        println!("{projects_table}");
+        println!("{projects_table}\n");
 
         if self.beta {
             println!("Not listing team projects (not implemented yet on beta)");
@@ -2134,10 +2179,10 @@ impl Shuttle {
                         "getting the team projects list fails repeatedly",
                     )
                 })?;
-            let team_projects_table = project::get_projects_table(self.beta, &team_projects, raw);
+            let team_projects_table = project::get_projects_table(&team_projects, raw);
 
             println!("{}", format!("{}'s Projects", team.display_name).bold());
-            println!("{team_projects_table}");
+            println!("{team_projects_table}\n");
         }
 
         Ok(CommandOutcome::Ok)
@@ -2189,6 +2234,14 @@ impl Shuttle {
                     .unwrap_or("<unknown>".to_owned())
             );
         }
+
+        Ok(CommandOutcome::Ok)
+    }
+    async fn project_status_beta(&self) -> Result<CommandOutcome> {
+        let client = self.client.as_ref().unwrap();
+        let project = client.get_project_beta(self.ctx.project_name()).await?;
+        // TODO: Make a proper way to display project info
+        println!("{project:?}");
 
         Ok(CommandOutcome::Ok)
     }

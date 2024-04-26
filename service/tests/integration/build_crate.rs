@@ -14,7 +14,7 @@ async fn not_shuttle() {
 
 #[tokio::test]
 #[should_panic(
-    expected = "Did not find any packages that Shuttle can run. Make sure your crate has a binary target and uses `#[shuttle_runtime::main]`."
+    expected = "Did not find any packages that Shuttle can run. Make sure your crate has a binary target that uses `#[shuttle_runtime::main]`."
 )]
 async fn not_bin() {
     let (tx, _) = tokio::sync::mpsc::channel::<String>(256);

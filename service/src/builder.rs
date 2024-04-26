@@ -104,7 +104,7 @@ pub async fn build_workspace(
     if packages.is_empty() {
         bail!(
             "Did not find any packages that Shuttle can run. \
-            Make sure your crate has a binary target and uses `#[shuttle_runtime::main]`."
+            Make sure your crate has a binary target that uses `#[shuttle_runtime::main]`."
         );
     }
 

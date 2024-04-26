@@ -1333,7 +1333,8 @@ impl Shuttle {
                                 db_type: Some(db_type.into()),
                                 db_name: config.db_name,
                             }))
-                            .await?
+                            .await
+                            .context("Failed to start database container. Make sure that a Docker engine is running.")?
                             .into_inner()
                             .into(),
                         ),
@@ -1373,7 +1374,7 @@ impl Shuttle {
                 resource::Type::Container => {
                     let config = serde_json::from_value(shuttle_resource.config)
                         .context("deserializing resource config")?;
-                    let res = prov.start_container(config).await?;
+                    let res = prov.start_container(config).await.context("Failed to start Docker container. Make sure that a Docker engine is running.")?;
                     *bytes = serde_json::to_vec(&ShuttleResourceOutput {
                         output: res,
                         custom: shuttle_resource.custom,
@@ -1512,7 +1513,7 @@ impl Shuttle {
                         Ok(runtime) => {
                             Shuttle::add_runtime_info(runtime, &mut runtimes).await?;
                         },
-                        Err(e) => println!("Runtime error: {e:?}"),
+                        Err(e) => println!("Error while starting service: {e:?}"),
                     }
                     false
                 },

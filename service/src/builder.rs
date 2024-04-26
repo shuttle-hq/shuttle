@@ -195,7 +195,7 @@ fn ensure_binary(package: &Package) -> anyhow::Result<()> {
     if package.targets.iter().any(|target| target.is_bin()) {
         Ok(())
     } else {
-        bail!("Your Shuttle package must be a binary.")
+        bail!("Your Shuttle package must be a binary. Have you used the #[shuttle_runtime::main] macro in a crate which isn't built as a binary?")
     }
 }
 

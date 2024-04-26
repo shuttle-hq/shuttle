@@ -13,7 +13,9 @@ async fn not_shuttle() {
 }
 
 #[tokio::test]
-#[should_panic(expected = "Your Shuttle package must be a binary.")]
+#[should_panic(
+    expected = "Your Shuttle package must be a binary. Have you used the #[shuttle_runtime::main] macro in a crate which isn't built as a binary?"
+)]
 async fn not_bin() {
     let (tx, _) = tokio::sync::mpsc::channel::<String>(256);
     let project_path = format!("{}/tests/resources/not-bin", env!("CARGO_MANIFEST_DIR"));

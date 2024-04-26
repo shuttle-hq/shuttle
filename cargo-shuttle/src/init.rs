@@ -32,7 +32,7 @@ pub fn generate_project(
 
     let path = match temp_loc.subfolder.as_ref() {
         Some(subfolder) => {
-            let path = temp_dir.path().join(&subfolder);
+            let path = temp_dir.path().join(subfolder);
             if path.exists() {
                 path
             } else {

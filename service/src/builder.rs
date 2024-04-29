@@ -101,6 +101,12 @@ pub async fn build_workspace(
 
     let metadata = async_cargo_metadata(manifest_path.as_path()).await?;
     let packages = find_shuttle_packages(&metadata)?;
+    if packages.is_empty() {
+        bail!(
+            "Did not find any packages that Shuttle can run. \
+            Make sure your crate has a binary target that uses `#[shuttle_runtime::main]`."
+        );
+    }
 
     let services = compile(
         packages,
@@ -147,13 +153,16 @@ pub fn find_shuttle_packages(metadata: &Metadata) -> anyhow::Result<Vec<Package>
     let mut packages = Vec::new();
     for member in metadata.workspace_packages() {
         // skip non-Shuttle-related crates
-        if !member
+        // (must have runtime dependency and not be just a library)
+        let has_runtime_dep = member
             .dependencies
             .iter()
-            .any(|dependency| dependency.name == RUNTIME_NAME)
-        {
+            .any(|dependency| dependency.name == RUNTIME_NAME);
+        let has_binary_target = member.targets.iter().any(|t| t.is_bin());
+        if !(has_runtime_dep && has_binary_target) {
             continue;
         }
+
         let mut shuttle_deps = member
             .dependencies
             .iter()
@@ -162,7 +171,6 @@ pub fn find_shuttle_packages(metadata: &Metadata) -> anyhow::Result<Vec<Package>
             .collect::<Vec<_>>();
         shuttle_deps.sort();
         info!(name = member.name, deps = ?shuttle_deps, "Found workspace member with shuttle dependencies");
-        ensure_binary(member)?;
         packages.push(member.to_owned());
     }
 
@@ -188,15 +196,6 @@ pub async fn clean_crate(project_path: &Path) -> anyhow::Result<()> {
     }
 
     Ok(())
-}
-
-/// Make sure the project is a binary for alpha projects.
-fn ensure_binary(package: &Package) -> anyhow::Result<()> {
-    if package.targets.iter().any(|target| target.is_bin()) {
-        Ok(())
-    } else {
-        bail!("Your Shuttle package must be a binary.")
-    }
 }
 
 async fn compile(

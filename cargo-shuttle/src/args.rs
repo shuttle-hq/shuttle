@@ -200,6 +200,7 @@ pub enum ResourceCommand {
 #[derive(Parser)]
 pub enum ProjectCommand {
     /// Create an environment for this project on Shuttle
+    #[command(visible_alias = "create")]
     Start(ProjectStartArgs),
     /// Check the status of this project's environment on Shuttle
     Status {
@@ -211,7 +212,7 @@ pub enum ProjectCommand {
     Stop,
     /// Destroy and create an environment for this project on Shuttle
     Restart(ProjectStartArgs),
-    /// List all projects belonging to the calling account
+    /// List all projects you have access to
     List {
         #[arg(long, default_value = "1")]
         /// (deprecated) Which page to display

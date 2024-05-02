@@ -22,7 +22,7 @@ use crate::args::TemplateLocation;
 pub fn generate_project(
     dest: PathBuf,
     name: &str,
-    temp_loc: TemplateLocation,
+    temp_loc: &TemplateLocation,
     no_git: bool,
 ) -> Result<()> {
     println!(r#"Creating project "{name}" in "{}""#, dest.display());
@@ -30,9 +30,9 @@ pub fn generate_project(
     let temp_dir: TempDir = setup_template(&temp_loc.auto_path)
         .context("Failed to setup template generation directory")?;
 
-    let path = match temp_loc.subfolder {
+    let path = match temp_loc.subfolder.as_ref() {
         Some(subfolder) => {
-            let path = temp_dir.path().join(&subfolder);
+            let path = temp_dir.path().join(subfolder);
             if path.exists() {
                 path
             } else {

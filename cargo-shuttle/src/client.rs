@@ -24,12 +24,10 @@ pub struct ShuttleApiClient {
     client: reqwest::Client,
     api_url: String,
     api_key: Option<ApiKey>,
-    /// alter behaviour to interact with the new platform
-    beta: bool,
 }
 
 impl ShuttleApiClient {
-    pub fn new(api_url: String, api_key: Option<ApiKey>, beta: bool) -> Self {
+    pub fn new(api_url: String, api_key: Option<ApiKey>) -> Self {
         Self {
             client: reqwest::Client::builder()
                 .default_headers(
@@ -44,7 +42,6 @@ impl ShuttleApiClient {
                 .unwrap(),
             api_url,
             api_key,
-            beta,
         }
     }
 
@@ -144,13 +141,14 @@ impl ShuttleApiClient {
     }
 
     pub async fn get_service_resources(&self, project: &str) -> Result<Vec<resource::Response>> {
-        let path = if self.beta {
-            format!("/projects/{project}/resources")
-        } else {
-            format!("/projects/{project}/services/{project}/resources")
-        };
-
-        self.get(path).await
+        self.get(format!("/projects/{project}/services/{project}/resources"))
+            .await
+    }
+    pub async fn get_service_resources_beta(
+        &self,
+        project: &str,
+    ) -> Result<Vec<resource::Response>> {
+        self.get(format!("/projects/{project}/resources")).await
     }
 
     pub async fn delete_service_resource(
@@ -159,19 +157,24 @@ impl ShuttleApiClient {
         resource_type: &resource::Type,
     ) -> Result<()> {
         let r#type = resource_type.to_string();
-
         let r#type = utf8_percent_encode(&r#type, percent_encoding::NON_ALPHANUMERIC).to_owned();
 
-        let path = if self.beta {
-            format!("/projects/{project}/resources/{}", r#type)
-        } else {
-            format!(
-                "/projects/{project}/services/{project}/resources/{}",
-                r#type
-            )
-        };
+        self.delete(format!(
+            "/projects/{project}/services/{project}/resources/{}",
+            r#type
+        ))
+        .await
+    }
+    pub async fn delete_service_resource_beta(
+        &self,
+        project: &str,
+        resource_type: &resource::Type,
+    ) -> Result<()> {
+        let r#type = resource_type.to_string();
+        let r#type = utf8_percent_encode(&r#type, percent_encoding::NON_ALPHANUMERIC).to_owned();
 
-        self.delete(path).await
+        self.delete(format!("/projects/{project}/resources/{}", r#type))
+            .await
     }
 
     pub async fn create_project(
@@ -179,9 +182,14 @@ impl ShuttleApiClient {
         project: &str,
         config: &project::Config,
     ) -> Result<project::Response> {
-        let path = format!("/projects/{project}");
-
-        self.post(path, Some(config))
+        self.post(format!("/projects/{project}"), Some(config))
+            .await
+            .context("failed to make create project request")?
+            .to_json()
+            .await
+    }
+    pub async fn create_project_beta(&self, name: &str) -> Result<project::ResponseBeta> {
+        self.post(format!("/projects/{name}"), None::<()>)
             .await
             .context("failed to make create project request")?
             .to_json()
@@ -199,12 +207,16 @@ impl ShuttleApiClient {
     }
 
     pub async fn get_project(&self, project: &str) -> Result<project::Response> {
-        let path = format!("/projects/{project}");
-
-        self.get(path).await
+        self.get(format!("/projects/{project}")).await
+    }
+    pub async fn get_project_beta(&self, project: &str) -> Result<project::ResponseBeta> {
+        self.get(format!("/projects/{project}")).await
     }
 
     pub async fn get_projects_list(&self) -> Result<Vec<project::Response>> {
+        self.get("/projects".to_owned()).await
+    }
+    pub async fn get_projects_list_beta(&self) -> Result<Vec<project::ResponseBeta>> {
         self.get("/projects".to_owned()).await
     }
 
@@ -215,13 +227,10 @@ impl ShuttleApiClient {
     }
 
     pub async fn delete_project(&self, project: &str) -> Result<String> {
-        let path = if self.beta {
-            format!("/projects/{project}")
-        } else {
-            format!("/projects/{project}/delete")
-        };
-
-        self.delete(path).await
+        self.delete(format!("/projects/{project}/delete")).await
+    }
+    pub async fn delete_project_beta(&self, project: &str) -> Result<String> {
+        self.delete(format!("/projects/{project}")).await
     }
 
     pub async fn get_teams_list(&self) -> Result<Vec<team::Response>> {
@@ -229,9 +238,7 @@ impl ShuttleApiClient {
     }
 
     pub async fn get_team_projects_list(&self, team_id: &str) -> Result<Vec<project::Response>> {
-        let path = format!("/teams/{team_id}/projects");
-
-        self.get(path).await
+        self.get(format!("/teams/{team_id}/projects")).await
     }
 
     pub async fn get_logs(

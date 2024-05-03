@@ -535,7 +535,7 @@ async fn create_team(
     State(RouterState { service, .. }): State<RouterState>,
     CustomErrorPath(team_name): CustomErrorPath<String>,
     Claim { sub, .. }: Claim,
-) -> Result<String, ApiError> {
+) -> Result<AxumJson<team::Response>, ApiError> {
     if team_name.chars().count() > 30 {
         return Err(InvalidTeamName.into());
     }
@@ -549,7 +549,11 @@ async fn create_team(
 
     Span::current().record("shuttle.team.id", &team.id);
 
-    Ok("Team created".to_string())
+    Ok(AxumJson(team::Response {
+        id: team.id,
+        display_name: team.display_name,
+        is_admin: true,
+    }))
 }
 
 #[instrument(skip_all, fields(shuttle.team.id = %team_id))]

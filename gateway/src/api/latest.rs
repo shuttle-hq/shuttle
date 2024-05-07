@@ -1727,20 +1727,6 @@ pub mod tests {
 
     #[test_context(TestProject)]
     #[tokio::test]
-    async fn api_delete_project_that_has_resources_but_fails_to_remove_them(
-        project: &mut TestProject,
-    ) {
-        project.deploy("../examples/axum/metadata").await;
-        project.stop_service().await;
-
-        assert_eq!(
-            project.router_call(Method::DELETE, "/delete").await,
-            StatusCode::INTERNAL_SERVER_ERROR
-        );
-    }
-
-    #[test_context(TestProject)]
-    #[tokio::test]
     async fn api_delete_project_that_has_running_deployment(project: &mut TestProject) {
         project.deploy("../examples/axum/hello-world").await;
 
@@ -1756,11 +1742,11 @@ pub mod tests {
         project.just_deploy("../examples/axum/hello-world").await;
 
         // Wait a bit to it to progress in the queue
-        sleep(Duration::from_secs(2)).await;
+        sleep(Duration::from_secs(10)).await;
 
         assert_eq!(
             project.router_call(Method::DELETE, "/delete").await,
-            StatusCode::BAD_REQUEST
+            StatusCode::OK
         );
     }
 

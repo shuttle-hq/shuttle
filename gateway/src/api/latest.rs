@@ -677,7 +677,7 @@ async fn get_status(
     };
 
     // Compute provisioner status.
-    let provisioner_status = if let Ok(channel) = service.provisioner_host().connect().await {
+    let provisioner_status = if let Ok(channel) = service.provisioner_uri().connect().await {
         let channel = ServiceBuilder::new().service(channel);
         let mut provisioner_client = ProvisionerClient::new(channel);
         if provisioner_client.health_check(Ping {}).await.is_ok() {

@@ -1732,7 +1732,7 @@ where
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ProjectDestroyed {
-    destroyed: Option<ContainerInspectResponse>,
+    pub destroyed: Option<ContainerInspectResponse>,
 }
 
 #[async_trait]

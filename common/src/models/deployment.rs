@@ -17,7 +17,7 @@ pub const GIT_STRINGS_MAX_LENGTH: usize = 80;
 pub const CREATE_SERVICE_BODY_LIMIT: usize = 50_000_000;
 const GIT_OPTION_NONE_TEXT: &str = "N/A";
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, Debug)]
 pub struct Response {
     pub id: Uuid,
     pub service_id: String,

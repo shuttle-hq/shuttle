@@ -85,7 +85,7 @@ services:
       - "--docker-host=/var/run/docker.sock"
       - "--auth-uri=http://auth:8000"
       - "--deploys-api-key=${DEPLOYS_API_KEY}"
-      - "--provisioner-host=provisioner"
+      - "--provisioner-uri=http://provisioner:8000"
       - "--proxy-fqdn=${APPS_FQDN}"
       - "--use-tls=${USE_TLS}"
       - "--cors-origin=http://localhost:3001"

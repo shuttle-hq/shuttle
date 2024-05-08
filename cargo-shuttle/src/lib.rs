@@ -32,7 +32,7 @@ use ignore::overrides::OverrideBuilder;
 use ignore::WalkBuilder;
 use indicatif::ProgressBar;
 use indoc::{formatdoc, printdoc};
-use shuttle_common::models::deployment::deployments_table_beta;
+use shuttle_common::models::deployment::{deployments_table_beta, DeploymentRequestBeta};
 use shuttle_common::{
     constants::{
         API_URL_DEFAULT, DEFAULT_IDLE_MINUTES, EXAMPLES_REPO, EXECUTABLE_DIRNAME,
@@ -1756,6 +1756,9 @@ impl Shuttle {
             no_test: args.no_test,
             ..Default::default()
         };
+        let mut deployment_req_beta = DeploymentRequestBeta {
+            ..Default::default()
+        };
 
         if self.beta {
             let manifest_path = working_directory.join("Cargo.toml");
@@ -1779,7 +1782,7 @@ impl Shuttle {
 
                     trace!(keys = ?secrets.keys(), "available secrets");
 
-                    deployment_req.secrets = Some(secrets);
+                    deployment_req_beta.secrets = Some(secrets);
                 } else {
                     trace!("No secrets were loaded");
                 }
@@ -1794,7 +1797,7 @@ impl Shuttle {
                 .expect("at least one shuttle crate in the workspace")
                 .name
                 .to_owned();
-            deployment_req.package_name = Some(package_name);
+            deployment_req_beta.package_name = package_name;
         }
 
         if let Ok(repo) = Repository::discover(working_directory) {
@@ -1839,8 +1842,13 @@ impl Shuttle {
 
         // End this early for beta platform.
         if self.beta {
+            deployment_req_beta.data = deployment_req.data;
+            deployment_req_beta.git_commit_id = deployment_req.git_commit_id;
+            deployment_req_beta.git_commit_msg = deployment_req.git_commit_msg;
+            deployment_req_beta.git_branch = deployment_req.git_branch;
+            deployment_req_beta.git_dirty = deployment_req.git_dirty;
             let deployment = client
-                .deploy_beta(self.ctx.project_name(), deployment_req)
+                .deploy_beta(self.ctx.project_name(), deployment_req_beta)
                 .await
                 .map_err(suggestions::deploy::deploy_request_failure)?;
 

@@ -409,14 +409,24 @@ pub fn get_deployments_table(
 
 #[derive(Default, Deserialize, Serialize)]
 pub struct DeploymentRequest {
-    /// Alpha: tar archive. Beta: zip archive.
+    /// Alpha: tar archive.
     pub data: Vec<u8>,
-    /// The cargo package name to compile and run. Required on beta.
-    pub package_name: Option<String>,
-    /// Secrets to add before this deployment. Ignored on alpha.
-    pub secrets: Option<HashMap<String, String>>,
-    /// Ignored on beta.
     pub no_test: bool,
+    pub git_commit_id: Option<String>,
+    pub git_commit_msg: Option<String>,
+    pub git_branch: Option<String>,
+    pub git_dirty: Option<bool>,
+}
+
+#[derive(Default, Deserialize, Serialize)]
+pub struct DeploymentRequestBeta {
+    /// Beta: zip archive.
+    pub data: Vec<u8>,
+    /// The cargo package name to compile and run.
+    pub package_name: String,
+    /// Secrets to add before this deployment.
+    /// Might remove this in favour of a separate secrets uploading action.
+    pub secrets: Option<HashMap<String, String>>,
     pub git_commit_id: Option<String>,
     pub git_commit_msg: Option<String>,
     pub git_branch: Option<String>,

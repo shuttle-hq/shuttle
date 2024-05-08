@@ -10,7 +10,7 @@ use shuttle_common::log::Backend;
 
 use super::otlp_tracing_bridge::{self, ErrorTracingLayer};
 
-const OTLP_ADDRESS: &str = "http://otel-collector:4317";
+const OTLP_ADDRESS: &str = "http://otel-collector:4318";
 
 pub fn setup_tracing<S>(subscriber: S, backend: Backend)
 where

@@ -9,7 +9,7 @@ use reqwest::{RequestBuilder, Response};
 use serde::{Deserialize, Serialize};
 use shuttle_common::constants::headers::X_CARGO_SHUTTLE_VERSION;
 use shuttle_common::log::LogsRange;
-use shuttle_common::models::deployment::DeploymentRequest;
+use shuttle_common::models::deployment::{DeploymentRequest, DeploymentRequestBeta};
 use shuttle_common::models::team;
 use shuttle_common::models::{deployment, project, service, ToJson};
 use shuttle_common::{resource, ApiKey, LogItem, VersionInfo};
@@ -108,7 +108,7 @@ impl ShuttleApiClient {
     pub async fn deploy_beta(
         &self,
         project: &str,
-        deployment_req: DeploymentRequest,
+        deployment_req: DeploymentRequestBeta,
     ) -> Result<deployment::EcsResponse> {
         let path = format!("/projects/{project}");
         let deployment_req = rmp_serde::to_vec(&deployment_req)

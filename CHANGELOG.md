@@ -7,7 +7,50 @@ See [conventional commits](https://www.conventionalcommits.org/) for commit guid
 
 **For proper release notes with more details such as upgrading guidelines, check out the [releases page](https://github.com/shuttle-hq/shuttle/releases).**
 
-## [0.44.0](https://github.com/shuttle-hq/shuttle/compare/v0.43.0..0.44.0) - 2024-04-23
+## [0.45.0](https://github.com/shuttle-hq/shuttle/compare/v0.44.0..0.45.0) - 2024-05-09
+
+### Features
+
+- *(runtime)* Version endpoint for runner version check - ([3757bfe](https://github.com/shuttle-hq/shuttle/commit/3757bfe55214ee19e9096661e20e4d369a7073f8))
+
+### Bug Fixes
+
+- *(backends)* Switch to http otel collector for compatibility with beta - ([85a8d54](https://github.com/shuttle-hq/shuttle/commit/85a8d54da6f6dd9524f81e13ba7333fce516db61))
+- *(cargo-shuttle)* Better error when docker is not running ([#1759](https://github.com/shuttle-hq/shuttle/issues/1759)) - ([873f11b](https://github.com/shuttle-hq/shuttle/commit/873f11b0b83c1640185438f0c949d22bda4af1de))
+- *(cargo-shuttle)* Skip org project listing on beta - ([b52786b](https://github.com/shuttle-hq/shuttle/commit/b52786b96e8ecee7bf6ea3bfd67a17e832346618))
+- *(runtime)* Make compatible with alpha & beta - ([3fc73ea](https://github.com/shuttle-hq/shuttle/commit/3fc73ea9c788f40f099e5b91d73724f13674be90))
+- *(service)* Improve workspace member discovery and error ([#1758](https://github.com/shuttle-hq/shuttle/issues/1758)) - ([28f4011](https://github.com/shuttle-hq/shuttle/commit/28f401159808252155118d211f458a2cbeacf259))
+- Otel-otlp http client, deployment request ([#1765](https://github.com/shuttle-hq/shuttle/issues/1765)) - ([f947dee](https://github.com/shuttle-hq/shuttle/commit/f947dee6c9041393ff9d36316bf26da955a7ac92))
+- Review comments on ecs-common - ([cd2c7a8](https://github.com/shuttle-hq/shuttle/commit/cd2c7a8b7f2f2c73fd8aa77ec0b3e8705970c71a))
+- Make services compatible with beta runtime - ([a45addb](https://github.com/shuttle-hq/shuttle/commit/a45addb476cde6aaeab7853963eae3430b156ce2))
+
+### Refactor
+
+- *(cargo-shuttle)* Adapt project response for beta ([#1756](https://github.com/shuttle-hq/shuttle/issues/1756)) - ([7fd5723](https://github.com/shuttle-hq/shuttle/commit/7fd57237cc6253e5a3e8273fcbb8ee5c00251708))
+- *(cargo-shuttle)* Cleanup of beta branching & behaviour ([#1760](https://github.com/shuttle-hq/shuttle/issues/1760)) - ([43d7f28](https://github.com/shuttle-hq/shuttle/commit/43d7f28440290b8a969232b20a9d6a6584b13a15))
+- Return team details when creating a new team ([#1761](https://github.com/shuttle-hq/shuttle/issues/1761)) - ([399b525](https://github.com/shuttle-hq/shuttle/commit/399b525bb658d4d2b122c3008f65d5cf1e686299))
+- Rename organizations to teams ([#1754](https://github.com/shuttle-hq/shuttle/issues/1754)) - ([61ec530](https://github.com/shuttle-hq/shuttle/commit/61ec5303f2671a787b7b49e62e568f184a1f2767))
+
+### Testing
+
+- Fix failing logger tests ([#1766](https://github.com/shuttle-hq/shuttle/issues/1766)) - ([935ae26](https://github.com/shuttle-hq/shuttle/commit/935ae266c7721eea43322265e34d1a2b6887fc24))
+
+### Miscellaneous Tasks
+
+- 0.45.0 - ([7bee979](https://github.com/shuttle-hq/shuttle/commit/7bee979e2529dee63ce641733ff4b8c86d66e237))
+
+### Miscellaneous
+
+- *(cargo-shuttle)* Nits - ([f1f4b4e](https://github.com/shuttle-hq/shuttle/commit/f1f4b4e4fdee33a147c351c331c06ce824ce9d75))
+- Bump examples - ([00a1bc4](https://github.com/shuttle-hq/shuttle/commit/00a1bc4ea3183c46b2b45f1b2dc0abf89509065f))
+- Arg for provisioner-uri ([#1763](https://github.com/shuttle-hq/shuttle/issues/1763)) - ([8671518](https://github.com/shuttle-hq/shuttle/commit/8671518d0e7f9183d48bc157f9a75b07f52f5a17))
+- Project delete ([#1762](https://github.com/shuttle-hq/shuttle/issues/1762)) - ([cf701a7](https://github.com/shuttle-hq/shuttle/commit/cf701a7d0d597d1a7d127281f758c0272e3944ca))
+- Merge pull request #1753 from shuttle-hq/feat/shuttle-ecs-common - ([3322112](https://github.com/shuttle-hq/shuttle/commit/332211226c346f86abe41e3da66770b778cc7a59))
+- Update timeout comment - ([95c155b](https://github.com/shuttle-hq/shuttle/commit/95c155bf9504c3f4630f34302c29d93eb16fb488))
+- Merge remote-tracking branch 'upstream/main' into feat/shuttle-ecs-common - ([a0e1bf1](https://github.com/shuttle-hq/shuttle/commit/a0e1bf153af7a07a3548680b1f7fea2733c92427))
+- Merge remote-tracking branch 'upstream/main' into feat/shuttle-ecs-common - ([ceed492](https://github.com/shuttle-hq/shuttle/commit/ceed492d3543058cecba90a14593757044354ccd))
+
+## [0.44.0](https://github.com/shuttle-hq/shuttle/compare/v0.43.0..v0.44.0) - 2024-04-23
 
 ### Features
 

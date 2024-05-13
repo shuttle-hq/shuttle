@@ -240,6 +240,12 @@ impl ShuttleApiClient {
     pub async fn get_team_projects_list(&self, team_id: &str) -> Result<Vec<project::Response>> {
         self.get(format!("/teams/{team_id}/projects")).await
     }
+    pub async fn get_team_projects_list_beta(
+        &self,
+        team_id: &str,
+    ) -> Result<Vec<project::ResponseBeta>> {
+        self.get(format!("/teams/{team_id}/projects")).await
+    }
 
     pub async fn get_logs(
         &self,

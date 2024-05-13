@@ -1675,7 +1675,7 @@ impl Shuttle {
         let mut signal_received = false;
         for (i, service) in services.iter().enumerate() {
             signal_received = tokio::select! {
-                res = Shuttle::spin_local_runtime(&run_args, service, i as u16) => {
+                res = Shuttle::spin_local_runtime(self.beta, &run_args, service, i as u16) => {
                     Shuttle::add_runtime_info(res.unwrap(), &mut runtimes).await?;
                     false
                 },

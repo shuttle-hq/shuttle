@@ -609,154 +609,154 @@ jobs:
               exit 1
             fi
 workflows:
-  # ci:
-  #   jobs:
-  #     - workspace-fmt-clippy
-  #     - test-standalone:
-  #         name: << matrix.path >>
-  #         matrix:
-  #           parameters:
-  #             path:
-  #               - resources/aws-rds
-  #               - resources/persist
-  #               - resources/qdrant
-  #               - resources/shared-db
-  #               - resources/turso
-  #               - resources/opendal
-  #               - services/shuttle-actix-web
-  #               - services/shuttle-axum
-  #               - services/shuttle-poem
-  #               - services/shuttle-rocket
-  #               - services/shuttle-salvo
-  #               - services/shuttle-serenity
-  #               - services/shuttle-thruster
-  #               - services/shuttle-tide
-  #               - services/shuttle-tower
-  #               - services/shuttle-warp
-  #     - test-workspace-member:
-  #         name: << matrix.crate >>
-  #         filters:
-  #           branches:
-  #             ignore:
-  #               - /pull\/.*/
-  #         matrix:
-  #           parameters:
-  #             crate:
-  #               # - shuttle-admin # no tests
-  #               - shuttle-backends
-  #               # - shuttle-gateway # TODO: move docker-dependant tests to integration tests and activate this
-  #     - test-workspace-member:
-  #         name: << matrix.crate >>
-  #         matrix:
-  #           parameters:
-  #             crate:
-  #               - shuttle-codegen
-  #               - shuttle-common
-  #     - test-workspace-member-with-integration:
-  #         name: << matrix.crate >>
-  #         filters:
-  #           branches:
-  #             ignore:
-  #               - /pull\/.*/
-  #         matrix:
-  #           alias: test-workspace-member-with-integration-medium
-  #           parameters:
-  #             resource_class:
-  #               - medium
-  #             crate:
-  #               - shuttle-resource-recorder
-  #     - test-workspace-member-with-integration:
-  #         name: << matrix.crate >>
-  #         matrix:
-  #           alias: test-workspace-member-with-integration-large
-  #           parameters:
-  #             resource_class:
-  #               - large
-  #             crate:
-  #               - shuttle-runtime
-  #               - shuttle-service
-  #     - test-workspace-member-with-integration:
-  #         name: << matrix.crate >>
-  #         matrix:
-  #           alias: test-workspace-member-with-integration-xlarge
-  #           parameters:
-  #             resource_class:
-  #               - xlarge
-  #             sccache-size:
-  #               - 1G
-  #             crate:
-  #               - cargo-shuttle
-  #               - shuttle-deployer
-  #     - test-workspace-member-with-integration-docker:
-  #         name: << matrix.crate >> with docker
-  #         filters:
-  #           branches:
-  #             ignore:
-  #               - /pull\/.*/
-  #         matrix:
-  #           alias: test-workspace-member-with-integration-docker-medium
-  #           parameters:
-  #             resource_class:
-  #               - medium
-  #             crate:
-  #               - shuttle-auth
-  #               - shuttle-backends
-  #               - shuttle-provisioner
-  #               - shuttle-logger
-  #     - test-workspace-member-with-integration-docker:
-  #         name: << matrix.crate >> with docker
-  #         matrix:
-  #           alias: test-workspace-member-with-integration-docker-large
-  #           parameters:
-  #             resource_class:
-  #               - large
-  #             sccache-size:
-  #               - 750M
-  #             crate:
-  #               - cargo-shuttle
-  #     - cargo-audit:
-  #         filters:
-  #           branches:
-  #             only: main
-  # unstable:
-  #   jobs:
-  #     # allow this job on main and other internal branches, but not on PRs from forks
-  #     - approve-deploy-images-unstable:
-  #         type: approval
-  #         filters:
-  #           branches:
-  #             ignore:
-  #               - /pull\/.*/
-  #               - production
-  #     - approve-build-and-push-images-unstable:
-  #         type: approval
-  #         filters:
-  #           branches:
-  #             ignore:
-  #               - /pull\/.*/
-  #               - production
-  #     - build-and-push:
-  #         name: build-and-push-unstable
-  #         aws-access-key-id: DEV_AWS_ACCESS_KEY_ID
-  #         aws-secret-access-key: DEV_AWS_SECRET_ACCESS_KEY
-  #         shuttle-env: staging
-  #         requires:
-  #           - approve-build-and-push-images-unstable
-  #     - deploy-images:
-  #         name: Deploy images to unstable
-  #         postgres-password: DEV_POSTGRES_PASSWORD
-  #         mongodb-password: DEV_MONGO_INITDB_ROOT_PASSWORD
-  #         honeycomb-api-key: DEV_HONEYCOMB_API_KEY
-  #         deploys-api-key: DEV_DEPLOYS_API_KEY
-  #         logger-postgres-uri: DEV_LOGGER_POSTGRES_URI
-  #         stripe-secret-key: DEV_STRIPE_SECRET_KEY
-  #         jwt-signing-private-key: DEV_AUTH_JWTSIGNING_PRIVATE_KEY
-  #         control-db-postgres-uri: DEV_CONTROL_DB_POSTGRES_URI
-  #         gateway-admin-key: DEV_GATEWAY_ADMIN_KEY
-  #         permit-api-key: STAGING_PERMIT_API_KEY
-  #         requires:
-  #           - build-and-push-unstable
-  #           - approve-deploy-images-unstable
+  ci:
+    jobs:
+      - workspace-fmt-clippy
+      - test-standalone:
+          name: << matrix.path >>
+          matrix:
+            parameters:
+              path:
+                - resources/aws-rds
+                - resources/persist
+                - resources/qdrant
+                - resources/shared-db
+                - resources/turso
+                - resources/opendal
+                - services/shuttle-actix-web
+                - services/shuttle-axum
+                - services/shuttle-poem
+                - services/shuttle-rocket
+                - services/shuttle-salvo
+                - services/shuttle-serenity
+                - services/shuttle-thruster
+                - services/shuttle-tide
+                - services/shuttle-tower
+                - services/shuttle-warp
+      - test-workspace-member:
+          name: << matrix.crate >>
+          filters:
+            branches:
+              ignore:
+                - /pull\/.*/
+          matrix:
+            parameters:
+              crate:
+                # - shuttle-admin # no tests
+                - shuttle-backends
+                # - shuttle-gateway # TODO: move docker-dependant tests to integration tests and activate this
+      - test-workspace-member:
+          name: << matrix.crate >>
+          matrix:
+            parameters:
+              crate:
+                - shuttle-codegen
+                - shuttle-common
+      - test-workspace-member-with-integration:
+          name: << matrix.crate >>
+          filters:
+            branches:
+              ignore:
+                - /pull\/.*/
+          matrix:
+            alias: test-workspace-member-with-integration-medium
+            parameters:
+              resource_class:
+                - medium
+              crate:
+                - shuttle-resource-recorder
+      - test-workspace-member-with-integration:
+          name: << matrix.crate >>
+          matrix:
+            alias: test-workspace-member-with-integration-large
+            parameters:
+              resource_class:
+                - large
+              crate:
+                - shuttle-runtime
+                - shuttle-service
+      - test-workspace-member-with-integration:
+          name: << matrix.crate >>
+          matrix:
+            alias: test-workspace-member-with-integration-xlarge
+            parameters:
+              resource_class:
+                - xlarge
+              sccache-size:
+                - 1G
+              crate:
+                - cargo-shuttle
+                - shuttle-deployer
+      - test-workspace-member-with-integration-docker:
+          name: << matrix.crate >> with docker
+          filters:
+            branches:
+              ignore:
+                - /pull\/.*/
+          matrix:
+            alias: test-workspace-member-with-integration-docker-medium
+            parameters:
+              resource_class:
+                - medium
+              crate:
+                - shuttle-auth
+                - shuttle-backends
+                - shuttle-provisioner
+                - shuttle-logger
+      - test-workspace-member-with-integration-docker:
+          name: << matrix.crate >> with docker
+          matrix:
+            alias: test-workspace-member-with-integration-docker-large
+            parameters:
+              resource_class:
+                - large
+              sccache-size:
+                - 750M
+              crate:
+                - cargo-shuttle
+      - cargo-audit:
+          filters:
+            branches:
+              only: main
+  unstable:
+    jobs:
+      # allow this job on main and other internal branches, but not on PRs from forks
+      - approve-deploy-images-unstable:
+          type: approval
+          filters:
+            branches:
+              ignore:
+                - /pull\/.*/
+                - production
+      - approve-build-and-push-images-unstable:
+          type: approval
+          filters:
+            branches:
+              ignore:
+                - /pull\/.*/
+                - production
+      - build-and-push:
+          name: build-and-push-unstable
+          aws-access-key-id: DEV_AWS_ACCESS_KEY_ID
+          aws-secret-access-key: DEV_AWS_SECRET_ACCESS_KEY
+          shuttle-env: staging
+          requires:
+            - approve-build-and-push-images-unstable
+      - deploy-images:
+          name: Deploy images to unstable
+          postgres-password: DEV_POSTGRES_PASSWORD
+          mongodb-password: DEV_MONGO_INITDB_ROOT_PASSWORD
+          honeycomb-api-key: DEV_HONEYCOMB_API_KEY
+          deploys-api-key: DEV_DEPLOYS_API_KEY
+          logger-postgres-uri: DEV_LOGGER_POSTGRES_URI
+          stripe-secret-key: DEV_STRIPE_SECRET_KEY
+          jwt-signing-private-key: DEV_AUTH_JWTSIGNING_PRIVATE_KEY
+          control-db-postgres-uri: DEV_CONTROL_DB_POSTGRES_URI
+          gateway-admin-key: DEV_GATEWAY_ADMIN_KEY
+          permit-api-key: STAGING_PERMIT_API_KEY
+          requires:
+            - build-and-push-unstable
+            - approve-deploy-images-unstable
   ### TODO: Fix and re-enable this
   # qa:
   #   jobs:
@@ -774,140 +774,140 @@ workflows:
   #             only: production
   build-binaries:
     jobs:
-      # - build-binaries-linux:
-      #     name: build-binaries-x86_64-gnu
-      #     target: x86_64-unknown-linux-gnu
-      #     resource_class: xlarge
-      #     filters:
-      #       branches:
-      #         only: production
-      # - build-binaries-linux:
-      #     name: build-binaries-x86_64-musl
-      #     target: x86_64-unknown-linux-musl
-      #     resource_class: xlarge
-      #     filters:
-      #       branches:
-      #         only: production
-      # - build-binaries-linux:
-      #     name: build-binaries-aarch64
-      #     target: aarch64-unknown-linux-musl
-      #     resource_class: arm.xlarge
-      #     filters:
-      #       branches:
-      #         only: production
-      - build-binaries-windows
-          # filters:
-          #   branches:
-          #     only: production
-      # - build-binaries-mac:
-      #     filters:
-      #       branches:
-      #         only: production
-      # - publish-github-release-draft:
-      #     requires:
-      #       - build-binaries-x86_64-gnu
-      #       - build-binaries-x86_64-musl
-      #       - build-binaries-aarch64
-      #       - build-binaries-windows
-      #       - build-binaries-mac
-  # deploy:
-  #   jobs:
-  #     # time save: build and push without approval since a merge to production should want to deploy.
-  #     # deploy requires approval.
-  #     - build-and-push:
-  #         name: build-and-push-production
-  #         aws-access-key-id: PROD_AWS_ACCESS_KEY_ID
-  #         aws-secret-access-key: PROD_AWS_SECRET_ACCESS_KEY
-  #         shuttle-env: production
-  #         filters:
-  #           branches:
-  #             only: production
-  #     - approve-deploy-production:
-  #         type: approval
-  #         filters:
-  #           branches:
-  #             only: production
-  #     - deploy-images:
-  #         name: deploy-images-to-production
-  #         postgres-password: PROD_POSTGRES_PASSWORD
-  #         mongodb-password: PROD_MONGO_INITDB_ROOT_PASSWORD
-  #         honeycomb-api-key: PROD_HONEYCOMB_API_KEY
-  #         deploys-api-key: PROD_DEPLOYS_API_KEY
-  #         logger-postgres-uri: PROD_LOGGER_POSTGRES_URI
-  #         stripe-secret-key: PROD_STRIPE_SECRET_KEY
-  #         jwt-signing-private-key: PROD_AUTH_JWTSIGNING_PRIVATE_KEY
-  #         control-db-postgres-uri: PROD_CONTROL_DB_POSTGRES_URI
-  #         gateway-admin-key: PROD_GATEWAY_ADMIN_KEY
-  #         permit-api-key: PROD_PERMIT_API_KEY
-  #         ssh-fingerprint: 6a:c5:33:fe:5b:c9:06:df:99:64:ca:17:0d:32:18:2e
-  #         ssh-config-script: production-ssh-config.sh
-  #         ssh-host: shuttle.prod.internal
-  #         shuttle-env: production
-  #         requires:
-  #           - build-and-push-production
-  #           - approve-deploy-production
-  # publish-crates:
-  #   jobs:
-  #     - approve-publish-crates:
-  #         type: approval
-  #         filters:
-  #           branches:
-  #             only: production
-  #     - publish-crate:
-  #         matrix:
-  #           parameters:
-  #             path:
-  #               - codegen
-  #               - common
-  #         name: publish-<< matrix.path >>
-  #         requires:
-  #           - approve-publish-crates
-  #     - publish-crate:
-  #         matrix:
-  #           parameters:
-  #             path:
-  #               - proto
-  #               - service
-  #         name: publish-<< matrix.path >>
-  #         requires:
-  #           - publish-common
-  #     - publish-crate:
-  #         matrix:
-  #           parameters:
-  #             path:
-  #               - resources/aws-rds
-  #               - resources/persist
-  #               - resources/qdrant
-  #               - resources/shared-db
-  #               - resources/turso
-  #               - resources/opendal
-  #         name: publish-<< matrix.path >>
-  #         requires:
-  #           - publish-service
-  #     - publish-crate:
-  #         matrix:
-  #           parameters:
-  #             path:
-  #               - runtime
-  #               - cargo-shuttle
-  #         name: publish-<< matrix.path >>
-  #         requires:
-  #           - publish-service
-  #           - publish-proto
-  #     - publish-crate:
-  #         matrix:
-  #           parameters:
-  #             path:
-  #               - services/shuttle-actix-web
-  #               - services/shuttle-axum
-  #               - services/shuttle-poem
-  #               - services/shuttle-rocket
-  #               - services/shuttle-salvo
-  #               - services/shuttle-serenity
-  #               - services/shuttle-thruster
-  #               - services/shuttle-tide
-  #               - services/shuttle-tower
-  #               - services/shuttle-warp
-  #         name: publish-<< matrix.path >>
-  #         requires:
-  #           - publish-runtime
+      - build-binaries-linux:
+          name: build-binaries-x86_64-gnu
+          target: x86_64-unknown-linux-gnu
+          resource_class: xlarge
+          filters:
+            branches:
+              only: production
+      - build-binaries-linux:
+          name: build-binaries-x86_64-musl
+          target: x86_64-unknown-linux-musl
+          resource_class: xlarge
+          filters:
+            branches:
+              only: production
+      - build-binaries-linux:
+          name: build-binaries-aarch64
+          target: aarch64-unknown-linux-musl
+          resource_class: arm.xlarge
+          filters:
+            branches:
+              only: production
+      - build-binaries-windows:
+          filters:
+            branches:
+              only: production
+      - build-binaries-mac:
+          filters:
+            branches:
+              only: production
+      - publish-github-release-draft:
+          requires:
+            - build-binaries-x86_64-gnu
+            - build-binaries-x86_64-musl
+            - build-binaries-aarch64
+            - build-binaries-windows
+            - build-binaries-mac
+  deploy:
+    jobs:
+      # time save: build and push without approval since a merge to production should want to deploy.
+      # deploy requires approval.
+      - build-and-push:
+          name: build-and-push-production
+          aws-access-key-id: PROD_AWS_ACCESS_KEY_ID
+          aws-secret-access-key: PROD_AWS_SECRET_ACCESS_KEY
+          shuttle-env: production
+          filters:
+            branches:
+              only: production
+      - approve-deploy-production:
+          type: approval
+          filters:
+            branches:
+              only: production
+      - deploy-images:
+          name: deploy-images-to-production
+          postgres-password: PROD_POSTGRES_PASSWORD
+          mongodb-password: PROD_MONGO_INITDB_ROOT_PASSWORD
+          honeycomb-api-key: PROD_HONEYCOMB_API_KEY
+          deploys-api-key: PROD_DEPLOYS_API_KEY
+          logger-postgres-uri: PROD_LOGGER_POSTGRES_URI
+          stripe-secret-key: PROD_STRIPE_SECRET_KEY
+          jwt-signing-private-key: PROD_AUTH_JWTSIGNING_PRIVATE_KEY
+          control-db-postgres-uri: PROD_CONTROL_DB_POSTGRES_URI
+          gateway-admin-key: PROD_GATEWAY_ADMIN_KEY
+          permit-api-key: PROD_PERMIT_API_KEY
+          ssh-fingerprint: 6a:c5:33:fe:5b:c9:06:df:99:64:ca:17:0d:32:18:2e
+          ssh-config-script: production-ssh-config.sh
+          ssh-host: shuttle.prod.internal
+          shuttle-env: production
+          requires:
+            - build-and-push-production
+            - approve-deploy-production
+  publish-crates:
+    jobs:
+      - approve-publish-crates:
+          type: approval
+          filters:
+            branches:
+              only: production
+      - publish-crate:
+          matrix:
+            parameters:
+              path:
+                - codegen
+                - common
+          name: publish-<< matrix.path >>
+          requires:
+            - approve-publish-crates
+      - publish-crate:
+          matrix:
+            parameters:
+              path:
+                - proto
+                - service
+          name: publish-<< matrix.path >>
+          requires:
+            - publish-common
+      - publish-crate:
+          matrix:
+            parameters:
+              path:
+                - resources/aws-rds
+                - resources/persist
+                - resources/qdrant
+                - resources/shared-db
+                - resources/turso
+                - resources/opendal
+          name: publish-<< matrix.path >>
+          requires:
+            - publish-service
+      - publish-crate:
+          matrix:
+            parameters:
+              path:
+                - runtime
+                - cargo-shuttle
+          name: publish-<< matrix.path >>
+          requires:
+            - publish-service
+            - publish-proto
+      - publish-crate:
+          matrix:
+            parameters:
+              path:
+                - services/shuttle-actix-web
+                - services/shuttle-axum
+                - services/shuttle-poem
+                - services/shuttle-rocket
+                - services/shuttle-salvo
+                - services/shuttle-serenity
+                - services/shuttle-thruster
+                - services/shuttle-tide
+                - services/shuttle-tower
+                - services/shuttle-warp
+          name: publish-<< matrix.path >>
+          requires:
+            - publish-runtime

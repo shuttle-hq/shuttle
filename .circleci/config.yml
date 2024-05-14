@@ -389,7 +389,7 @@ jobs:
             AUTH_JWTSIGNING_PRIVATE_KEY=${<< parameters.jwt-signing-private-key >>} \
             CONTROL_DB_POSTGRES_URI=${<< parameters.control-db-postgres-uri >>} \
             GATEWAY_ADMIN_KEY=${<< parameters.gateway-admin-key >>} \
-            CORS_ORIGIN=${<< parameters.cors-origin >>} \
+            CORS_ORIGIN=<< parameters.cors-origin >> \
             PERMIT_API_KEY=${<< parameters.permit-api-key >>} \
             make deploy
       - when:

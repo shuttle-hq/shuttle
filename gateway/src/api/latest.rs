@@ -15,7 +15,7 @@ use axum::{Json as AxumJson, Router};
 use fqdn::FQDN;
 use futures::Future;
 use http::header::AUTHORIZATION;
-use http::{HeaderValue, Method, StatusCode, Uri};
+use http::{request, HeaderValue, Method, StatusCode, Uri};
 use instant_acme::{AccountCredentials, ChallengeType};
 use serde::{Deserialize, Serialize};
 use shuttle_backends::auth::{AuthPublicKey, JwtAuthenticationLayer, ScopedLayer};
@@ -39,7 +39,7 @@ use shuttle_proto::provisioner::Ping;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::{Mutex, MutexGuard};
 use tower::ServiceBuilder;
-use tower_http::cors::CorsLayer;
+use tower_http::cors::{AllowOrigin, CorsLayer};
 use tracing::{debug, error, field, info, instrument, trace, warn, Span};
 use ttl_cache::TtlCache;
 use ulid::Ulid;
@@ -1194,15 +1194,17 @@ impl ApiBuilder {
     }
 
     pub fn with_cors(mut self, cors_origin: &str) -> Self {
+        let cors_origin = cors_origin.to_owned();
+
         let cors_layer = CorsLayer::new()
             .allow_methods(vec![Method::GET, Method::POST, Method::DELETE])
             .allow_headers(vec![AUTHORIZATION])
             .max_age(Duration::from_secs(60) * 10)
-            .allow_origin(
-                cors_origin
-                    .parse::<HeaderValue>()
-                    .expect("to be able to parse the CORS origin"),
-            );
+            .allow_origin(AllowOrigin::predicate(
+                move |origin: &HeaderValue, _request_parts: &request::Parts| {
+                    origin.as_bytes().ends_with(cors_origin.as_bytes())
+                },
+            ));
 
         self.router = self.router.layer(cors_layer);
 

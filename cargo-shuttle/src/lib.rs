@@ -2169,26 +2169,38 @@ impl Shuttle {
         println!("{}", "Personal Projects".bold());
         println!("{projects_table}\n");
 
-        if self.beta {
-            println!("Not listing team projects (not implemented yet on beta)");
-            return Ok(CommandOutcome::Ok);
-        }
-
         let teams = client.get_teams_list().await?;
 
         for team in teams {
-            let team_projects = client
-                .get_team_projects_list(&team.id)
-                .await
-                .map_err(|err| {
-                    suggestions::project::project_request_failure(
-                        err,
-                        "Getting teams projects list failed",
-                        false,
-                        "getting the team projects list fails repeatedly",
-                    )
-                })?;
-            let team_projects_table = project::get_projects_table(&team_projects, raw);
+            let team_projects_table = if self.beta {
+                let team_projects =
+                    client
+                        .get_team_projects_list_beta(&team.id)
+                        .await
+                        .map_err(|err| {
+                            suggestions::project::project_request_failure(
+                                err,
+                                "Getting teams projects list failed",
+                                false,
+                                "getting the team projects list fails repeatedly",
+                            )
+                        })?;
+                project::get_projects_table_beta(&team_projects)
+            } else {
+                let team_projects =
+                    client
+                        .get_team_projects_list(&team.id)
+                        .await
+                        .map_err(|err| {
+                            suggestions::project::project_request_failure(
+                                err,
+                                "Getting teams projects list failed",
+                                false,
+                                "getting the team projects list fails repeatedly",
+                            )
+                        })?;
+                project::get_projects_table(&team_projects, raw)
+            };
 
             println!("{}", format!("{}'s Projects", team.display_name).bold());
             println!("{team_projects_table}\n");

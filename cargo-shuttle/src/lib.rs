@@ -2142,16 +2142,20 @@ impl Shuttle {
         let client = self.client.as_ref().unwrap();
 
         let projects_table = if self.beta {
-            project::get_projects_table_beta(&client.get_projects_list_beta().await.map_err(
-                |err| {
-                    suggestions::project::project_request_failure(
-                        err,
-                        "Getting projects list failed",
-                        false,
-                        "getting the projects list fails repeatedly",
-                    )
-                },
-            )?)
+            project::get_projects_table_beta(
+                &client
+                    .get_projects_list_beta()
+                    .await
+                    .map_err(|err| {
+                        suggestions::project::project_request_failure(
+                            err,
+                            "Getting projects list failed",
+                            false,
+                            "getting the projects list fails repeatedly",
+                        )
+                    })?
+                    .projects,
+            )
         } else {
             project::get_projects_table(
                 &client.get_projects_list().await.map_err(|err| {
@@ -2173,18 +2177,18 @@ impl Shuttle {
 
         for team in teams {
             let team_projects_table = if self.beta {
-                let team_projects =
-                    client
-                        .get_team_projects_list_beta(&team.id)
-                        .await
-                        .map_err(|err| {
-                            suggestions::project::project_request_failure(
-                                err,
-                                "Getting teams projects list failed",
-                                false,
-                                "getting the team projects list fails repeatedly",
-                            )
-                        })?;
+                let team_projects = client
+                    .get_team_projects_list_beta(&team.id)
+                    .await
+                    .map_err(|err| {
+                        suggestions::project::project_request_failure(
+                            err,
+                            "Getting teams projects list failed",
+                            false,
+                            "getting the team projects list fails repeatedly",
+                        )
+                    })?
+                    .projects;
                 project::get_projects_table_beta(&team_projects)
             } else {
                 let team_projects =

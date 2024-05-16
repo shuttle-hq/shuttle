@@ -216,7 +216,7 @@ impl ShuttleApiClient {
     pub async fn get_projects_list(&self) -> Result<Vec<project::Response>> {
         self.get("/projects".to_owned()).await
     }
-    pub async fn get_projects_list_beta(&self) -> Result<Vec<project::ResponseBeta>> {
+    pub async fn get_projects_list_beta(&self) -> Result<project::ResponseListBeta> {
         self.get("/projects".to_owned()).await
     }
 
@@ -243,7 +243,7 @@ impl ShuttleApiClient {
     pub async fn get_team_projects_list_beta(
         &self,
         team_id: &str,
-    ) -> Result<Vec<project::ResponseBeta>> {
+    ) -> Result<project::ResponseListBeta> {
         self.get(format!("/teams/{team_id}/projects")).await
     }
 

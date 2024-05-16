@@ -37,6 +37,11 @@ pub struct ResponseBeta {
     pub is_admin: bool,
 }
 
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct ResponseListBeta {
+    pub projects: Vec<ResponseBeta>,
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize, EnumString)]
 #[serde(rename_all = "lowercase")]
 pub enum State {

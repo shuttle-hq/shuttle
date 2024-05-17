@@ -94,6 +94,11 @@ impl std::fmt::Display for LogItemBeta {
     }
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct LogsResponseBeta {
+    pub logs: Vec<LogItemBeta>,
+}
+
 const LOGLINE_MAX_CHARS: usize = 2048;
 const TRUNC_MSG: &str = "... (truncated)";
 

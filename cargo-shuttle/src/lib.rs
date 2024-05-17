@@ -852,7 +852,7 @@ impl Shuttle {
         let client = self.client.as_ref().unwrap();
         let proj_name = self.ctx.project_name();
         let logs = if args.dump_it_all {
-            client.get_project_logs_beta(proj_name).await?
+            client.get_project_logs_beta(proj_name).await?.logs
         } else {
             // TODO:
             // let depl = client.get_current_deployment_beta(proj_name).await?;
@@ -860,7 +860,10 @@ impl Shuttle {
             let depl = depls
                 .first()
                 .expect("at least one deployment in this project");
-            client.get_deployment_logs_beta(proj_name, &depl.id).await?
+            client
+                .get_deployment_logs_beta(proj_name, &depl.id)
+                .await?
+                .logs
         };
         for log in logs {
             println!("{}", log);

@@ -8,11 +8,11 @@ use reqwest::header::HeaderMap;
 use reqwest::{RequestBuilder, Response};
 use serde::{Deserialize, Serialize};
 use shuttle_common::constants::headers::X_CARGO_SHUTTLE_VERSION;
-use shuttle_common::log::LogsRange;
+use shuttle_common::log::{LogsRange, LogsResponseBeta};
 use shuttle_common::models::deployment::{DeploymentRequest, DeploymentRequestBeta};
 use shuttle_common::models::team;
 use shuttle_common::models::{deployment, project, service, ToJson};
-use shuttle_common::{resource, ApiKey, LogItem, LogItemBeta, VersionInfo};
+use shuttle_common::{resource, ApiKey, LogItem, VersionInfo};
 use tokio::net::TcpStream;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
@@ -264,12 +264,12 @@ impl ShuttleApiClient {
         &self,
         project: &str,
         deployment_id: &str,
-    ) -> Result<Vec<LogItemBeta>> {
+    ) -> Result<LogsResponseBeta> {
         let path = format!("/projects/{project}/deployments/{deployment_id}/logs");
 
         self.get(path).await.context("Failed parsing logs.")
     }
-    pub async fn get_project_logs_beta(&self, project: &str) -> Result<Vec<LogItemBeta>> {
+    pub async fn get_project_logs_beta(&self, project: &str) -> Result<LogsResponseBeta> {
         let path = format!("/projects/{project}/logs");
 
         self.get(path).await.context("Failed parsing logs.")

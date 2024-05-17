@@ -850,31 +850,20 @@ impl Shuttle {
 
     async fn logs_beta(&self, args: LogsArgs) -> Result<CommandOutcome> {
         let client = self.client.as_ref().unwrap();
-        let mut stream = client
-            // TODO: use something else than a fake Uuid
-            .get_logs_ws(self.ctx.project_name(), &Uuid::new_v4(), LogsRange::All)
-            .await
-            .map_err(|err| {
-                suggestions::logs::get_logs_failure(err, "Connecting to the logs stream failed")
-            })?;
-
-        while let Some(Ok(msg)) = stream.next().await {
-            if let tokio_tungstenite::tungstenite::Message::Text(line) = msg {
-                match serde_json::from_str::<shuttle_common::LogItemBeta>(&line) {
-                    Ok(log) => {
-                        if args.raw {
-                            println!("{}", log.line);
-                        } else {
-                            println!("{log}");
-                        }
-                    }
-                    Err(err) => {
-                        // TODO better handle logs, by returning a different type than the log line
-                        // if an error happened.
-                        bail!(err);
-                    }
-                }
-            }
+        let proj_name = self.ctx.project_name();
+        let logs = if args.dump_it_all {
+            client.get_project_logs_beta(proj_name).await?
+        } else {
+            // TODO:
+            // let depl = client.get_current_deployment_beta(proj_name).await?;
+            let depls = client.get_deployments_beta(proj_name).await?;
+            let depl = depls
+                .first()
+                .expect("at least one deployment in this project");
+            client.get_deployment_logs_beta(proj_name, &depl.id).await?
+        };
+        for log in logs {
+            println!("{}", log);
         }
 
         Ok(CommandOutcome::Ok)
@@ -908,10 +897,10 @@ impl Shuttle {
                     "Could not find any deployments for '{proj_name}'. Try passing a deployment ID manually",
                 ))?;
 
-                most_recent.id
+                most_recent.id.to_string()
             } else if let Some(deployment) = client.get_service(proj_name).await?.deployment {
                 // Active deployment
-                deployment.id
+                deployment.id.to_string()
             } else {
                 bail!(
                     "Could not find a running deployment for '{proj_name}'. \
@@ -984,7 +973,7 @@ impl Shuttle {
 
         let deployments_len = if self.beta {
             let deployments = client
-                .deployments_beta(proj_name)
+                .get_deployments_beta(proj_name)
                 .await
                 .map_err(suggestions::deployment::get_deployments_list_failure)?;
             let table = deployments_table_beta(&deployments, proj_name, raw);
@@ -1862,7 +1851,11 @@ impl Shuttle {
             .map_err(suggestions::deploy::deploy_request_failure)?;
 
         let mut stream = client
-            .get_logs_ws(self.ctx.project_name(), &deployment.id, LogsRange::All)
+            .get_logs_ws(
+                self.ctx.project_name(),
+                &deployment.id.to_string(),
+                LogsRange::All,
+            )
             .await
             .map_err(|err| {
                 suggestions::deploy::deployment_setup_failure(
@@ -1982,7 +1975,11 @@ impl Shuttle {
                 // the terminal isn't completely spammed
                 sleep(Duration::from_millis(100)).await;
                 stream = client
-                    .get_logs_ws(self.ctx.project_name(), &deployment.id, LogsRange::All)
+                    .get_logs_ws(
+                        self.ctx.project_name(),
+                        &deployment.id.to_string(),
+                        LogsRange::All,
+                    )
                     .await
                     .map_err(|err| {
                         suggestions::deploy::deployment_setup_failure(

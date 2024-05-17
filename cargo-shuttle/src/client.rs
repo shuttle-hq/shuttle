@@ -12,7 +12,7 @@ use shuttle_common::log::LogsRange;
 use shuttle_common::models::deployment::{DeploymentRequest, DeploymentRequestBeta};
 use shuttle_common::models::team;
 use shuttle_common::models::{deployment, project, service, ToJson};
-use shuttle_common::{resource, ApiKey, LogItem, VersionInfo};
+use shuttle_common::{resource, ApiKey, LogItem, LogItemBeta, VersionInfo};
 use tokio::net::TcpStream;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
@@ -250,7 +250,7 @@ impl ShuttleApiClient {
     pub async fn get_logs(
         &self,
         project: &str,
-        deployment_id: &Uuid,
+        deployment_id: &str,
         range: LogsRange,
     ) -> Result<Vec<LogItem>> {
         let mut path = format!("/projects/{project}/deployments/{deployment_id}/logs");
@@ -260,11 +260,25 @@ impl ShuttleApiClient {
             .await
             .context("Failed parsing logs. Is your cargo-shuttle outdated?")
     }
+    pub async fn get_deployment_logs_beta(
+        &self,
+        project: &str,
+        deployment_id: &str,
+    ) -> Result<Vec<LogItemBeta>> {
+        let path = format!("/projects/{project}/deployments/{deployment_id}/logs");
+
+        self.get(path).await.context("Failed parsing logs.")
+    }
+    pub async fn get_project_logs_beta(&self, project: &str) -> Result<Vec<LogItemBeta>> {
+        let path = format!("/projects/{project}/logs");
+
+        self.get(path).await.context("Failed parsing logs.")
+    }
 
     pub async fn get_logs_ws(
         &self,
         project: &str,
-        deployment_id: &Uuid,
+        deployment_id: &str,
         range: LogsRange,
     ) -> Result<WebSocketStream<MaybeTlsStream<TcpStream>>> {
         let mut path = format!("/projects/{project}/ws/deployments/{deployment_id}/logs");
@@ -287,12 +301,6 @@ impl ShuttleApiClient {
         };
     }
 
-    pub async fn deployments_beta(&self, project: &str) -> Result<Vec<deployment::EcsResponse>> {
-        let path = format!("/projects/{project}/deployments",);
-
-        self.get(path).await
-    }
-
     pub async fn get_deployments(
         &self,
         project: &str,
@@ -304,6 +312,22 @@ impl ShuttleApiClient {
             page.saturating_sub(1),
             limit,
         );
+
+        self.get(path).await
+    }
+    pub async fn get_deployments_beta(
+        &self,
+        project: &str,
+    ) -> Result<Vec<deployment::EcsResponse>> {
+        let path = format!("/projects/{project}/deployments");
+
+        self.get(path).await
+    }
+    pub async fn _get_current_deployment_beta(
+        &self,
+        project: &str,
+    ) -> Result<deployment::EcsResponse> {
+        let path = format!("/projects/{project}/deployments/current");
 
         self.get(path).await
     }

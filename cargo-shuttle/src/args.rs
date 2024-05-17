@@ -431,7 +431,7 @@ pub struct LogsArgs {
     pub all: bool,
     /// Get logs from all deployments instead of one deployment
     #[arg(long)]
-    pub dump_it_all: bool,
+    pub all_deployments: bool,
 }
 
 /// Helper function to parse and return the absolute path

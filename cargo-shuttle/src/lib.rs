@@ -851,7 +851,7 @@ impl Shuttle {
     async fn logs_beta(&self, args: LogsArgs) -> Result<CommandOutcome> {
         let client = self.client.as_ref().unwrap();
         let proj_name = self.ctx.project_name();
-        let logs = if args.dump_it_all {
+        let logs = if args.all_deployments {
             client.get_project_logs_beta(proj_name).await?.logs
         } else {
             // TODO:

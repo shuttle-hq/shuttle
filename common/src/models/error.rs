@@ -24,7 +24,18 @@ pub struct ApiError {
 impl ApiError {
     pub fn internal(message: &str) -> Self {
         Self {
-            message: message.to_string(),
+            message: format!("{message}. Please create a ticket to get this fixed."),
+            status_code: StatusCode::INTERNAL_SERVER_ERROR.as_u16(),
+        }
+    }
+
+    /// Creates an internal error without exposing sensitive information to the user.
+    pub fn internal_safe(error: impl std::error::Error) -> Self {
+        error!(error = error.to_string(), "");
+
+        Self {
+            message: "Internal server error occured. Please create a ticket to get this fixed."
+                .to_string(),
             status_code: StatusCode::INTERNAL_SERVER_ERROR.as_u16(),
         }
     }
@@ -40,6 +51,27 @@ impl ApiError {
         Self {
             message: error.to_string(),
             status_code: StatusCode::BAD_REQUEST.as_u16(),
+        }
+    }
+
+    pub fn not_found(message: impl ToString) -> Self {
+        Self {
+            message: message.to_string(),
+            status_code: StatusCode::NOT_FOUND.as_u16(),
+        }
+    }
+
+    pub fn unauthorized() -> Self {
+        Self {
+            message: "Unauthorized".to_string(),
+            status_code: StatusCode::UNAUTHORIZED.as_u16(),
+        }
+    }
+
+    pub fn forbidden() -> Self {
+        Self {
+            message: "Forbidden".to_string(),
+            status_code: StatusCode::FORBIDDEN.as_u16(),
         }
     }
 

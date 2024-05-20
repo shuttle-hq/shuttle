@@ -110,16 +110,15 @@ impl ShuttleApiClient {
         project: &str,
         deployment_req: DeploymentRequestBeta,
     ) -> Result<deployment::EcsResponse> {
-        let path = format!("/projects/{project}");
+        let path = format!("/projects/{project}/deployments");
         let deployment_req = rmp_serde::to_vec(&deployment_req)
             .context("serialize DeploymentRequest as a MessagePack byte vector")?;
 
         let url = format!("{}{}", self.api_url, path);
-        let mut builder = self.client.put(url);
+        let mut builder = self.client.post(url);
         builder = self.set_auth_bearer(builder);
 
         builder
-            .header("Transfer-Encoding", "chunked")
             .body(deployment_req)
             .send()
             .await

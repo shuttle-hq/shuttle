@@ -979,7 +979,10 @@ impl Shuttle {
                 .map_err(suggestions::deployment::get_deployments_list_failure)?;
             let table = deployments_table_beta(&deployments);
 
-            println!("Deployments in project '{}'", proj_name);
+            println!(
+                "{}",
+                format!("Deployments in project '{}'", proj_name).bold()
+            );
             println!("{table}");
             deployments.len()
         } else {

@@ -269,7 +269,7 @@ pub fn get_projects_table_beta(projects: &[ResponseBeta]) -> String {
             .map(|s| s.get_color())
             .unwrap_or_default();
         table.add_row(vec![
-            Cell::new(&project.id),
+            Cell::new(&project.id).add_attribute(Attribute::Bold),
             Cell::new(&project.name),
             Cell::new(state)
                 // Unwrap is safe because Color::from_str returns the color white if the argument is not a Color.

@@ -154,10 +154,8 @@ pub fn deployments_table_beta(deployments: &[EcsResponse]) -> String {
             Cell::new("Deployment ID"),
             Cell::new("Status"),
             Cell::new("Last updated"),
-            Cell::new("Commit ID"),
-            Cell::new("Commit Message"),
             Cell::new("Branch"),
-            Cell::new("Dirty"),
+            Cell::new("Commit"),
         ]);
 
     for deploy in deployments.iter() {
@@ -172,7 +170,7 @@ pub fn deployments_table_beta(deployments: &[EcsResponse]) -> String {
             .git_commit_msg
             .as_ref()
             .map_or(String::from(GIT_OPTION_NONE_TEXT), |val| {
-                val.chars().take(24).collect::<String>()
+                val.chars().take(24).collect()
             });
 
         table.add_row(vec![
@@ -181,19 +179,22 @@ pub fn deployments_table_beta(deployments: &[EcsResponse]) -> String {
                 // Unwrap is safe because Color::from_str returns the color white if str is not a Color.
                 .fg(Color::from_str(deploy.latest_deployment_state.get_color()).unwrap()),
             Cell::new(deploy.updated_at.format("%Y-%m-%dT%H:%M:%SZ")),
-            Cell::new(truncated_commit_id),
-            Cell::new(truncated_commit_msg),
             Cell::new(
                 deploy
                     .git_branch
                     .as_ref()
-                    .map_or(GIT_OPTION_NONE_TEXT, |val| val as &str),
+                    .unwrap_or(&GIT_OPTION_NONE_TEXT.to_owned()),
             ),
-            Cell::new(
-                deploy
-                    .git_dirty
-                    .map_or(String::from(GIT_OPTION_NONE_TEXT), |val| val.to_string()),
-            ),
+            Cell::new(format!(
+                "{}{} {}",
+                truncated_commit_id,
+                if deploy.git_dirty.is_some_and(|d| d) {
+                    "*"
+                } else {
+                    ""
+                },
+                truncated_commit_msg,
+            )),
         ]);
     }
 

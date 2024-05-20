@@ -32,7 +32,6 @@ use ignore::overrides::OverrideBuilder;
 use ignore::WalkBuilder;
 use indicatif::ProgressBar;
 use indoc::{formatdoc, printdoc};
-use shuttle_common::models::deployment::{deployments_table_beta, DeploymentRequestBeta};
 use shuttle_common::{
     constants::{
         API_URL_DEFAULT, DEFAULT_IDLE_MINUTES, EXAMPLES_REPO, EXECUTABLE_DIRNAME,
@@ -43,8 +42,8 @@ use shuttle_common::{
     log::LogsRange,
     models::{
         deployment::{
-            get_deployments_table, DeploymentRequest, CREATE_SERVICE_BODY_LIMIT,
-            GIT_STRINGS_MAX_LENGTH,
+            deployments_table_beta, get_deployments_table, DeploymentRequest,
+            DeploymentRequestBeta, CREATE_SERVICE_BODY_LIMIT, GIT_STRINGS_MAX_LENGTH,
         },
         error::ApiError,
         project,
@@ -59,9 +58,8 @@ use shuttle_proto::{
     provisioner::{provisioner_server::Provisioner, DatabaseRequest},
     runtime::{self, LoadRequest, StartRequest, StopRequest},
 };
-use shuttle_service::builder::{async_cargo_metadata, find_shuttle_packages};
 use shuttle_service::{
-    builder::{build_workspace, BuiltService},
+    builder::{async_cargo_metadata, build_workspace, find_shuttle_packages, BuiltService},
     runner, Environment,
 };
 use strum::{EnumMessage, VariantArray};
@@ -979,7 +977,9 @@ impl Shuttle {
                 .get_deployments_beta(proj_name)
                 .await
                 .map_err(suggestions::deployment::get_deployments_list_failure)?;
-            let table = deployments_table_beta(&deployments, proj_name, raw);
+            let table = deployments_table_beta(&deployments);
+
+            println!("Deployments in project '{}'", proj_name);
             println!("{table}");
             deployments.len()
         } else {

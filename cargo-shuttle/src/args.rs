@@ -14,7 +14,6 @@ use clap::{
 use clap_complete::Shell;
 use shuttle_common::constants::{DEFAULT_IDLE_MINUTES, EXAMPLES_REPO};
 use shuttle_common::resource;
-use uuid::Uuid;
 
 #[derive(Parser)]
 #[command(
@@ -411,7 +410,7 @@ impl InitTemplateArg {
 #[derive(Parser, Clone, Debug, Default)]
 pub struct LogsArgs {
     /// Deployment ID to get logs for. Defaults to currently running deployment
-    pub id: Option<Uuid>,
+    pub id: Option<String>,
     #[arg(short, long)]
     /// View logs from the most recent deployment (which is not always the latest running one)
     pub latest: bool,
@@ -430,6 +429,9 @@ pub struct LogsArgs {
     /// View all log lines
     #[arg(long, group = "output_mode")]
     pub all: bool,
+    /// Get logs from all deployments instead of one deployment
+    #[arg(long)]
+    pub all_deployments: bool,
 }
 
 /// Helper function to parse and return the absolute path

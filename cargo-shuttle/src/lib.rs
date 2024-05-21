@@ -32,7 +32,6 @@ use ignore::overrides::OverrideBuilder;
 use ignore::WalkBuilder;
 use indicatif::ProgressBar;
 use indoc::{formatdoc, printdoc};
-use shuttle_common::models::deployment::{deployments_table_beta, DeploymentRequestBeta};
 use shuttle_common::{
     constants::{
         API_URL_DEFAULT, DEFAULT_IDLE_MINUTES, EXAMPLES_REPO, EXECUTABLE_DIRNAME,
@@ -43,8 +42,8 @@ use shuttle_common::{
     log::LogsRange,
     models::{
         deployment::{
-            get_deployments_table, DeploymentRequest, CREATE_SERVICE_BODY_LIMIT,
-            GIT_STRINGS_MAX_LENGTH,
+            deployments_table_beta, get_deployments_table, DeploymentRequest,
+            DeploymentRequestBeta, CREATE_SERVICE_BODY_LIMIT, GIT_STRINGS_MAX_LENGTH,
         },
         error::ApiError,
         project,
@@ -59,9 +58,8 @@ use shuttle_proto::{
     provisioner::{provisioner_server::Provisioner, DatabaseRequest},
     runtime::{self, LoadRequest, StartRequest, StopRequest},
 };
-use shuttle_service::builder::{async_cargo_metadata, find_shuttle_packages};
 use shuttle_service::{
-    builder::{build_workspace, BuiltService},
+    builder::{async_cargo_metadata, build_workspace, find_shuttle_packages, BuiltService},
     runner, Environment,
 };
 use strum::{EnumMessage, VariantArray};
@@ -854,16 +852,18 @@ impl Shuttle {
         let logs = if args.all_deployments {
             client.get_project_logs_beta(proj_name).await?.logs
         } else {
-            // TODO:
-            // let depl = client.get_current_deployment_beta(proj_name).await?;
-            let depls = client.get_deployments_beta(proj_name).await?;
-            let depl = depls
-                .first()
-                .expect("at least one deployment in this project");
-            client
-                .get_deployment_logs_beta(proj_name, &depl.id)
-                .await?
-                .logs
+            let id = if let Some(id) = args.id {
+                id
+            } else {
+                // TODO: fix the endpoint and use:
+                // let depl = client.get_current_deployment_beta(proj_name).await?;
+                let depls = client.get_deployments_beta(proj_name).await?;
+                let depl = depls
+                    .first()
+                    .expect("at least one deployment in this project");
+                depl.id.clone()
+            };
+            client.get_deployment_logs_beta(proj_name, &id).await?.logs
         };
         for log in logs {
             println!("{}", log);
@@ -979,7 +979,12 @@ impl Shuttle {
                 .get_deployments_beta(proj_name)
                 .await
                 .map_err(suggestions::deployment::get_deployments_list_failure)?;
-            let table = deployments_table_beta(&deployments, proj_name, raw);
+            let table = deployments_table_beta(&deployments);
+
+            println!(
+                "{}",
+                format!("Deployments in project '{}'", proj_name).bold()
+            );
             println!("{table}");
             deployments.len()
         } else {

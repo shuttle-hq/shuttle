@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
 use comfy_table::{
     modifiers::UTF8_ROUND_CORNERS,
-    presets::{NOTHING, UTF8_FULL},
+    presets::{NOTHING, UTF8_BORDERS_ONLY, UTF8_FULL},
     Attribute, Cell, CellAlignment, Color, ContentArrangement, Table,
 };
 use crossterm::style::Stylize;
@@ -145,128 +145,60 @@ impl EcsState {
     }
 }
 
-pub fn deployments_table_beta(
-    deployments: &Vec<EcsResponse>,
-    project_name: &str,
-    raw: bool,
-) -> String {
-    if deployments.is_empty() {
-        // The page starts at 1 in the CLI.
-        let mut s = "No deployments are linked to this service\n".to_string();
-        if !raw {
-            s = s.yellow().bold().to_string();
-        }
+pub fn deployments_table_beta(deployments: &[EcsResponse]) -> String {
+    let mut table = Table::new();
+    table
+        .load_preset(UTF8_BORDERS_ONLY)
+        .set_content_arrangement(ContentArrangement::Disabled)
+        .set_header(vec![
+            Cell::new("Deployment ID"),
+            Cell::new("Status"),
+            Cell::new("Last updated"),
+            Cell::new("Branch"),
+            Cell::new("Commit"),
+        ]);
 
-        s
-    } else {
-        let mut table = Table::new();
+    for deploy in deployments.iter() {
+        let truncated_commit_id = deploy
+            .git_commit_id
+            .as_ref()
+            .map_or(String::from(GIT_OPTION_NONE_TEXT), |val| {
+                val.chars().take(7).collect()
+            });
 
-        if raw {
-            table
-                .load_preset(NOTHING)
-                .set_content_arrangement(ContentArrangement::Disabled)
-                .set_header(vec![
-                    Cell::new("Deployment ID").set_alignment(CellAlignment::Left),
-                    Cell::new("Status").set_alignment(CellAlignment::Left),
-                    Cell::new("Last updated").set_alignment(CellAlignment::Left),
-                    Cell::new("Commit ID").set_alignment(CellAlignment::Left),
-                    Cell::new("Commit Message").set_alignment(CellAlignment::Left),
-                    Cell::new("Branch").set_alignment(CellAlignment::Left),
-                    Cell::new("Dirty").set_alignment(CellAlignment::Left),
-                ]);
-        } else {
-            table
-                .load_preset(UTF8_FULL)
-                .apply_modifier(UTF8_ROUND_CORNERS)
-                .set_content_arrangement(ContentArrangement::DynamicFullWidth)
-                .set_header(vec![
-                    Cell::new("Deployment ID")
-                        .set_alignment(CellAlignment::Center)
-                        .add_attribute(Attribute::Bold),
-                    Cell::new("Status")
-                        .set_alignment(CellAlignment::Center)
-                        .add_attribute(Attribute::Bold),
-                    Cell::new("Last updated")
-                        .set_alignment(CellAlignment::Center)
-                        .add_attribute(Attribute::Bold),
-                    Cell::new("Commit ID")
-                        .set_alignment(CellAlignment::Center)
-                        .add_attribute(Attribute::Bold),
-                    Cell::new("Commit Message")
-                        .set_alignment(CellAlignment::Center)
-                        .add_attribute(Attribute::Bold),
-                    Cell::new("Branch")
-                        .set_alignment(CellAlignment::Center)
-                        .add_attribute(Attribute::Bold),
-                    Cell::new("Dirty")
-                        .set_alignment(CellAlignment::Center)
-                        .add_attribute(Attribute::Bold),
-                ]);
-        }
+        let truncated_commit_msg = deploy
+            .git_commit_msg
+            .as_ref()
+            .map_or(String::from(GIT_OPTION_NONE_TEXT), |val| {
+                val.chars().take(24).collect()
+            });
 
-        for deploy in deployments.iter() {
-            let truncated_commit_id = deploy
-                .git_commit_id
-                .as_ref()
-                .map_or(String::from(GIT_OPTION_NONE_TEXT), |val| {
-                    val.chars().take(7).collect()
-                });
-
-            let truncated_commit_msg = deploy
-                .git_commit_msg
-                .as_ref()
-                .map_or(String::from(GIT_OPTION_NONE_TEXT), |val| {
-                    val.chars().take(24).collect::<String>()
-                });
-
-            if raw {
-                table.add_row(vec![
-                    Cell::new(&deploy.id),
-                    Cell::new(&deploy.latest_deployment_state),
-                    Cell::new(deploy.updated_at.format("%Y-%m-%dT%H:%M:%SZ")),
-                    Cell::new(truncated_commit_id),
-                    Cell::new(truncated_commit_msg),
-                    Cell::new(
-                        deploy
-                            .git_branch
-                            .as_ref()
-                            .map_or(GIT_OPTION_NONE_TEXT, |val| val as &str),
-                    ),
-                    Cell::new(
-                        deploy
-                            .git_dirty
-                            .map_or(String::from(GIT_OPTION_NONE_TEXT), |val| val.to_string()),
-                    ),
-                ]);
-            } else {
-                table.add_row(vec![
-                    Cell::new(&deploy.id),
-                    Cell::new(&deploy.latest_deployment_state)
-                        // Unwrap is safe because Color::from_str returns the color white if str is not a Color.
-                        .fg(Color::from_str(deploy.latest_deployment_state.get_color()).unwrap())
-                        .set_alignment(CellAlignment::Center),
-                    Cell::new(deploy.updated_at.format("%Y-%m-%dT%H:%M:%SZ"))
-                        .set_alignment(CellAlignment::Center),
-                    Cell::new(truncated_commit_id),
-                    Cell::new(truncated_commit_msg),
-                    Cell::new(
-                        deploy
-                            .git_branch
-                            .as_ref()
-                            .map_or(GIT_OPTION_NONE_TEXT, |val| val as &str),
-                    ),
-                    Cell::new(
-                        deploy
-                            .git_dirty
-                            .map_or(String::from(GIT_OPTION_NONE_TEXT), |val| val.to_string()),
-                    )
-                    .set_alignment(CellAlignment::Center),
-                ]);
-            }
-        }
-
-        format!("\nMost recent deployments for {project_name}\n{table}\n")
+        table.add_row(vec![
+            Cell::new(&deploy.id).add_attribute(Attribute::Bold),
+            Cell::new(&deploy.latest_deployment_state)
+                // Unwrap is safe because Color::from_str returns the color white if str is not a Color.
+                .fg(Color::from_str(deploy.latest_deployment_state.get_color()).unwrap()),
+            Cell::new(deploy.updated_at.format("%Y-%m-%dT%H:%M:%SZ")),
+            Cell::new(
+                deploy
+                    .git_branch
+                    .as_ref()
+                    .unwrap_or(&GIT_OPTION_NONE_TEXT.to_owned()),
+            ),
+            Cell::new(format!(
+                "{}{} {}",
+                truncated_commit_id,
+                if deploy.git_dirty.is_some_and(|d| d) {
+                    "*"
+                } else {
+                    ""
+                },
+                truncated_commit_msg,
+            )),
+        ]);
     }
+
+    table.to_string()
 }
 
 pub fn get_deployments_table(

@@ -4,7 +4,7 @@ use std::str::FromStr;
 
 use comfy_table::{
     modifiers::UTF8_ROUND_CORNERS,
-    presets::{NOTHING, UTF8_FULL},
+    presets::{NOTHING, UTF8_BORDERS_ONLY, UTF8_FULL},
     Attribute, Cell, CellAlignment, Color, ContentArrangement, Table,
 };
 use crossterm::style::Stylize;
@@ -247,20 +247,14 @@ pub fn get_projects_table(projects: &[Response], raw: bool) -> String {
 }
 
 pub fn get_projects_table_beta(projects: &[ResponseBeta]) -> String {
-    if projects.is_empty() {
-        return "No projects are linked to this account"
-            .yellow()
-            .to_string();
-    }
-
     let mut table = Table::new();
     table
-        .load_preset(NOTHING)
+        .load_preset(UTF8_BORDERS_ONLY)
         .set_content_arrangement(ContentArrangement::Disabled)
         .set_header(vec![
-            Cell::new("Project Name").set_alignment(CellAlignment::Left),
-            Cell::new("Project Id").set_alignment(CellAlignment::Left),
-            Cell::new("Deployment Status").set_alignment(CellAlignment::Left),
+            Cell::new("Project Id"),
+            Cell::new("Project Name"),
+            Cell::new("Deployment Status"),
         ]);
 
     for project in projects {
@@ -269,16 +263,17 @@ pub fn get_projects_table_beta(projects: &[ResponseBeta]) -> String {
             .as_ref()
             .map(|s| s.to_string())
             .unwrap_or_default();
+        let color = project
+            .deployment_state
+            .as_ref()
+            .map(|s| s.get_color())
+            .unwrap_or_default();
         table.add_row(vec![
+            Cell::new(&project.id).add_attribute(Attribute::Bold),
             Cell::new(&project.name),
-            Cell::new(&project.id),
             Cell::new(state)
                 // Unwrap is safe because Color::from_str returns the color white if the argument is not a Color.
-                .fg(Color::from_str(
-                    // TODO: Color for EcsState
-                    "",
-                )
-                .unwrap()),
+                .fg(Color::from_str(color).unwrap()),
         ]);
     }
 

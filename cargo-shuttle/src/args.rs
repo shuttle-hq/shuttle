@@ -409,7 +409,7 @@ impl InitTemplateArg {
 
 #[derive(Parser, Clone, Debug, Default)]
 pub struct LogsArgs {
-    /// Deployment ID to get logs for. Defaults to currently running deployment
+    /// Deployment ID to get logs for. Defaults to the current deployment
     pub id: Option<String>,
     #[arg(short, long)]
     /// View logs from the most recent deployment (which is not always the latest running one)

@@ -852,16 +852,18 @@ impl Shuttle {
         let logs = if args.all_deployments {
             client.get_project_logs_beta(proj_name).await?.logs
         } else {
-            // TODO:
-            // let depl = client.get_current_deployment_beta(proj_name).await?;
-            let depls = client.get_deployments_beta(proj_name).await?;
-            let depl = depls
-                .first()
-                .expect("at least one deployment in this project");
-            client
-                .get_deployment_logs_beta(proj_name, &depl.id)
-                .await?
-                .logs
+            let id = if let Some(id) = args.id {
+                id
+            } else {
+                // TODO: fix the endpoint and use:
+                // let depl = client.get_current_deployment_beta(proj_name).await?;
+                let depls = client.get_deployments_beta(proj_name).await?;
+                let depl = depls
+                    .first()
+                    .expect("at least one deployment in this project");
+                depl.id.clone()
+            };
+            client.get_deployment_logs_beta(proj_name, &id).await?.logs
         };
         for log in logs {
             println!("{}", log);

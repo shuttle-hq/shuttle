@@ -347,6 +347,9 @@ impl<S> FromRequestParts<S> for Claim {
         // Record current account name for tracing purposes
         Span::current().record("account.user_id", &claim.sub);
 
+        // And for the new system
+        Span::current().record("shuttle.user.id", &claim.sub);
+
         trace!(?claim, "got user");
 
         Ok(claim.clone())

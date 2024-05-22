@@ -322,7 +322,7 @@ impl ShuttleApiClient {
 
         self.get(path).await
     }
-    pub async fn _get_current_deployment_beta(
+    pub async fn get_current_deployment_beta(
         &self,
         project: &str,
     ) -> Result<deployment::ResponseBeta> {
@@ -331,7 +331,7 @@ impl ShuttleApiClient {
         self.get(path).await
     }
 
-    pub async fn deployment_status(
+    pub async fn get_deployment_beta(
         &self,
         project: &str,
         deployment_id: &str,

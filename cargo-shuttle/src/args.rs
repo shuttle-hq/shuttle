@@ -166,7 +166,7 @@ pub enum DeploymentCommand {
     /// View status of a deployment
     Status {
         /// ID of deployment to get status for
-        id: String,
+        id: Option<String>,
     },
 }
 

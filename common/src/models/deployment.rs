@@ -105,6 +105,7 @@ impl EcsState {
             EcsState::Stopped => "dark_blue",
             EcsState::Stopping => "blue",
             EcsState::Failed => "red",
+            EcsState::Unknown => "grey",
         }
     }
 }

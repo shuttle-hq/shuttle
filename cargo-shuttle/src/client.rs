@@ -109,7 +109,7 @@ impl ShuttleApiClient {
         &self,
         project: &str,
         deployment_req: DeploymentRequestBeta,
-    ) -> Result<deployment::EcsResponse> {
+    ) -> Result<deployment::ResponseBeta> {
         let path = format!("/projects/{project}/deployments");
         let deployment_req = rmp_serde::to_vec(&deployment_req)
             .context("serialize DeploymentRequest as a MessagePack byte vector")?;
@@ -317,7 +317,7 @@ impl ShuttleApiClient {
     pub async fn get_deployments_beta(
         &self,
         project: &str,
-    ) -> Result<Vec<deployment::EcsResponse>> {
+    ) -> Result<Vec<deployment::ResponseBeta>> {
         let path = format!("/projects/{project}/deployments");
 
         self.get(path).await
@@ -325,7 +325,7 @@ impl ShuttleApiClient {
     pub async fn _get_current_deployment_beta(
         &self,
         project: &str,
-    ) -> Result<deployment::EcsResponse> {
+    ) -> Result<deployment::ResponseBeta> {
         let path = format!("/projects/{project}/deployments/current");
 
         self.get(path).await
@@ -335,7 +335,7 @@ impl ShuttleApiClient {
         &self,
         project: &str,
         deployment_id: &str,
-    ) -> Result<deployment::EcsResponse> {
+    ) -> Result<deployment::ResponseBeta> {
         let path = format!("/projects/{project}/deployments/{deployment_id}");
 
         self.get(path).await

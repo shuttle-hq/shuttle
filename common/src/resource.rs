@@ -2,6 +2,7 @@ use std::{fmt::Display, str::FromStr};
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use thiserror::Error;
 
 use crate::{constants::RESOURCE_SCHEMA_VERSION, database};
 
@@ -87,21 +88,32 @@ pub enum Type {
     Container,
 }
 
+#[derive(Debug, Error)]
+pub enum InvalidResourceType {
+    #[error("'{0}' is an unknown database type")]
+    Type(String),
+
+    #[error("{0}")]
+    Database(String),
+}
+
 impl FromStr for Type {
-    type Err = String;
+    type Err = InvalidResourceType;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if let Some((prefix, rest)) = s.split_once("::") {
             match prefix {
-                "database" => Ok(Self::Database(database::Type::from_str(rest)?)),
-                _ => Err(format!("'{prefix}' is an unknown resource type")),
+                "database" => Ok(Self::Database(
+                    database::Type::from_str(rest).map_err(InvalidResourceType::Database)?,
+                )),
+                _ => Err(InvalidResourceType::Type(prefix.to_string())),
             }
         } else {
             match s {
                 "secrets" => Ok(Self::Secrets),
                 "persist" => Ok(Self::Persist),
                 "container" => Ok(Self::Container),
-                _ => Err(format!("'{s}' is an unknown resource type")),
+                _ => Err(InvalidResourceType::Type(s.to_string())),
             }
         }
     }

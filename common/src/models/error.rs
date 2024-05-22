@@ -63,13 +63,6 @@ impl ApiError {
         }
     }
 
-    pub fn not_found(message: impl ToString) -> Self {
-        Self {
-            message: message.to_string(),
-            status_code: StatusCode::NOT_FOUND.as_u16(),
-        }
-    }
-
     pub fn unauthorized() -> Self {
         Self {
             message: "Unauthorized".to_string(),

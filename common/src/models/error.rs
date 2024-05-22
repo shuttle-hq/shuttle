@@ -30,13 +30,22 @@ impl ApiError {
     }
 
     /// Creates an internal error without exposing sensitive information to the user.
-    pub fn internal_safe(error: impl std::error::Error) -> Self {
-        error!(error = error.to_string(), "");
+    #[inline(always)]
+    pub fn internal_safe<E>(message: &str, error: E) -> Self
+    where
+        E: std::error::Error + 'static,
+    {
+        error!(error = &error as &dyn std::error::Error, "{message}");
 
-        Self {
-            message: "Internal server error occured. Please create a ticket to get this fixed."
-                .to_string(),
-            status_code: StatusCode::INTERNAL_SERVER_ERROR.as_u16(),
+        // Return the raw error during debug builds
+        #[cfg(debug_assertions)]
+        {
+            ApiError::internal(&error.to_string())
+        }
+        // Return the safe message during release builds
+        #[cfg(not(debug_assertions))]
+        {
+            ApiError::internal(message)
         }
     }
 
@@ -77,6 +86,130 @@ impl ApiError {
 
     pub fn status(&self) -> StatusCode {
         StatusCode::from_u16(self.status_code).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR)
+    }
+}
+
+pub trait ErrorContext<T> {
+    fn context_internal_error(self, message: &str) -> Result<T, ApiError>;
+    fn with_context_internal_error(self, message: impl FnOnce() -> String) -> Result<T, ApiError>;
+    fn context_bad_request(self, message: &str) -> Result<T, ApiError>;
+    fn with_context_bad_request(self, message: impl FnOnce() -> String) -> Result<T, ApiError>;
+    fn context_not_found(self, message: &str) -> Result<T, ApiError>;
+    fn with_context_not_found(self, message: impl FnOnce() -> String) -> Result<T, ApiError>;
+}
+
+impl<T, E> ErrorContext<T> for Result<T, E>
+where
+    E: std::error::Error + 'static,
+{
+    #[inline(always)]
+    fn context_internal_error(self, message: &str) -> Result<T, ApiError> {
+        match self {
+            Ok(value) => Ok(value),
+            Err(error) => Err(ApiError::internal_safe(message, error)),
+        }
+    }
+
+    #[inline(always)]
+    fn with_context_internal_error(self, message: impl FnOnce() -> String) -> Result<T, ApiError> {
+        self.context_internal_error(&message())
+    }
+
+    #[inline(always)]
+    fn context_bad_request(self, message: &str) -> Result<T, ApiError> {
+        match self {
+            Ok(value) => Ok(value),
+            Err(error) => Err({
+                warn!(
+                    error = &error as &dyn std::error::Error,
+                    "bad request: {message}"
+                );
+
+                ApiError {
+                    message: message.to_string(),
+                    status_code: StatusCode::BAD_REQUEST.as_u16(),
+                }
+            }),
+        }
+    }
+
+    #[inline(always)]
+    fn with_context_bad_request(self, message: impl FnOnce() -> String) -> Result<T, ApiError> {
+        self.context_bad_request(&message())
+    }
+
+    #[inline(always)]
+    fn context_not_found(self, message: &str) -> Result<T, ApiError> {
+        match self {
+            Ok(value) => Ok(value),
+            Err(error) => Err({
+                warn!(
+                    error = &error as &dyn std::error::Error,
+                    "not found: {message}"
+                );
+
+                ApiError {
+                    message: message.to_string(),
+                    status_code: StatusCode::NOT_FOUND.as_u16(),
+                }
+            }),
+        }
+    }
+
+    #[inline(always)]
+    fn with_context_not_found(self, message: impl FnOnce() -> String) -> Result<T, ApiError> {
+        self.context_not_found(&message())
+    }
+}
+
+impl<T> ErrorContext<T> for Option<T> {
+    #[inline]
+    fn context_internal_error(self, message: &str) -> Result<T, ApiError> {
+        match self {
+            Some(value) => Ok(value),
+            None => Err(ApiError::internal(message)),
+        }
+    }
+
+    #[inline]
+    fn with_context_internal_error(self, message: impl FnOnce() -> String) -> Result<T, ApiError> {
+        self.context_internal_error(&message())
+    }
+
+    #[inline]
+    fn context_bad_request(self, message: &str) -> Result<T, ApiError> {
+        match self {
+            Some(value) => Ok(value),
+            None => Err({
+                ApiError {
+                    message: message.to_string(),
+                    status_code: StatusCode::BAD_REQUEST.as_u16(),
+                }
+            }),
+        }
+    }
+
+    #[inline]
+    fn with_context_bad_request(self, message: impl FnOnce() -> String) -> Result<T, ApiError> {
+        self.context_bad_request(&message())
+    }
+
+    #[inline]
+    fn context_not_found(self, message: &str) -> Result<T, ApiError> {
+        match self {
+            Some(value) => Ok(value),
+            None => Err({
+                ApiError {
+                    message: message.to_string(),
+                    status_code: StatusCode::NOT_FOUND.as_u16(),
+                }
+            }),
+        }
+    }
+
+    #[inline]
+    fn with_context_not_found(self, message: impl FnOnce() -> String) -> Result<T, ApiError> {
+        self.context_not_found(&message())
     }
 }
 

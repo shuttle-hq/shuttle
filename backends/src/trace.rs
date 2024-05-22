@@ -10,7 +10,7 @@ use shuttle_common::log::Backend;
 
 use super::otlp_tracing_bridge::{self, ErrorTracingLayer};
 
-const OTLP_ADDRESS: &str = "http://otel-collector:4317";
+const OTLP_ADDRESS: &str = "http://otel-collector:4318";
 
 pub fn setup_tracing<S>(subscriber: S, backend: Backend)
 where
@@ -43,7 +43,7 @@ where
         .tracing()
         .with_exporter(
             opentelemetry_otlp::new_exporter()
-                .tonic()
+                .http()
                 .with_endpoint(otlp_address.clone()),
         )
         .with_trace_config(trace::config().with_resource(Resource::new(resources.clone())))
@@ -57,7 +57,7 @@ where
         .with_log_config(Config::default().with_resource(Resource::new(resources.clone())))
         .with_exporter(
             opentelemetry_otlp::new_exporter()
-                .tonic()
+                .http()
                 .with_endpoint(otlp_address),
         )
         .install_batch(Tokio)

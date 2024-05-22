@@ -73,6 +73,18 @@ pub struct SubscribeStopResponse {
     #[prost(string, tag = "2")]
     pub message: ::prost::alloc::string::String,
 }
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct Ping {}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct Pong {}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct VersionInfo {
+    #[prost(string, tag = "1")]
+    pub version: ::prost::alloc::string::String,
+}
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum StopReason {
@@ -264,6 +276,40 @@ pub mod runtime_client {
                 .insert(GrpcMethod::new("runtime.Runtime", "SubscribeStop"));
             self.inner.server_streaming(req, path, codec).await
         }
+        pub async fn version(
+            &mut self,
+            request: impl tonic::IntoRequest<super::Ping>,
+        ) -> std::result::Result<tonic::Response<super::VersionInfo>, tonic::Status> {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::new(
+                    tonic::Code::Unknown,
+                    format!("Service was not ready: {}", e.into()),
+                )
+            })?;
+            let codec = tonic::codec::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static("/runtime.Runtime/Version");
+            let mut req = request.into_request();
+            req.extensions_mut()
+                .insert(GrpcMethod::new("runtime.Runtime", "Version"));
+            self.inner.unary(req, path, codec).await
+        }
+        pub async fn health_check(
+            &mut self,
+            request: impl tonic::IntoRequest<super::Ping>,
+        ) -> std::result::Result<tonic::Response<super::Pong>, tonic::Status> {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::new(
+                    tonic::Code::Unknown,
+                    format!("Service was not ready: {}", e.into()),
+                )
+            })?;
+            let codec = tonic::codec::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static("/runtime.Runtime/HealthCheck");
+            let mut req = request.into_request();
+            req.extensions_mut()
+                .insert(GrpcMethod::new("runtime.Runtime", "HealthCheck"));
+            self.inner.unary(req, path, codec).await
+        }
     }
 }
 /// Generated server implementations.
@@ -298,6 +344,14 @@ pub mod runtime_server {
             &self,
             request: tonic::Request<super::SubscribeStopRequest>,
         ) -> std::result::Result<tonic::Response<Self::SubscribeStopStream>, tonic::Status>;
+        async fn version(
+            &self,
+            request: tonic::Request<super::Ping>,
+        ) -> std::result::Result<tonic::Response<super::VersionInfo>, tonic::Status>;
+        async fn health_check(
+            &self,
+            request: tonic::Request<super::Ping>,
+        ) -> std::result::Result<tonic::Response<super::Pong>, tonic::Status>;
     }
     #[derive(Debug)]
     pub struct RuntimeServer<T: Runtime> {
@@ -530,6 +584,77 @@ pub mod runtime_server {
                                 max_encoding_message_size,
                             );
                         let res = grpc.server_streaming(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/runtime.Runtime/Version" => {
+                    #[allow(non_camel_case_types)]
+                    struct VersionSvc<T: Runtime>(pub Arc<T>);
+                    impl<T: Runtime> tonic::server::UnaryService<super::Ping> for VersionSvc<T> {
+                        type Response = super::VersionInfo;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(&mut self, request: tonic::Request<super::Ping>) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move { <T as Runtime>::version(&inner, request).await };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let inner = inner.0;
+                        let method = VersionSvc(inner);
+                        let codec = tonic::codec::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/runtime.Runtime/HealthCheck" => {
+                    #[allow(non_camel_case_types)]
+                    struct HealthCheckSvc<T: Runtime>(pub Arc<T>);
+                    impl<T: Runtime> tonic::server::UnaryService<super::Ping> for HealthCheckSvc<T> {
+                        type Response = super::Pong;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(&mut self, request: tonic::Request<super::Ping>) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut =
+                                async move { <T as Runtime>::health_check(&inner, request).await };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let inner = inner.0;
+                        let method = HealthCheckSvc(inner);
+                        let codec = tonic::codec::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
                         Ok(res)
                     };
                     Box::pin(fut)

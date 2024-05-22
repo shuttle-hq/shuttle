@@ -4,6 +4,7 @@ use std::time::{Duration, SystemTime};
 use async_trait::async_trait;
 use chrono::NaiveDateTime;
 use prost_types::Timestamp;
+use shuttle_common::log::LogsRange;
 use shuttle_proto::logger::{LogItem, LogLine};
 use sqlx::{
     migrate::Migrator,
@@ -45,7 +46,12 @@ impl fmt::Display for DalError {
 #[async_trait]
 pub trait Dal {
     /// Get logs for a deployment
-    async fn get_logs(&self, deployment_id: String) -> Result<Vec<Log>, DalError>;
+    async fn get_logs(
+        &self,
+        deployment_id: String,
+        head: Option<u32>,
+        tail: Option<u32>,
+    ) -> Result<Vec<Log>, DalError>;
 }
 
 #[derive(Clone)]
@@ -150,13 +156,41 @@ impl Postgres {
 
 #[async_trait]
 impl Dal for Postgres {
-    async fn get_logs(&self, deployment_id: String) -> Result<Vec<Log>, DalError> {
-        let result =
-            sqlx::query_as("SELECT * FROM logs WHERE deployment_id = $1 ORDER BY tx_timestamp")
-                .bind(deployment_id)
-                .fetch_all(&self.pool)
-                .await?;
+    async fn get_logs(
+        &self,
+        deployment_id: String,
+        head: Option<u32>,
+        tail: Option<u32>,
+    ) -> Result<Vec<Log>, DalError> {
+        let mode = match (head, tail) {
+            (Some(len), None) => LogsRange::Head(len),
+            (None, Some(len)) => LogsRange::Tail(len),
+            (None, None) => LogsRange::All,
+            _ => LogsRange::Tail(1000),
+        };
 
+        let result = match mode {
+            LogsRange::Head(len) => {
+                sqlx::query_as("SELECT * FROM logs WHERE deployment_id = $1 ORDER BY tx_timestamp limit $2")
+                    .bind(deployment_id)
+                    .bind(len as i64)
+                    .fetch_all(&self.pool)
+                    .await?
+            }
+            LogsRange::Tail(len) => {
+                sqlx::query_as("SELECT * FROM (SELECT * FROM logs WHERE deployment_id = $1 ORDER BY tx_timestamp DESC limit $2) AS TAIL_TABLE ORDER BY tx_timestamp")
+                    .bind(deployment_id)
+                    .bind(len as i64)
+                    .fetch_all(&self.pool)
+                    .await?
+            }
+            LogsRange::All => {
+                sqlx::query_as("SELECT * FROM logs WHERE deployment_id = $1 ORDER BY tx_timestamp")
+                    .bind(deployment_id)
+                    .fetch_all(&self.pool)
+                    .await?
+            }
+        };
         Ok(result)
     }
 }

@@ -4,12 +4,14 @@ use std::str::FromStr;
 
 use comfy_table::{
     modifiers::UTF8_ROUND_CORNERS,
-    presets::{NOTHING, UTF8_FULL},
+    presets::{NOTHING, UTF8_BORDERS_ONLY, UTF8_FULL},
     Attribute, Cell, CellAlignment, Color, ContentArrangement, Table,
 };
 use crossterm::style::Stylize;
 use serde::{Deserialize, Serialize};
 use strum::EnumString;
+
+use crate::deployment::EcsState;
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 pub struct Response {
@@ -17,6 +19,27 @@ pub struct Response {
     pub name: String,
     pub state: State,
     pub idle_minutes: Option<u64>,
+    #[serde(flatten)]
+    pub owner: Owner,
+    /// Whether the calling user is an admin in this project
+    pub is_admin: bool,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct ResponseBeta {
+    pub id: String,
+    pub name: String,
+    /// Some() if an ECS service exists (something has been deployed).
+    pub deployment_state: Option<EcsState>,
+    #[serde(flatten)]
+    pub owner: Owner,
+    /// Whether the calling user is an admin in this project
+    pub is_admin: bool,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct ResponseListBeta {
+    pub projects: Vec<ResponseBeta>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, EnumString)]
@@ -164,19 +187,16 @@ pub struct Config {
     pub idle_minutes: u64,
 }
 
-pub fn get_projects_table(
-    projects: &Vec<Response>,
-    page: u32,
-    raw: bool,
-    page_hint: bool,
-) -> String {
+#[derive(Clone, Deserialize, Serialize, Debug, PartialEq)]
+#[serde(tag = "owner_type", content = "owner_id", rename_all = "lowercase")]
+pub enum Owner {
+    User(String),
+    Team(String),
+}
+
+pub fn get_projects_table(projects: &[Response], raw: bool) -> String {
     if projects.is_empty() {
-        // The page starts at 1 in the CLI.
-        let mut s = if page <= 1 {
-            "No projects are linked to this account\n".to_string()
-        } else {
-            "No more projects are linked to this account\n".to_string()
-        };
+        let mut s = "No projects are linked to this account".to_string();
         if !raw {
             s = s.yellow().bold().to_string();
         }
@@ -208,7 +228,7 @@ pub fn get_projects_table(
                 ]);
         }
 
-        for project in projects.iter() {
+        for project in projects {
             if raw {
                 table.add_row(vec![Cell::new(&project.name), Cell::new(&project.state)]);
             } else {
@@ -222,14 +242,40 @@ pub fn get_projects_table(
             }
         }
 
-        let formatted_table = format!("\nThese projects are linked to this account\n{table}\n");
-        if page_hint {
-            format!(
-                "{formatted_table}More projects are available on the next page using `--page {}`\n",
-                page + 1
-            )
-        } else {
-            formatted_table
-        }
+        table.to_string()
     }
+}
+
+pub fn get_projects_table_beta(projects: &[ResponseBeta]) -> String {
+    let mut table = Table::new();
+    table
+        .load_preset(UTF8_BORDERS_ONLY)
+        .set_content_arrangement(ContentArrangement::Disabled)
+        .set_header(vec![
+            Cell::new("Project Id"),
+            Cell::new("Project Name"),
+            Cell::new("Deployment Status"),
+        ]);
+
+    for project in projects {
+        let state = project
+            .deployment_state
+            .as_ref()
+            .map(|s| s.to_string())
+            .unwrap_or_default();
+        let color = project
+            .deployment_state
+            .as_ref()
+            .map(|s| s.get_color())
+            .unwrap_or_default();
+        table.add_row(vec![
+            Cell::new(&project.id).add_attribute(Attribute::Bold),
+            Cell::new(&project.name),
+            Cell::new(state)
+                // Unwrap is safe because Color::from_str returns the color white if the argument is not a Color.
+                .fg(Color::from_str(color).unwrap()),
+        ]);
+    }
+
+    table.to_string()
 }

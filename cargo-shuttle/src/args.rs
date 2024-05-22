@@ -14,7 +14,6 @@ use clap::{
 use clap_complete::Shell;
 use shuttle_common::constants::{DEFAULT_IDLE_MINUTES, EXAMPLES_REPO};
 use shuttle_common::resource;
-use uuid::Uuid;
 
 #[derive(Parser)]
 #[command(
@@ -39,6 +38,9 @@ pub struct ShuttleArgs {
     /// Turn on tracing output for cargo-shuttle and shuttle libraries.
     #[arg(long, env = "SHUTTLE_DEBUG")]
     pub debug: bool,
+    /// Target Shuttle's development environment
+    #[arg(long, env = "SHUTTLE_BETA", hide = true)]
+    pub beta: bool,
 
     #[command(subcommand)]
     pub cmd: Command,
@@ -158,13 +160,13 @@ pub enum DeploymentCommand {
         limit: u32,
 
         #[arg(long, default_value_t = false)]
-        /// Output table in `raw` format
+        /// Output table without borders
         raw: bool,
     },
     /// View status of a deployment
     Status {
         /// ID of deployment to get status for
-        id: Uuid,
+        id: String,
     },
 }
 
@@ -173,7 +175,7 @@ pub enum ResourceCommand {
     /// List all the resources for a project
     List {
         #[arg(long, default_value_t = false)]
-        /// Output table in `raw` format
+        /// Output table without borders
         raw: bool,
 
         #[arg(
@@ -197,6 +199,7 @@ pub enum ResourceCommand {
 #[derive(Parser)]
 pub enum ProjectCommand {
     /// Create an environment for this project on Shuttle
+    #[command(visible_alias = "create")]
     Start(ProjectStartArgs),
     /// Check the status of this project's environment on Shuttle
     Status {
@@ -208,7 +211,7 @@ pub enum ProjectCommand {
     Stop,
     /// Destroy and create an environment for this project on Shuttle
     Restart(ProjectStartArgs),
-    /// List all projects belonging to the calling account
+    /// List all projects you have access to
     List {
         #[arg(long, default_value = "1")]
         /// (deprecated) Which page to display
@@ -219,7 +222,7 @@ pub enum ProjectCommand {
         limit: u32,
 
         #[arg(long, default_value_t = false)]
-        /// Output table in `raw` format
+        /// Output table without borders
         raw: bool,
     },
     /// Delete a project and all linked data
@@ -409,8 +412,8 @@ impl InitTemplateArg {
 
 #[derive(Parser, Clone, Debug, Default)]
 pub struct LogsArgs {
-    /// Deployment ID to get logs for. Defaults to currently running deployment
-    pub id: Option<Uuid>,
+    /// Deployment ID to get logs for. Defaults to the current deployment
+    pub id: Option<String>,
     #[arg(short, long)]
     /// View logs from the most recent deployment (which is not always the latest running one)
     pub latest: bool,
@@ -420,6 +423,18 @@ pub struct LogsArgs {
     /// Don't display timestamps and log origin tags
     #[arg(long)]
     pub raw: bool,
+    /// View the first N log lines
+    #[arg(long, group = "output_mode")]
+    pub head: Option<u32>,
+    /// View the last N log lines
+    #[arg(long, group = "output_mode")]
+    pub tail: Option<u32>,
+    /// View all log lines
+    #[arg(long, group = "output_mode")]
+    pub all: bool,
+    /// Get logs from all deployments instead of one deployment
+    #[arg(long)]
+    pub all_deployments: bool,
 }
 
 /// Helper function to parse and return the absolute path

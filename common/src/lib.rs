@@ -14,6 +14,8 @@ pub mod limits;
 pub mod log;
 #[cfg(feature = "service")]
 pub use log::LogItem;
+#[cfg(feature = "service")]
+pub use log::LogItemBeta;
 #[cfg(feature = "models")]
 pub mod models;
 pub mod resource;
@@ -28,9 +30,6 @@ use std::fmt::Debug;
 use anyhow::bail;
 use serde::{Deserialize, Serialize};
 use zeroize::Zeroize;
-
-pub type ApiUrl = String;
-pub type Host = String;
 
 #[derive(Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "persist", derive(PartialEq, Eq, Hash, sqlx::Type))]
@@ -162,6 +161,14 @@ impl DatabaseInfo {
             self.port,
             self.database_name,
         )
+    }
+
+    pub fn role_name(&self) -> String {
+        self.role_name.to_string()
+    }
+
+    pub fn database_name(&self) -> String {
+        self.database_name.to_string()
     }
 }
 

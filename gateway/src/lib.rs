@@ -3,13 +3,7 @@ extern crate async_trait;
 
 use std::convert::Infallible;
 use std::error::Error as StdError;
-use std::fmt::Formatter;
-use std::io;
 use std::pin::Pin;
-
-use acme::AcmeClientError;
-
-use axum::response::{IntoResponse, Response};
 
 use bollard::Docker;
 use futures::prelude::*;
@@ -17,12 +11,9 @@ use hyper::client::HttpConnector;
 use hyper::Client;
 use once_cell::sync::Lazy;
 use service::ContainerSettings;
-use shuttle_backends::client::permit;
 use shuttle_backends::project_name::ProjectName;
-use shuttle_common::models::error::{ApiError, ErrorKind};
 use shuttle_common::models::user::UserId;
 use strum::Display;
-use tokio::sync::mpsc::error::SendError;
 
 pub mod acme;
 pub mod api;
@@ -45,105 +36,6 @@ pub enum DockerStatsSource {
     Bollard,
 }
 static AUTH_CLIENT: Lazy<Client<HttpConnector>> = Lazy::new(Client::new);
-
-/// Server-side errors that do not have to do with the user runtime
-/// should be [`Error`]s.
-///
-/// All [`Error`] have an [`ErrorKind`] and an (optional) source.
-
-/// [`Error] is safe to be used as error variants to axum endpoints
-/// return types as their [`IntoResponse`] implementation does not
-/// leak any sensitive information.
-#[derive(Debug)]
-pub struct Error {
-    kind: ErrorKind,
-    source: Option<Box<dyn StdError + Sync + Send + 'static>>,
-}
-
-impl Error {
-    pub fn source<E: StdError + Sync + Send + 'static>(kind: ErrorKind, err: E) -> Self {
-        Self {
-            kind,
-            source: Some(Box::new(err)),
-        }
-    }
-
-    pub fn custom<S: AsRef<str>>(kind: ErrorKind, message: S) -> Self {
-        Self {
-            kind,
-            source: Some(Box::new(io::Error::new(
-                io::ErrorKind::Other,
-                message.as_ref().to_string(),
-            ))),
-        }
-    }
-
-    pub fn from_kind(kind: ErrorKind) -> Self {
-        Self { kind, source: None }
-    }
-
-    pub fn kind(&self) -> ErrorKind {
-        self.kind.clone()
-    }
-}
-
-impl From<ErrorKind> for Error {
-    fn from(kind: ErrorKind) -> Self {
-        Self::from_kind(kind)
-    }
-}
-
-impl<T> From<SendError<T>> for Error {
-    fn from(_: SendError<T>) -> Self {
-        Self::from(ErrorKind::ServiceUnavailable)
-    }
-}
-
-impl From<io::Error> for Error {
-    fn from(_: io::Error) -> Self {
-        Self::from(ErrorKind::Internal)
-    }
-}
-
-impl From<AcmeClientError> for Error {
-    fn from(error: AcmeClientError) -> Self {
-        Self::source(ErrorKind::Internal, error)
-    }
-}
-
-impl From<permit::Error> for Error {
-    fn from(error: permit::Error) -> Self {
-        Self::source(ErrorKind::Internal, error)
-    }
-}
-
-impl IntoResponse for Error {
-    fn into_response(self) -> Response {
-        let error: ApiError = self.kind.clone().into();
-
-        if error.status_code >= 500 {
-            tracing::error!(
-                error = &self as &dyn std::error::Error,
-                "control plane request error"
-            );
-        }
-
-        error.into_response()
-    }
-}
-
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.kind)?;
-        if let Some(source) = self.source.as_ref() {
-            write!(f, ": ")?;
-            source.fmt(f)?;
-        }
-        Ok(())
-    }
-}
-
-impl StdError for Error {}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProjectDetails {
@@ -168,7 +60,7 @@ pub trait DockerContext: Send + Sync {
 
     fn container_settings(&self) -> &ContainerSettings;
 
-    async fn get_stats(&self, container_id: &str) -> Result<u64, Error>;
+    async fn get_stats(&self, container_id: &str) -> Result<u64, String>;
 }
 
 /// A generic state which can, when provided with a [`Context`], do
@@ -276,6 +168,7 @@ pub mod tests {
     use ring::signature::{self, Ed25519KeyPair, KeyPair};
     use shuttle_backends::auth::ConvertResponse;
     use shuttle_backends::test_utils::gateway::PermissionsMock;
+    use shuttle_backends::test_utils::provisioner::get_mocked_provisioner;
     use shuttle_backends::test_utils::resource_recorder::get_mocked_resource_recorder;
     use shuttle_common::claims::{AccountTier, Claim};
     use shuttle_common::models::deployment::DeploymentRequest;
@@ -295,7 +188,7 @@ pub mod tests {
     use crate::service::{ContainerSettings, GatewayService, MIGRATIONS};
     use crate::task::BoxedTask;
     use crate::worker::Worker;
-    use crate::{DockerContext, Error};
+    use crate::DockerContext;
 
     macro_rules! value_block_helper {
         ($next:ident, $block:block) => {
@@ -366,18 +259,6 @@ pub mod tests {
         }}
     }
 
-    macro_rules! assert_err_kind {
-        {
-            $left:expr, ErrorKind::$right:ident
-        } => {{
-            let left: Result<_, crate::Error> = $left;
-            assert_eq!(
-                left.map_err(|err| err.kind()),
-                Err(crate::ErrorKind::$right)
-            );
-        }};
-    }
-
     macro_rules! timed_loop {
         (wait: $wait:literal$(, max: $max:literal)?, $block:block) => {{
             #[allow(unused_mut)]
@@ -394,7 +275,7 @@ pub mod tests {
         }};
     }
 
-    pub(crate) use {assert_err_kind, assert_matches, assert_stream_matches, value_block_helper};
+    pub(crate) use {assert_matches, assert_stream_matches, value_block_helper};
 
     mod request_builder_ext {
         pub trait Sealed {}
@@ -519,6 +400,7 @@ pub mod tests {
             let auth: SocketAddr = format!("0.0.0.0:{auth_port}").parse().unwrap();
             let auth_uri: Uri = format!("http://{auth}").parse().unwrap();
             let resource_recorder_port = get_mocked_resource_recorder().await;
+            let provisioner_port = get_mocked_provisioner().await;
 
             let auth_service = AuthService::new(auth);
             auth_service
@@ -538,8 +420,6 @@ pub mod tests {
             let network_name =
                 env::var("SHUTTLE_TESTS_NETWORK").unwrap_or_else(|_| "shuttle_default".to_string());
 
-            let provisioner_host = "provisioner".to_string();
-
             let docker_host = "/var/run/docker.sock".to_string();
 
             let args = StartArgs {
@@ -552,9 +432,9 @@ pub mod tests {
                     docker_host,
                     image,
                     prefix,
-                    provisioner_host,
+                    provisioner_uri: format!("http://host.docker.internal:{provisioner_port}"),
                     // The started containers need to reach auth on the host.
-                    // For this to work, the firewall should not be blocking traffic on the `SHUTTLE_TEST_NETWORK` interface.
+                    // For this to work, the firewall should not be blocking traffic on the `SHUTTLE_TESTS_NETWORK` interface.
                     // The following command can be used on NixOs to allow traffic on the interface.
                     // ```
                     // sudo iptables -I nixos-fw -i <interface> -j nixos-fw-accept
@@ -691,7 +571,7 @@ pub mod tests {
             });
 
             let _worker = tokio::spawn(async move {
-                worker.start().await.unwrap();
+                worker.start().await;
             });
 
             // Allow the spawns to start
@@ -734,7 +614,7 @@ pub mod tests {
             &self.container_settings
         }
 
-        async fn get_stats(&self, _container_id: &str) -> Result<u64, Error> {
+        async fn get_stats(&self, _container_id: &str) -> Result<u64, String> {
             Ok(0)
         }
     }

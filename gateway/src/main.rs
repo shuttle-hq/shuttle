@@ -7,7 +7,6 @@ use std::time::Duration;
 
 use async_posthog::ClientOptions;
 use clap::Parser;
-use futures::prelude::*;
 use shuttle_backends::client::{permit, PermissionsDal};
 use shuttle_backends::trace::setup_tracing;
 use shuttle_common::log::Backend;
@@ -88,13 +87,10 @@ async fn sync_permit_projects(db: SqlitePool, args: SyncArgs) {
 
     for (uid, pids) in projects_by_user {
         println!("syncing {uid} projects");
-        match client.get_user_projects(&uid).await {
+        match client.get_personal_projects(&uid).await {
             Ok(projs) => {
                 for pid in pids {
-                    if !projs
-                        .iter()
-                        .any(|p| p.resource.as_ref().unwrap().key == pid)
-                    {
+                    if !projs.iter().any(|p| *p == pid) {
                         println!("creating project link {uid} <-> {pid}");
                         client.create_project(&uid, &pid).await.unwrap();
                     } else {
@@ -136,12 +132,7 @@ async fn start(
 
     let sender = worker.sender();
 
-    let worker_handle = tokio::spawn(
-        worker
-            .start()
-            .map_ok(|_| info!("worker terminated successfully"))
-            .map_err(|err| error!("worker error: {}", err)),
-    );
+    let worker_handle = tokio::spawn(worker.start());
 
     // Every 60 secs go over all `::Ready` projects and check their health.
     // Also syncs the state of all projects on startup

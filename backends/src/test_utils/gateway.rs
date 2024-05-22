@@ -2,9 +2,8 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use permit_client_rs::models::UserRead;
-use permit_pdp_client_rs::models::UserPermissionsResult;
 use serde::Serialize;
-use shuttle_common::models::organization;
+use shuttle_common::models::team;
 use tokio::sync::Mutex;
 use wiremock::{
     http,
@@ -13,7 +12,7 @@ use wiremock::{
 };
 
 use crate::client::{
-    permit::{Organization, Result},
+    permit::{Owner, Result, Team},
     PermissionsDal,
 };
 
@@ -23,24 +22,30 @@ pub async fn get_mocked_gateway_server() -> MockServer {
     let projects = vec![
         Project {
             id: "00000000000000000000000001",
-            account_id: "user-1",
+            owner_id: "user-1",
             name: "user-1-project-1",
             state: "stopped",
             idle_minutes: 30,
+            is_admin: true,
+            owner_type: "user",
         },
         Project {
             id: "00000000000000000000000002",
-            account_id: "user-1",
+            owner_id: "user-1",
             name: "user-1-project-2",
             state: "ready",
             idle_minutes: 30,
+            is_admin: true,
+            owner_type: "user",
         },
         Project {
             id: "00000000000000000000000003",
-            account_id: "user-2",
+            owner_id: "user-2",
             name: "user-2-project-1",
             state: "ready",
             idle_minutes: 30,
+            is_admin: true,
+            owner_type: "user",
         },
     ];
 
@@ -54,7 +59,7 @@ pub async fn get_mocked_gateway_server() -> MockServer {
 
             let user = bearer.to_str().unwrap().split_whitespace().nth(1).unwrap();
 
-            let body: Vec<_> = p.iter().filter(|p| p.account_id == user).collect();
+            let body: Vec<_> = p.iter().filter(|p| p.owner_id == user).collect();
 
             ResponseTemplate::new(200).set_body_json(body)
         })
@@ -72,7 +77,7 @@ pub async fn get_mocked_gateway_server() -> MockServer {
 
             let user = bearer.to_str().unwrap().split_whitespace().nth(1).unwrap();
 
-            if p.iter().any(|p| p.account_id == user && p.name == project) {
+            if p.iter().any(|p| p.owner_id == user && p.name == project) {
                 ResponseTemplate::new(200)
             } else {
                 ResponseTemplate::new(401)
@@ -88,10 +93,12 @@ pub async fn get_mocked_gateway_server() -> MockServer {
 #[derive(Debug, Clone, Serialize)]
 struct Project<'a> {
     id: &'a str,
-    account_id: &'a str,
     name: &'a str,
     state: &'a str,
     idle_minutes: u64,
+    is_admin: bool,
+    owner_type: &'a str,
+    owner_id: &'a str,
 }
 
 #[derive(Clone, Default)]
@@ -148,11 +155,11 @@ impl PermissionsDal for PermissionsMock {
         Ok(())
     }
 
-    async fn get_user_projects(&self, user_id: &str) -> Result<Vec<UserPermissionsResult>> {
+    async fn get_personal_projects(&self, user_id: &str) -> Result<Vec<String>> {
         self.calls
             .lock()
             .await
-            .push(format!("get_user_projects {user_id}"));
+            .push(format!("get_personal_projects {user_id}"));
         Ok(vec![])
     }
 
@@ -164,35 +171,40 @@ impl PermissionsDal for PermissionsMock {
         Ok(true)
     }
 
-    async fn create_organization(&self, user_id: &str, org: &Organization) -> Result<()> {
+    async fn create_team(&self, user_id: &str, team: &Team) -> Result<()> {
         self.calls.lock().await.push(format!(
-            "create_organization {user_id} {} {}",
-            org.id, org.display_name
+            "create_team {user_id} {} {}",
+            team.id, team.display_name
         ));
         Ok(())
     }
 
-    async fn delete_organization(&self, user_id: &str, org_id: &str) -> Result<()> {
+    async fn delete_team(&self, user_id: &str, team_id: &str) -> Result<()> {
         self.calls
             .lock()
             .await
-            .push(format!("delete_organization {user_id} {org_id}"));
+            .push(format!("delete_team {user_id} {team_id}"));
         Ok(())
     }
 
-    async fn get_organization_projects(&self, user_id: &str, org_id: &str) -> Result<Vec<String>> {
+    async fn get_team(&self, user_id: &str, team_id: &str) -> Result<team::Response> {
         self.calls
             .lock()
             .await
-            .push(format!("get_organization_projects {user_id} {org_id}"));
+            .push(format!("get_team {user_id} {team_id}"));
         Ok(Default::default())
     }
 
-    async fn get_organizations(&self, user_id: &str) -> Result<Vec<organization::Response>> {
+    async fn get_team_projects(&self, user_id: &str, team_id: &str) -> Result<Vec<String>> {
         self.calls
             .lock()
             .await
-            .push(format!("get_organizations {user_id}"));
+            .push(format!("get_team_projects {user_id} {team_id}"));
+        Ok(Default::default())
+    }
+
+    async fn get_teams(&self, user_id: &str) -> Result<Vec<team::Response>> {
+        self.calls.lock().await.push(format!("get_teams {user_id}"));
         Ok(Default::default())
     }
 
@@ -209,63 +221,67 @@ impl PermissionsDal for PermissionsMock {
         Ok(())
     }
 
-    async fn transfer_project_to_org(
+    async fn transfer_project_to_team(
         &self,
         user_id: &str,
         project_id: &str,
-        org_id: &str,
+        team_id: &str,
     ) -> Result<()> {
         self.calls.lock().await.push(format!(
-            "transfer_project_to_org {user_id} {project_id} {org_id}"
+            "transfer_project_to_team {user_id} {project_id} {team_id}"
         ));
         Ok(())
     }
 
-    async fn transfer_project_from_org(
+    async fn transfer_project_from_team(
         &self,
         user_id: &str,
         project_id: &str,
-        org_id: &str,
+        team_id: &str,
     ) -> Result<()> {
         self.calls.lock().await.push(format!(
-            "transfer_project_from_org {user_id} {project_id} {org_id}"
+            "transfer_project_from_team {user_id} {project_id} {team_id}"
         ));
         Ok(())
     }
 
-    async fn add_organization_member(
-        &self,
-        admin_user: &str,
-        org_id: &str,
-        user_id: &str,
-    ) -> Result<()> {
-        self.calls.lock().await.push(format!(
-            "add_organization_member {admin_user} {org_id} {user_id}"
-        ));
-        Ok(())
-    }
-
-    async fn remove_organization_member(
-        &self,
-        admin_user: &str,
-        org_id: &str,
-        user_id: &str,
-    ) -> Result<()> {
-        self.calls.lock().await.push(format!(
-            "remove_organization_member {admin_user} {org_id} {user_id}"
-        ));
-        Ok(())
-    }
-
-    async fn get_organization_members(
-        &self,
-        user_id: &str,
-        org_id: &str,
-    ) -> Result<Vec<organization::MemberResponse>> {
+    async fn add_team_member(&self, admin_user: &str, team_id: &str, user_id: &str) -> Result<()> {
         self.calls
             .lock()
             .await
-            .push(format!("get_organization_members {user_id} {org_id}"));
+            .push(format!("add_team_member {admin_user} {team_id} {user_id}"));
+        Ok(())
+    }
+
+    async fn remove_team_member(
+        &self,
+        admin_user: &str,
+        team_id: &str,
+        user_id: &str,
+    ) -> Result<()> {
+        self.calls.lock().await.push(format!(
+            "remove_team_member {admin_user} {team_id} {user_id}"
+        ));
+        Ok(())
+    }
+
+    async fn get_team_members(
+        &self,
+        user_id: &str,
+        team_id: &str,
+    ) -> Result<Vec<team::MemberResponse>> {
+        self.calls
+            .lock()
+            .await
+            .push(format!("get_team_members {user_id} {team_id}"));
         Ok(Default::default())
+    }
+
+    async fn get_project_owner(&self, user_id: &str, project_id: &str) -> Result<Owner> {
+        self.calls
+            .lock()
+            .await
+            .push(format!("get_project_owner {user_id} {project_id}"));
+        Ok(Owner::User(user_id.to_string()))
     }
 }

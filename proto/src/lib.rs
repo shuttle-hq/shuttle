@@ -146,16 +146,14 @@ mod _runtime_client {
     use tracing::{info, trace};
 
     pub type Client = runtime_client::RuntimeClient<
-        shuttle_common::claims::ClaimService<
-            shuttle_common::claims::InjectPropagation<tonic::transport::Channel>,
-        >,
+        shuttle_common::claims::InjectPropagation<tonic::transport::Channel>,
     >;
 
     /// Get a runtime client that is correctly configured
     #[cfg(feature = "client")]
-    pub async fn get_client(port: &str) -> anyhow::Result<Client> {
+    pub async fn get_client(address: String) -> anyhow::Result<Client> {
         info!("connecting runtime client");
-        let conn = Endpoint::new(format!("http://127.0.0.1:{port}"))
+        let conn = Endpoint::new(address)
             .context("creating runtime client endpoint")?
             .connect_timeout(Duration::from_secs(5));
 
@@ -177,7 +175,6 @@ mod _runtime_client {
         .context("runtime control port did not open in time")?;
 
         let runtime_service = tower::ServiceBuilder::new()
-            .layer(shuttle_common::claims::ClaimLayer)
             .layer(shuttle_common::claims::InjectPropagationLayer)
             .service(channel);
 

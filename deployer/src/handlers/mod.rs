@@ -50,6 +50,11 @@ pub struct PaginationDetails {
     pub limit: Option<u32>,
 }
 
+#[derive(Deserialize)]
+struct LogsQuery {
+    head: Option<u32>,
+    tail: Option<u32>,
+}
 #[derive(Clone)]
 pub struct RouterBuilder {
     router: Router,
@@ -424,9 +429,12 @@ pub async fn get_logs(
     Extension(deployment_manager): Extension<DeploymentManager>,
     Extension(claim): Extension<Claim>,
     CustomErrorPath((project_name, deployment_id)): CustomErrorPath<(String, Uuid)>,
+    Query(LogsQuery { head, tail }): Query<LogsQuery>,
 ) -> Result<Json<Vec<LogItem>>> {
     let mut logs_request: tonic::Request<LogsRequest> = tonic::Request::new(LogsRequest {
         deployment_id: deployment_id.to_string(),
+        head,
+        tail,
     });
 
     logs_request.extensions_mut().insert(claim);
@@ -464,20 +472,26 @@ pub async fn get_logs_subscribe(
     Extension(deployment_manager): Extension<DeploymentManager>,
     Extension(claim): Extension<Claim>,
     CustomErrorPath((project_name, deployment_id)): CustomErrorPath<(String, Uuid)>,
+    Query(LogsQuery { head, tail }): Query<LogsQuery>,
     ws_upgrade: ws::WebSocketUpgrade,
 ) -> axum::response::Response {
-    ws_upgrade
-        .on_upgrade(move |s| logs_websocket_handler(s, deployment_manager, deployment_id, claim))
+    ws_upgrade.on_upgrade(move |s| {
+        logs_websocket_handler(s, deployment_manager, deployment_id, head, tail, claim)
+    })
 }
 
 async fn logs_websocket_handler(
     mut s: WebSocket,
     deployment_manager: DeploymentManager,
     deployment_id: Uuid,
+    head: Option<u32>,
+    tail: Option<u32>,
     claim: Claim,
 ) {
     let mut logs_request: tonic::Request<LogsRequest> = tonic::Request::new(LogsRequest {
         deployment_id: deployment_id.to_string(),
+        head,
+        tail,
     });
 
     logs_request.extensions_mut().insert(claim);

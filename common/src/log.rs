@@ -28,7 +28,16 @@ pub enum Backend {
     Logger,
     Provisioner,
     ResourceRecorder,
+    Control,
     Runtime(String),
+}
+
+/// Which subset of deployment log lines to process
+#[derive(Deserialize)]
+pub enum LogsRange {
+    Head(u32),
+    Tail(u32),
+    All,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -44,6 +53,50 @@ pub struct LogItem {
 
     /// The log line
     pub line: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct LogItemBeta {
+    /// Time log was captured
+    pub timestamp: DateTime<Utc>,
+
+    /// Stdout/stderr
+    pub source: String,
+
+    /// The log line
+    pub line: String,
+}
+
+impl LogItemBeta {
+    pub fn new(timestamp: DateTime<Utc>, source: String, line: String) -> Self {
+        Self {
+            timestamp,
+            source,
+            line,
+        }
+    }
+}
+
+#[cfg(feature = "display")]
+impl std::fmt::Display for LogItemBeta {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let datetime: chrono::DateTime<chrono::Local> = DateTime::from(self.timestamp);
+
+        write!(
+            f,
+            "{} [{}] {}",
+            datetime
+                .to_rfc3339_opts(chrono::SecondsFormat::Millis, false)
+                .dim(),
+            self.source,
+            self.line,
+        )
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct LogsResponseBeta {
+    pub logs: Vec<LogItemBeta>,
 }
 
 const LOGLINE_MAX_CHARS: usize = 2048;

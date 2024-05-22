@@ -443,13 +443,14 @@ jobs:
           name: Install Rust
           # Note: Let binary build use latest
           command: |
+            choco uninstall rust # The one coming from choco interferes with the one coming from rustup
             wget -OutFile "C:\rustup-init.exe" https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-msvc/rustup-init.exe
             C:\rustup-init.exe -y --target x86_64-pc-windows-msvc
           shell: powershell.exe
       - run:
           name: Build
           command: |
-            ..\.cargo\bin\cargo.exe build --release --package cargo-shuttle --target x86_64-pc-windows-msvc
+            cargo.exe build --release --package cargo-shuttle --target x86_64-pc-windows-msvc
           shell: powershell.exe
       - make-artifact:
           target: x86_64-pc-windows-msvc

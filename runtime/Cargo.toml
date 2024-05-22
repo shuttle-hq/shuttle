@@ -1,6 +1,6 @@
 [package]
 name = "shuttle-runtime"
-version = "0.43.0"
+version = "0.45.0"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -22,12 +22,13 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 strfmt = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
+tokio-util = { workspace = true }
 tokio-stream = { workspace = true }
 tonic = { workspace = true }
 tracing-subscriber = { workspace = true, optional = true }
 
 [dev-dependencies]
-portpicker = "0.1.1"
+portpicker = { workspace = true }
 shuttle-service = { workspace = true, features = ["builder", "runner"] }
 shuttle-proto = { workspace = true, features = ["provisioner"] }
 uuid = { workspace = true }

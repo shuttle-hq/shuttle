@@ -19,6 +19,21 @@ pub enum State {
     Unknown,
 }
 
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Display, Serialize, EnumString)]
+#[serde(rename_all = "lowercase")]
+#[strum(serialize_all = "lowercase")]
+#[strum(ascii_case_insensitive)]
+pub enum EcsState {
+    Pending,
+    Building,
+    Running,
+    #[strum(serialize = "in progress")]
+    InProgress,
+    Stopped,
+    Stopping,
+    Failed,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DeploymentMetadata {
     pub env: Environment,

@@ -35,6 +35,7 @@ fn cleanup() {
 mod needs_docker {
     use super::*;
     use pretty_assertions::assert_eq;
+    use tokio::time::sleep;
 
     #[tokio::test]
     async fn store_and_get_logs() {
@@ -82,10 +83,15 @@ mod needs_docker {
                 .into_inner();
             assert!(response.success);
 
+            // Allow some time for the logs to be inserted into the DB
+            sleep(Duration::from_millis(500)).await;
+
             // Get logs
             let logs = client
                 .get_logs(Request::new(LogsRequest {
                     deployment_id: deployment_id.into(),
+                    head: None,
+                    tail: None,
                 }))
                 .await
                 .unwrap()
@@ -125,7 +131,11 @@ mod needs_docker {
                     deployment_id: deployment_id.to_string(),
                     log_line: Some(LogLine {
                         service_name: SHUTTLE_SERVICE.to_string(),
-                        tx_timestamp: Some(Timestamp::from(SystemTime::UNIX_EPOCH)),
+                        tx_timestamp: Some(Timestamp::from(
+                            SystemTime::UNIX_EPOCH
+                                .checked_add(Duration::from_secs(10))
+                                .unwrap(),
+                        )),
                         data: "log 1 example".as_bytes().to_vec(),
                     }),
                 },
@@ -135,7 +145,7 @@ mod needs_docker {
                         service_name: SHUTTLE_SERVICE.to_string(),
                         tx_timestamp: Some(Timestamp::from(
                             SystemTime::UNIX_EPOCH
-                                .checked_add(Duration::from_secs(10))
+                                .checked_add(Duration::from_secs(20))
                                 .unwrap(),
                         )),
                         data: "log 2 example".as_bytes().to_vec(),
@@ -143,23 +153,25 @@ mod needs_docker {
                 },
             ];
 
-            let response = client
+            // Subscribe to stream
+            let mut response = client
+                .get_logs_stream(Request::new(LogsRequest {
+                    deployment_id: deployment_id.into(),
+                    head: None,
+                    tail: None,
+                }))
+                .await
+                .unwrap()
+                .into_inner();
+
+            let stored_response = client
                 .store_logs(Request::new(StoreLogsRequest {
                     logs: expected_stored_logs.clone(),
                 }))
                 .await
                 .unwrap()
                 .into_inner();
-            assert!(response.success);
-
-            // Subscribe to stream
-            let mut response = client
-                .get_logs_stream(Request::new(LogsRequest {
-                    deployment_id: deployment_id.into(),
-                }))
-                .await
-                .unwrap()
-                .into_inner();
+            assert!(stored_response.success);
 
             let log = timeout(std::time::Duration::from_millis(500), response.message())
                 .await

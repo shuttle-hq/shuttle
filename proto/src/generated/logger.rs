@@ -15,6 +15,10 @@ pub struct StoreLogsResponse {
 pub struct LogsRequest {
     #[prost(string, tag = "1")]
     pub deployment_id: ::prost::alloc::string::String,
+    #[prost(uint32, optional, tag = "2")]
+    pub head: ::core::option::Option<u32>,
+    #[prost(uint32, optional, tag = "3")]
+    pub tail: ::core::option::Option<u32>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]

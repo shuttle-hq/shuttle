@@ -309,7 +309,7 @@ impl PermissionsDal for Client {
             None,
             None,
             None,
-            None,
+            Some(100),
         )
         .await?
         .into_iter()
@@ -440,7 +440,7 @@ impl PermissionsDal for Client {
             &self.proj_id,
             &self.env_id,
             Some(true),
-            None,
+            Some(100),
             None,
             Some("default"),
             Some(&format!("Team:{team_id}")),
@@ -692,7 +692,7 @@ impl PermissionsDal for Client {
             Some(&format!("Team:{team_id}")),
             None,
             None,
-            None,
+            Some(100),
         )
         .await?;
 

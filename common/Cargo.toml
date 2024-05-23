@@ -30,7 +30,7 @@ serde = { workspace = true, features = ["derive", "std"] }
 serde_json = { workspace = true }
 sqlx = { workspace = true, optional = true }
 strum = { workspace = true, features = ["derive"] }
-thiserror = { workspace = true, optional = true }
+thiserror = { workspace = true }
 tonic = { workspace = true, optional = true }
 tower = { workspace = true, optional = true }
 tracing = { workspace = true, features = ["std"], optional = true }
@@ -65,7 +65,7 @@ extract_propagation = [
     "tower",
     "tracing-opentelemetry",
 ]
-models = ["async-trait", "reqwest", "service", "thiserror"]
+models = ["async-trait", "reqwest", "service"]
 persist = ["sqlx", "rand"]
 sqlx = ["dep:sqlx", "sqlx/sqlite"]
 service = ["chrono/serde", "display", "tracing", "tracing-subscriber", "uuid"]

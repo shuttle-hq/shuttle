@@ -13,6 +13,7 @@ pub struct Response {
     pub key: String,
     pub account_tier: String,
     pub subscriptions: Vec<Subscription>,
+    pub has_access_to_beta: bool,
 }
 
 #[derive(Deserialize, Serialize, Debug)]

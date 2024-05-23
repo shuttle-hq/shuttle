@@ -86,15 +86,16 @@ where
     P: PermissionsDal + Send + Sync,
 {
     async fn create_user(&self, account_name: String, tier: AccountTier) -> Result<User, Error> {
-        let user = User::new(account_name, ApiKey::generate(), tier, vec![]);
+        let user = User::new(account_name, ApiKey::generate(), tier, vec![], false);
 
         query(
-            "INSERT INTO users (account_name, key, account_tier, user_id) VALUES ($1, $2, $3, $4)",
+            "INSERT INTO users (account_name, key, account_tier, user_id, has_access_to_beta) VALUES ($1, $2, $3, $4, $5)",
         )
         .bind(&user.name)
         .bind(user.key.expose())
         .bind(user.account_tier.to_string())
         .bind(&user.id)
+        .bind(false)
         .execute(&self.pool)
         .await?;
 
@@ -278,6 +279,7 @@ pub struct User {
     pub key: Secret<ApiKey>,
     pub account_tier: AccountTier,
     pub subscriptions: Vec<Subscription>,
+    pub has_access_to_beta: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -310,6 +312,7 @@ impl User {
         key: ApiKey,
         account_tier: AccountTier,
         subscriptions: Vec<Subscription>,
+        has_access_to_beta: bool,
     ) -> Self {
         Self {
             name,
@@ -317,6 +320,7 @@ impl User {
             key: Secret::new(key),
             account_tier,
             subscriptions,
+            has_access_to_beta,
         }
     }
 
@@ -390,6 +394,7 @@ impl FromRow<'_, PgRow> for User {
                 },
             )?,
             subscriptions: vec![],
+            has_access_to_beta: row.try_get("has_access_to_beta").unwrap(),
         })
     }
 }
@@ -465,6 +470,7 @@ impl From<User> for models::user::Response {
             key: user.key.expose().as_ref().to_owned(),
             account_tier: user.account_tier.to_string(),
             subscriptions: user.subscriptions.into_iter().map(Into::into).collect(),
+            has_access_to_beta: user.has_access_to_beta,
         }
     }
 }

@@ -83,11 +83,40 @@ impl ApiError {
 }
 
 pub trait ErrorContext<T> {
-    fn context_internal_error(self, message: &str) -> Result<T, ApiError>;
+    /// Make a new internal server error with the given message.
+    #[inline(always)]
+    fn context_internal_error(self, message: &str) -> Result<T, ApiError>
+    where
+        Self: Sized,
+    {
+        self.with_context_internal_error(move || message.to_string())
+    }
+
+    /// Make a new internal server error using the given function to create the message.
     fn with_context_internal_error(self, message: impl FnOnce() -> String) -> Result<T, ApiError>;
-    fn context_bad_request(self, message: &str) -> Result<T, ApiError>;
+
+    /// Make a new bad request error with the given message.
+    #[inline(always)]
+    fn context_bad_request(self, message: &str) -> Result<T, ApiError>
+    where
+        Self: Sized,
+    {
+        self.with_context_bad_request(move || message.to_string())
+    }
+
+    /// Make a new bad request error using the given function to create the message.
     fn with_context_bad_request(self, message: impl FnOnce() -> String) -> Result<T, ApiError>;
-    fn context_not_found(self, message: &str) -> Result<T, ApiError>;
+
+    /// Make a new not found error with the given message.
+    #[inline(always)]
+    fn context_not_found(self, message: &str) -> Result<T, ApiError>
+    where
+        Self: Sized,
+    {
+        self.with_context_not_found(move || message.to_string())
+    }
+
+    /// Make a new not found error using the given function to create the message.
     fn with_context_not_found(self, message: impl FnOnce() -> String) -> Result<T, ApiError>;
 }
 
@@ -96,20 +125,17 @@ where
     E: std::error::Error + 'static,
 {
     #[inline(always)]
-    fn context_internal_error(self, message: &str) -> Result<T, ApiError> {
+    fn with_context_internal_error(self, message: impl FnOnce() -> String) -> Result<T, ApiError> {
         match self {
             Ok(value) => Ok(value),
-            Err(error) => Err(ApiError::internal_safe(message, error)),
+            Err(error) => Err(ApiError::internal_safe(message().as_ref(), error)),
         }
     }
 
     #[inline(always)]
-    fn with_context_internal_error(self, message: impl FnOnce() -> String) -> Result<T, ApiError> {
-        self.context_internal_error(&message())
-    }
+    fn with_context_bad_request(self, message: impl FnOnce() -> String) -> Result<T, ApiError> {
+        let message = message();
 
-    #[inline(always)]
-    fn context_bad_request(self, message: &str) -> Result<T, ApiError> {
         match self {
             Ok(value) => Ok(value),
             Err(error) => Err({
@@ -119,7 +145,7 @@ where
                 );
 
                 ApiError {
-                    message: message.to_string(),
+                    message,
                     status_code: StatusCode::BAD_REQUEST.as_u16(),
                 }
             }),
@@ -127,12 +153,9 @@ where
     }
 
     #[inline(always)]
-    fn with_context_bad_request(self, message: impl FnOnce() -> String) -> Result<T, ApiError> {
-        self.context_bad_request(&message())
-    }
+    fn with_context_not_found(self, message: impl FnOnce() -> String) -> Result<T, ApiError> {
+        let message = message();
 
-    #[inline(always)]
-    fn context_not_found(self, message: &str) -> Result<T, ApiError> {
         match self {
             Ok(value) => Ok(value),
             Err(error) => Err({
@@ -142,40 +165,30 @@ where
                 );
 
                 ApiError {
-                    message: message.to_string(),
+                    message,
                     status_code: StatusCode::NOT_FOUND.as_u16(),
                 }
             }),
         }
     }
-
-    #[inline(always)]
-    fn with_context_not_found(self, message: impl FnOnce() -> String) -> Result<T, ApiError> {
-        self.context_not_found(&message())
-    }
 }
 
 impl<T> ErrorContext<T> for Option<T> {
     #[inline]
-    fn context_internal_error(self, message: &str) -> Result<T, ApiError> {
+    fn with_context_internal_error(self, message: impl FnOnce() -> String) -> Result<T, ApiError> {
         match self {
             Some(value) => Ok(value),
-            None => Err(ApiError::internal(message)),
+            None => Err(ApiError::internal(message().as_ref())),
         }
     }
 
     #[inline]
-    fn with_context_internal_error(self, message: impl FnOnce() -> String) -> Result<T, ApiError> {
-        self.context_internal_error(&message())
-    }
-
-    #[inline]
-    fn context_bad_request(self, message: &str) -> Result<T, ApiError> {
+    fn with_context_bad_request(self, message: impl FnOnce() -> String) -> Result<T, ApiError> {
         match self {
             Some(value) => Ok(value),
             None => Err({
                 ApiError {
-                    message: message.to_string(),
+                    message: message(),
                     status_code: StatusCode::BAD_REQUEST.as_u16(),
                 }
             }),
@@ -183,26 +196,16 @@ impl<T> ErrorContext<T> for Option<T> {
     }
 
     #[inline]
-    fn with_context_bad_request(self, message: impl FnOnce() -> String) -> Result<T, ApiError> {
-        self.context_bad_request(&message())
-    }
-
-    #[inline]
-    fn context_not_found(self, message: &str) -> Result<T, ApiError> {
+    fn with_context_not_found(self, message: impl FnOnce() -> String) -> Result<T, ApiError> {
         match self {
             Some(value) => Ok(value),
             None => Err({
                 ApiError {
-                    message: message.to_string(),
+                    message: message(),
                     status_code: StatusCode::NOT_FOUND.as_u16(),
                 }
             }),
         }
-    }
-
-    #[inline]
-    fn with_context_not_found(self, message: impl FnOnce() -> String) -> Result<T, ApiError> {
-        self.context_not_found(&message())
     }
 }
 

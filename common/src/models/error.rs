@@ -134,11 +134,10 @@ where
 
     #[inline(always)]
     fn with_context_bad_request(self, message: impl FnOnce() -> String) -> Result<T, ApiError> {
-        let message = message();
-
         match self {
             Ok(value) => Ok(value),
             Err(error) => Err({
+                let message = message();
                 warn!(
                     error = &error as &dyn std::error::Error,
                     "bad request: {message}"
@@ -154,11 +153,10 @@ where
 
     #[inline(always)]
     fn with_context_not_found(self, message: impl FnOnce() -> String) -> Result<T, ApiError> {
-        let message = message();
-
         match self {
             Ok(value) => Ok(value),
             Err(error) => Err({
+                let message = message();
                 warn!(
                     error = &error as &dyn std::error::Error,
                     "not found: {message}"

@@ -1,4 +1,4 @@
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Local, Utc};
 use comfy_table::{
     modifiers::UTF8_ROUND_CORNERS,
     presets::{NOTHING, UTF8_BORDERS_ONLY, UTF8_FULL},
@@ -30,16 +30,13 @@ pub struct Response {
 }
 
 #[derive(Deserialize, Serialize)]
-pub struct EcsResponse {
+pub struct ResponseBeta {
     pub id: String,
-    pub latest_deployment_state: EcsState,
-    pub running_id: Option<String>,
+    pub state: EcsState,
+    pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
-    pub uri: Option<String>,
-    pub git_commit_id: Option<String>,
-    pub git_commit_msg: Option<String>,
-    pub git_branch: Option<String>,
-    pub git_dirty: Option<bool>,
+    /// URIs where this deployment can currently be reached (only relevant for Running)
+    pub uris: Vec<String>,
 }
 
 impl Display for Response {
@@ -60,55 +57,22 @@ impl Display for Response {
     }
 }
 
-impl EcsResponse {
+impl ResponseBeta {
     pub fn colored_println(&self) {
-        let running_deployment = self
-            .running_id
-            .as_ref()
-            .map(|id| {
-                format!(
-                    "\nRunning deployment: '{}' - {} {}",
-                    id,
-                    "running".to_string().with(
-                        crossterm::style::Color::from_str(EcsState::Running.get_color()).unwrap()
-                    ),
-                    self.uri
-                        .as_ref()
-                        .map(|inner| format!("({inner})"))
-                        .unwrap_or("".to_string())
-                )
-            })
-            .unwrap_or_default();
-
-        // Stringify the state.
-        let latest_state = format!(
+        let state = format!(
             "{}",
-            self.latest_deployment_state
+            self.state
                 .to_string()
                 // Unwrap is safe because Color::from_str returns the color white if the argument is not a Color.
-                .with(
-                    crossterm::style::Color::from_str(self.latest_deployment_state.get_color())
-                        .unwrap()
-                )
+                .with(crossterm::style::Color::from_str(self.state.get_color()).unwrap())
         );
 
-        let state_with_uri = match self.running_id {
-            None if EcsState::Running == self.latest_deployment_state
-                || EcsState::InProgress == self.latest_deployment_state =>
-            {
-                let uri = self
-                    .uri
-                    .as_ref()
-                    .map(|inner| format!(" ({inner})"))
-                    .unwrap_or_default();
-                format!("{latest_state}{uri}")
-            }
-            _ => latest_state,
-        };
-
+        // TODO: make this look nicer
         println!(
-            "Current deployment: '{}' - {}{running_deployment}",
-            self.id, state_with_uri
+            "Deployment {} - {}\n{}",
+            self.id.as_str().bold(),
+            state,
+            self.uris.join("\n"),
         )
     }
 }
@@ -141,11 +105,12 @@ impl EcsState {
             EcsState::Stopped => "dark_blue",
             EcsState::Stopping => "blue",
             EcsState::Failed => "red",
+            EcsState::Unknown => "grey",
         }
     }
 }
 
-pub fn deployments_table_beta(deployments: &[EcsResponse]) -> String {
+pub fn deployments_table_beta(deployments: &[ResponseBeta]) -> String {
     let mut table = Table::new();
     table
         .load_preset(UTF8_BORDERS_ONLY)
@@ -153,48 +118,17 @@ pub fn deployments_table_beta(deployments: &[EcsResponse]) -> String {
         .set_header(vec![
             Cell::new("Deployment ID"),
             Cell::new("Status"),
-            Cell::new("Last updated"),
-            Cell::new("Branch"),
-            Cell::new("Commit"),
+            Cell::new("Date"),
         ]);
 
     for deploy in deployments.iter() {
-        let truncated_commit_id = deploy
-            .git_commit_id
-            .as_ref()
-            .map_or(String::from(GIT_OPTION_NONE_TEXT), |val| {
-                val.chars().take(7).collect()
-            });
-
-        let truncated_commit_msg = deploy
-            .git_commit_msg
-            .as_ref()
-            .map_or(String::from(GIT_OPTION_NONE_TEXT), |val| {
-                val.chars().take(24).collect()
-            });
-
+        let datetime: DateTime<Local> = DateTime::from(deploy.created_at);
         table.add_row(vec![
             Cell::new(&deploy.id).add_attribute(Attribute::Bold),
-            Cell::new(&deploy.latest_deployment_state)
+            Cell::new(&deploy.state)
                 // Unwrap is safe because Color::from_str returns the color white if str is not a Color.
-                .fg(Color::from_str(deploy.latest_deployment_state.get_color()).unwrap()),
-            Cell::new(deploy.updated_at.format("%Y-%m-%dT%H:%M:%SZ")),
-            Cell::new(
-                deploy
-                    .git_branch
-                    .as_ref()
-                    .unwrap_or(&GIT_OPTION_NONE_TEXT.to_owned()),
-            ),
-            Cell::new(format!(
-                "{}{} {}",
-                truncated_commit_id,
-                if deploy.git_dirty.is_some_and(|d| d) {
-                    "*"
-                } else {
-                    ""
-                },
-                truncated_commit_msg,
-            )),
+                .fg(Color::from_str(deploy.state.get_color()).unwrap()),
+            Cell::new(datetime.to_rfc3339_opts(chrono::SecondsFormat::Secs, false)),
         ]);
     }
 

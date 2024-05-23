@@ -127,10 +127,11 @@ impl Shuttle {
             if matches!(
                 args.cmd,
                 Command::Project(ProjectCommand::Stop { .. } | ProjectCommand::Restart { .. })
+                    | Command::Status
             ) {
                 unimplemented!("This command is deprecated on the beta platform");
             }
-            if matches!(args.cmd, Command::Stop | Command::Clean | Command::Status) {
+            if matches!(args.cmd, Command::Stop | Command::Clean) {
                 unimplemented!("This command is not yet implemented on the beta platform");
             }
             eprintln!("INFO: Using beta platform API");
@@ -220,9 +221,7 @@ impl Shuttle {
             Command::Deployment(DeploymentCommand::List { page, limit, raw }) => {
                 self.deployments_list(page, limit, raw).await
             }
-            Command::Deployment(DeploymentCommand::Status { id }) => {
-                self.deployment_get(id.as_str()).await
-            }
+            Command::Deployment(DeploymentCommand::Status { id }) => self.deployment_get(id).await,
             Command::Resource(ResourceCommand::List { raw, show_secrets }) => {
                 self.resources_list(raw, show_secrets).await
             }
@@ -855,13 +854,7 @@ impl Shuttle {
             let id = if let Some(id) = args.id {
                 id
             } else {
-                // TODO: fix the endpoint and use:
-                // let depl = client.get_current_deployment_beta(proj_name).await?;
-                let depls = client.get_deployments_beta(proj_name).await?;
-                let depl = depls
-                    .first()
-                    .expect("at least one deployment in this project");
-                depl.id.clone()
+                client.get_current_deployment_beta(proj_name).await?.id
             };
             client.get_deployment_logs_beta(proj_name, &id).await?.logs
         };
@@ -1013,20 +1006,30 @@ impl Shuttle {
         Ok(CommandOutcome::Ok)
     }
 
-    async fn deployment_get(&self, deployment_id: &str) -> Result<CommandOutcome> {
+    async fn deployment_get(&self, deployment_id: Option<String>) -> Result<CommandOutcome> {
         let client = self.client.as_ref().unwrap();
 
         if self.beta {
-            let deployment = client
-                .deployment_status(self.ctx.project_name(), deployment_id)
-                .await
-                .map_err(suggestions::deployment::get_deployment_status_failure)?;
+            let deployment = match deployment_id {
+                Some(id) => {
+                    client
+                        .get_deployment_beta(self.ctx.project_name(), &id)
+                        .await
+                }
+                None => {
+                    client
+                        .get_current_deployment_beta(self.ctx.project_name())
+                        .await
+                }
+            }
+            .map_err(suggestions::deployment::get_deployment_status_failure)?;
             deployment.colored_println();
         } else {
+            let deployment_id = deployment_id.expect("deployment id required on alpha platform");
             let deployment = client
                 .get_deployment_details(
                     self.ctx.project_name(),
-                    &Uuid::from_str(deployment_id).map_err(|err| {
+                    &Uuid::from_str(&deployment_id).map_err(|err| {
                         anyhow!("Provided deployment id is not a valid UUID: {err}")
                     })?,
                 )

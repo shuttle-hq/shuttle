@@ -860,7 +860,7 @@ impl ProjectCreating {
         let ContainerSettings {
             image: default_image,
             prefix,
-            provisioner_host,
+            provisioner_uri,
             auth_uri,
             resource_recorder_uri,
             extra_hosts,
@@ -902,7 +902,7 @@ impl ProjectCreating {
                         "--api-address",
                         format!("0.0.0.0:{RUNTIME_API_PORT}"),
                         "--provisioner-address",
-                        format!("http://{provisioner_host}:8000"),
+                        provisioner_uri,
                         "--artifacts-path",
                         "/opt/shuttle",
                         "--state",
@@ -1732,7 +1732,7 @@ where
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ProjectDestroyed {
-    destroyed: Option<ContainerInspectResponse>,
+    pub destroyed: Option<ContainerInspectResponse>,
 }
 
 #[async_trait]

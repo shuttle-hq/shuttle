@@ -38,6 +38,8 @@ pub struct LocalProvisioner {
 
 impl LocalProvisioner {
     pub fn new() -> Result<Self> {
+        // This only constructs the client and does not try to connect.
+        // A "no such file" error will happen on the first request to Docker.
         Ok(Self {
             docker: Docker::connect_with_local_defaults()?,
         })

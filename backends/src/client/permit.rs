@@ -1,6 +1,7 @@
 use std::{
     fmt::{Debug, Display},
     str::FromStr,
+    sync::Arc,
 };
 
 use async_trait::async_trait;
@@ -129,6 +130,130 @@ pub trait PermissionsDal {
 
     /// Get the owner of a project
     async fn get_project_owner(&self, user_id: &str, project_id: &str) -> Result<Owner>;
+}
+
+#[async_trait]
+impl<T> PermissionsDal for Arc<T>
+where
+    T: PermissionsDal + Send + Sync,
+{
+    async fn get_user(&self, user_id: &str) -> Result<UserRead> {
+        self.as_ref().get_user(user_id).await
+    }
+
+    async fn delete_user(&self, user_id: &str) -> Result<()> {
+        self.as_ref().delete_user(user_id).await
+    }
+
+    async fn new_user(&self, user_id: &str) -> Result<UserRead> {
+        self.as_ref().new_user(user_id).await
+    }
+
+    async fn make_pro(&self, user_id: &str) -> Result<()> {
+        self.as_ref().make_pro(user_id).await
+    }
+
+    async fn make_basic(&self, user_id: &str) -> Result<()> {
+        self.as_ref().make_basic(user_id).await
+    }
+
+    async fn create_project(&self, user_id: &str, project_id: &str) -> Result<()> {
+        self.as_ref().create_project(user_id, project_id).await
+    }
+
+    async fn delete_project(&self, project_id: &str) -> Result<()> {
+        self.as_ref().delete_project(project_id).await
+    }
+
+    async fn get_personal_projects(&self, user_id: &str) -> Result<Vec<String>> {
+        self.as_ref().get_personal_projects(user_id).await
+    }
+
+    async fn create_team(&self, user_id: &str, team: &Team) -> Result<()> {
+        self.as_ref().create_team(user_id, team).await
+    }
+
+    async fn delete_team(&self, user_id: &str, team_id: &str) -> Result<()> {
+        self.as_ref().delete_team(user_id, team_id).await
+    }
+
+    async fn get_team(&self, user_id: &str, team_id: &str) -> Result<team::Response> {
+        self.as_ref().get_team(user_id, team_id).await
+    }
+
+    async fn get_teams(&self, user_id: &str) -> Result<Vec<team::Response>> {
+        self.as_ref().get_teams(user_id).await
+    }
+
+    async fn get_team_projects(&self, user_id: &str, team_id: &str) -> Result<Vec<String>> {
+        self.as_ref().get_team_projects(user_id, team_id).await
+    }
+
+    async fn transfer_project_to_user(
+        &self,
+        user_id: &str,
+        project_id: &str,
+        new_user_id: &str,
+    ) -> Result<()> {
+        self.as_ref()
+            .transfer_project_to_user(user_id, project_id, new_user_id)
+            .await
+    }
+
+    async fn transfer_project_to_team(
+        &self,
+        user_id: &str,
+        project_id: &str,
+        team_id: &str,
+    ) -> Result<()> {
+        self.as_ref()
+            .transfer_project_to_team(user_id, project_id, team_id)
+            .await
+    }
+
+    async fn transfer_project_from_team(
+        &self,
+        user_id: &str,
+        project_id: &str,
+        team_id: &str,
+    ) -> Result<()> {
+        self.as_ref()
+            .transfer_project_from_team(user_id, project_id, team_id)
+            .await
+    }
+
+    async fn add_team_member(&self, admin_user: &str, team_id: &str, user_id: &str) -> Result<()> {
+        self.as_ref()
+            .add_team_member(admin_user, team_id, user_id)
+            .await
+    }
+
+    async fn remove_team_member(
+        &self,
+        admin_user: &str,
+        team_id: &str,
+        user_id: &str,
+    ) -> Result<()> {
+        self.as_ref()
+            .remove_team_member(admin_user, team_id, user_id)
+            .await
+    }
+
+    async fn get_team_members(
+        &self,
+        user_id: &str,
+        team_id: &str,
+    ) -> Result<Vec<team::MemberResponse>> {
+        self.as_ref().get_team_members(user_id, team_id).await
+    }
+
+    async fn allowed(&self, user_id: &str, project_id: &str, action: &str) -> Result<bool> {
+        self.as_ref().allowed(user_id, project_id, action).await
+    }
+
+    async fn get_project_owner(&self, user_id: &str, project_id: &str) -> Result<Owner> {
+        self.as_ref().get_project_owner(user_id, project_id).await
+    }
 }
 
 /// Simple details of a team to create
@@ -309,7 +434,7 @@ impl PermissionsDal for Client {
             None,
             None,
             None,
-            None,
+            Some(100),
         )
         .await?
         .into_iter()
@@ -440,7 +565,7 @@ impl PermissionsDal for Client {
             &self.proj_id,
             &self.env_id,
             Some(true),
-            None,
+            Some(100),
             None,
             Some("default"),
             Some(&format!("Team:{team_id}")),
@@ -692,7 +817,7 @@ impl PermissionsDal for Client {
             Some(&format!("Team:{team_id}")),
             None,
             None,
-            None,
+            Some(100),
         )
         .await?;
 

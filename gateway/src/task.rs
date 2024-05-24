@@ -168,6 +168,28 @@ pub fn restart(project_id: Ulid) -> impl Task<ProjectContext, Output = Project> 
     })
 }
 
+pub fn run_until_ready() -> impl Task<ProjectContext, Output = Project> {
+    run(|ctx| async move {
+        match ctx.state {
+            Project::Ready(_) | Project::Errored(_) => TaskResult::Done(ctx.state),
+            _ => TaskResult::Pending(ctx.state.next(&ctx.gateway).await.unwrap()),
+        }
+    })
+}
+
+pub fn run_until_destroyed() -> impl Task<ProjectContext, Output = Project> {
+    run(|ctx| async move {
+        match ctx.state {
+            Project::Errored(_) => TaskResult::Done(ctx.state),
+            Project::Destroyed(_) => {
+                // Set `destroyed` to None to prevent starting up the container with the old key
+                TaskResult::Done(Project::Destroyed(ProjectDestroyed { destroyed: None }))
+            }
+            _ => TaskResult::Pending(ctx.state.next(&ctx.gateway).await.unwrap()),
+        }
+    })
+}
+
 pub fn start_idle_deploys() -> impl Task<ProjectContext, Output = Project> {
     run(|ctx| async move {
         match ctx.state {

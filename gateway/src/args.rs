@@ -60,8 +60,8 @@ pub struct ServiceArgs {
     pub prefix: String,
     /// The address at which an active runtime container will find
     /// the provisioner service
-    #[arg(long, default_value = "provisioner")]
-    pub provisioner_host: String,
+    #[arg(long, default_value = "http://provisioner:8000")]
+    pub provisioner_uri: String,
     /// Address to reach the authentication service at
     #[arg(long, default_value = "http://127.0.0.1:8008")]
     pub auth_uri: Uri,

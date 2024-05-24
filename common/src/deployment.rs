@@ -32,6 +32,8 @@ pub enum EcsState {
     Stopped,
     Stopping,
     Failed,
+    /// Fallback
+    Unknown,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

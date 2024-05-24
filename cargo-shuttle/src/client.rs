@@ -8,8 +8,8 @@ use reqwest::header::HeaderMap;
 use reqwest::{RequestBuilder, Response};
 use serde::{Deserialize, Serialize};
 use shuttle_common::constants::headers::X_CARGO_SHUTTLE_VERSION;
-use shuttle_common::log::LogsRange;
-use shuttle_common::models::deployment::DeploymentRequest;
+use shuttle_common::log::{LogsRange, LogsResponseBeta};
+use shuttle_common::models::deployment::{DeploymentRequest, DeploymentRequestBeta};
 use shuttle_common::models::team;
 use shuttle_common::models::{deployment, project, service, ToJson};
 use shuttle_common::{resource, ApiKey, LogItem, VersionInfo};
@@ -24,12 +24,10 @@ pub struct ShuttleApiClient {
     client: reqwest::Client,
     api_url: String,
     api_key: Option<ApiKey>,
-    /// alter behaviour to interact with the new platform
-    beta: bool,
 }
 
 impl ShuttleApiClient {
-    pub fn new(api_url: String, api_key: Option<ApiKey>, beta: bool) -> Self {
+    pub fn new(api_url: String, api_key: Option<ApiKey>) -> Self {
         Self {
             client: reqwest::Client::builder()
                 .default_headers(
@@ -44,7 +42,6 @@ impl ShuttleApiClient {
                 .unwrap(),
             api_url,
             api_key,
-            beta,
         }
     }
 
@@ -111,18 +108,17 @@ impl ShuttleApiClient {
     pub async fn deploy_beta(
         &self,
         project: &str,
-        deployment_req: DeploymentRequest,
-    ) -> Result<deployment::EcsResponse> {
-        let path = format!("/projects/{project}");
+        deployment_req: DeploymentRequestBeta,
+    ) -> Result<deployment::ResponseBeta> {
+        let path = format!("/projects/{project}/deployments");
         let deployment_req = rmp_serde::to_vec(&deployment_req)
             .context("serialize DeploymentRequest as a MessagePack byte vector")?;
 
         let url = format!("{}{}", self.api_url, path);
-        let mut builder = self.client.put(url);
+        let mut builder = self.client.post(url);
         builder = self.set_auth_bearer(builder);
 
         builder
-            .header("Transfer-Encoding", "chunked")
             .body(deployment_req)
             .send()
             .await
@@ -144,13 +140,14 @@ impl ShuttleApiClient {
     }
 
     pub async fn get_service_resources(&self, project: &str) -> Result<Vec<resource::Response>> {
-        let path = if self.beta {
-            format!("/projects/{project}/resources")
-        } else {
-            format!("/projects/{project}/services/{project}/resources")
-        };
-
-        self.get(path).await
+        self.get(format!("/projects/{project}/services/{project}/resources"))
+            .await
+    }
+    pub async fn get_service_resources_beta(
+        &self,
+        project: &str,
+    ) -> Result<Vec<resource::Response>> {
+        self.get(format!("/projects/{project}/resources")).await
     }
 
     pub async fn delete_service_resource(
@@ -159,19 +156,24 @@ impl ShuttleApiClient {
         resource_type: &resource::Type,
     ) -> Result<()> {
         let r#type = resource_type.to_string();
-
         let r#type = utf8_percent_encode(&r#type, percent_encoding::NON_ALPHANUMERIC).to_owned();
 
-        let path = if self.beta {
-            format!("/projects/{project}/resources/{}", r#type)
-        } else {
-            format!(
-                "/projects/{project}/services/{project}/resources/{}",
-                r#type
-            )
-        };
+        self.delete(format!(
+            "/projects/{project}/services/{project}/resources/{}",
+            r#type
+        ))
+        .await
+    }
+    pub async fn delete_service_resource_beta(
+        &self,
+        project: &str,
+        resource_type: &resource::Type,
+    ) -> Result<()> {
+        let r#type = resource_type.to_string();
+        let r#type = utf8_percent_encode(&r#type, percent_encoding::NON_ALPHANUMERIC).to_owned();
 
-        self.delete(path).await
+        self.delete(format!("/projects/{project}/resources/{}", r#type))
+            .await
     }
 
     pub async fn create_project(
@@ -179,9 +181,14 @@ impl ShuttleApiClient {
         project: &str,
         config: &project::Config,
     ) -> Result<project::Response> {
-        let path = format!("/projects/{project}");
-
-        self.post(path, Some(config))
+        self.post(format!("/projects/{project}"), Some(config))
+            .await
+            .context("failed to make create project request")?
+            .to_json()
+            .await
+    }
+    pub async fn create_project_beta(&self, name: &str) -> Result<project::ResponseBeta> {
+        self.post(format!("/projects/{name}"), None::<()>)
             .await
             .context("failed to make create project request")?
             .to_json()
@@ -199,12 +206,16 @@ impl ShuttleApiClient {
     }
 
     pub async fn get_project(&self, project: &str) -> Result<project::Response> {
-        let path = format!("/projects/{project}");
-
-        self.get(path).await
+        self.get(format!("/projects/{project}")).await
+    }
+    pub async fn get_project_beta(&self, project: &str) -> Result<project::ResponseBeta> {
+        self.get(format!("/projects/{project}")).await
     }
 
     pub async fn get_projects_list(&self) -> Result<Vec<project::Response>> {
+        self.get("/projects".to_owned()).await
+    }
+    pub async fn get_projects_list_beta(&self) -> Result<project::ResponseListBeta> {
         self.get("/projects".to_owned()).await
     }
 
@@ -215,13 +226,10 @@ impl ShuttleApiClient {
     }
 
     pub async fn delete_project(&self, project: &str) -> Result<String> {
-        let path = if self.beta {
-            format!("/projects/{project}")
-        } else {
-            format!("/projects/{project}/delete")
-        };
-
-        self.delete(path).await
+        self.delete(format!("/projects/{project}/delete")).await
+    }
+    pub async fn delete_project_beta(&self, project: &str) -> Result<String> {
+        self.delete(format!("/projects/{project}")).await
     }
 
     pub async fn get_teams_list(&self) -> Result<Vec<team::Response>> {
@@ -229,15 +237,19 @@ impl ShuttleApiClient {
     }
 
     pub async fn get_team_projects_list(&self, team_id: &str) -> Result<Vec<project::Response>> {
-        let path = format!("/teams/{team_id}/projects");
-
-        self.get(path).await
+        self.get(format!("/teams/{team_id}/projects")).await
+    }
+    pub async fn get_team_projects_list_beta(
+        &self,
+        team_id: &str,
+    ) -> Result<project::ResponseListBeta> {
+        self.get(format!("/teams/{team_id}/projects")).await
     }
 
     pub async fn get_logs(
         &self,
         project: &str,
-        deployment_id: &Uuid,
+        deployment_id: &str,
         range: LogsRange,
     ) -> Result<Vec<LogItem>> {
         let mut path = format!("/projects/{project}/deployments/{deployment_id}/logs");
@@ -247,11 +259,25 @@ impl ShuttleApiClient {
             .await
             .context("Failed parsing logs. Is your cargo-shuttle outdated?")
     }
+    pub async fn get_deployment_logs_beta(
+        &self,
+        project: &str,
+        deployment_id: &str,
+    ) -> Result<LogsResponseBeta> {
+        let path = format!("/projects/{project}/deployments/{deployment_id}/logs");
+
+        self.get(path).await.context("Failed parsing logs.")
+    }
+    pub async fn get_project_logs_beta(&self, project: &str) -> Result<LogsResponseBeta> {
+        let path = format!("/projects/{project}/logs");
+
+        self.get(path).await.context("Failed parsing logs.")
+    }
 
     pub async fn get_logs_ws(
         &self,
         project: &str,
-        deployment_id: &Uuid,
+        deployment_id: &str,
         range: LogsRange,
     ) -> Result<WebSocketStream<MaybeTlsStream<TcpStream>>> {
         let mut path = format!("/projects/{project}/ws/deployments/{deployment_id}/logs");
@@ -274,12 +300,6 @@ impl ShuttleApiClient {
         };
     }
 
-    pub async fn deployments_beta(&self, project: &str) -> Result<Vec<deployment::EcsResponse>> {
-        let path = format!("/projects/{project}/deployments",);
-
-        self.get(path).await
-    }
-
     pub async fn get_deployments(
         &self,
         project: &str,
@@ -294,12 +314,28 @@ impl ShuttleApiClient {
 
         self.get(path).await
     }
+    pub async fn get_deployments_beta(
+        &self,
+        project: &str,
+    ) -> Result<Vec<deployment::ResponseBeta>> {
+        let path = format!("/projects/{project}/deployments");
 
-    pub async fn deployment_status(
+        self.get(path).await
+    }
+    pub async fn get_current_deployment_beta(
+        &self,
+        project: &str,
+    ) -> Result<deployment::ResponseBeta> {
+        let path = format!("/projects/{project}/deployments/current");
+
+        self.get(path).await
+    }
+
+    pub async fn get_deployment_beta(
         &self,
         project: &str,
         deployment_id: &str,
-    ) -> Result<deployment::EcsResponse> {
+    ) -> Result<deployment::ResponseBeta> {
         let path = format!("/projects/{project}/deployments/{deployment_id}");
 
         self.get(path).await

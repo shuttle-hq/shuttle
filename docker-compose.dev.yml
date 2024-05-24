@@ -85,10 +85,10 @@ services:
       - "--docker-host=/var/run/docker.sock"
       - "--auth-uri=http://auth:8000"
       - "--deploys-api-key=${DEPLOYS_API_KEY}"
-      - "--provisioner-host=provisioner"
+      - "--provisioner-uri=http://provisioner:8000"
       - "--proxy-fqdn=${APPS_FQDN}"
       - "--use-tls=${USE_TLS}"
-      - "--cors-origin=http://localhost:3001"
+      - "--cors-origin=${CORS_ORIGIN}"
       - "--admin-key=${GATEWAY_ADMIN_KEY}"
       - "--permit-api-uri=https://api.eu-central-1.permit.io"
       - "--permit-pdp-uri=http://permit-pdp:7000"
@@ -97,6 +97,7 @@ services:
   otel-collector:
     ports:
       - 4317:4317
+      - 4318:4318
   logger:
     ports:
       - 8010:8000

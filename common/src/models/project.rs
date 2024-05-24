@@ -4,7 +4,7 @@ use std::str::FromStr;
 
 use comfy_table::{
     modifiers::UTF8_ROUND_CORNERS,
-    presets::{NOTHING, UTF8_FULL},
+    presets::{NOTHING, UTF8_BORDERS_ONLY, UTF8_FULL},
     Attribute, Cell, CellAlignment, Color, ContentArrangement, Table,
 };
 use crossterm::style::Stylize;
@@ -17,16 +17,29 @@ use crate::deployment::EcsState;
 pub struct Response {
     pub id: String,
     pub name: String,
-    // Ignored on beta.
     pub state: State,
-    // Ignored on alpha. Present on beta if an ECS service exists (something has been deployed).
-    pub deployment_state: Option<EcsState>,
-    // Always None on beta.
     pub idle_minutes: Option<u64>,
     #[serde(flatten)]
     pub owner: Owner,
     /// Whether the calling user is an admin in this project
     pub is_admin: bool,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct ResponseBeta {
+    pub id: String,
+    pub name: String,
+    /// Some() if an ECS service exists (something has been deployed).
+    pub deployment_state: Option<EcsState>,
+    #[serde(flatten)]
+    pub owner: Owner,
+    /// Whether the calling user is an admin in this project
+    pub is_admin: bool,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct ResponseListBeta {
+    pub projects: Vec<ResponseBeta>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, EnumString)]
@@ -181,9 +194,9 @@ pub enum Owner {
     Team(String),
 }
 
-pub fn get_projects_table(beta: bool, projects: &[Response], raw: bool) -> String {
+pub fn get_projects_table(projects: &[Response], raw: bool) -> String {
     if projects.is_empty() {
-        let mut s = "No projects are linked to this account\n".to_string();
+        let mut s = "No projects are linked to this account".to_string();
         if !raw {
             s = s.yellow().bold().to_string();
         }
@@ -198,8 +211,7 @@ pub fn get_projects_table(beta: bool, projects: &[Response], raw: bool) -> Strin
                 .set_content_arrangement(ContentArrangement::Disabled)
                 .set_header(vec![
                     Cell::new("Project Name").set_alignment(CellAlignment::Left),
-                    Cell::new(if beta { "Deployment Status" } else { "Status" })
-                        .set_alignment(CellAlignment::Left),
+                    Cell::new("Status").set_alignment(CellAlignment::Left),
                 ]);
         } else {
             table
@@ -210,41 +222,60 @@ pub fn get_projects_table(beta: bool, projects: &[Response], raw: bool) -> Strin
                     Cell::new("Project Name")
                         .set_alignment(CellAlignment::Center)
                         .add_attribute(Attribute::Bold),
-                    Cell::new(if beta { "Deployment Status" } else { "Status" })
+                    Cell::new("Status")
                         .set_alignment(CellAlignment::Center)
                         .add_attribute(Attribute::Bold),
                 ]);
         }
 
-        for project in projects.iter() {
-            let state = if beta {
-                project
-                    .deployment_state
-                    .as_ref()
-                    .map(|s| s.to_string())
-                    .unwrap_or_default()
-            } else {
-                project.state.to_string()
-            };
+        for project in projects {
             if raw {
-                table.add_row(vec![Cell::new(&project.name), Cell::new(state)]);
+                table.add_row(vec![Cell::new(&project.name), Cell::new(&project.state)]);
             } else {
                 table.add_row(vec![
                     Cell::new(&project.name),
-                    Cell::new(state)
+                    Cell::new(&project.state)
                         // Unwrap is safe because Color::from_str returns the color white if the argument is not a Color.
-                        .fg(Color::from_str(if beta {
-                            // TODO: Color for EcsState
-                            ""
-                        } else {
-                            project.state.get_color()
-                        })
-                        .unwrap())
+                        .fg(Color::from_str(project.state.get_color()).unwrap())
                         .set_alignment(CellAlignment::Center),
                 ]);
             }
         }
 
-        format!("\nThese projects are linked to this account\n{table}\n")
+        table.to_string()
     }
+}
+
+pub fn get_projects_table_beta(projects: &[ResponseBeta]) -> String {
+    let mut table = Table::new();
+    table
+        .load_preset(UTF8_BORDERS_ONLY)
+        .set_content_arrangement(ContentArrangement::Disabled)
+        .set_header(vec![
+            Cell::new("Project Id"),
+            Cell::new("Project Name"),
+            Cell::new("Deployment Status"),
+        ]);
+
+    for project in projects {
+        let state = project
+            .deployment_state
+            .as_ref()
+            .map(|s| s.to_string())
+            .unwrap_or_default();
+        let color = project
+            .deployment_state
+            .as_ref()
+            .map(|s| s.get_color())
+            .unwrap_or_default();
+        table.add_row(vec![
+            Cell::new(&project.id).add_attribute(Attribute::Bold),
+            Cell::new(&project.name),
+            Cell::new(state)
+                // Unwrap is safe because Color::from_str returns the color white if the argument is not a Color.
+                .fg(Color::from_str(color).unwrap()),
+        ]);
+    }
+
+    table.to_string()
 }

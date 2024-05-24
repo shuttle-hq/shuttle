@@ -145,7 +145,7 @@ impl From<Error> for ApiError {
 pub struct ContainerSettingsBuilder {
     prefix: Option<String>,
     image: Option<String>,
-    provisioner: Option<String>,
+    provisioner_uri: Option<String>,
     auth_uri: Option<String>,
     resource_recorder_uri: Option<String>,
     network_name: Option<String>,
@@ -162,7 +162,7 @@ impl ContainerSettingsBuilder {
         let ServiceArgs {
             prefix,
             network_name,
-            provisioner_host,
+            provisioner_uri,
             auth_uri,
             resource_recorder_uri,
             image,
@@ -172,7 +172,7 @@ impl ContainerSettingsBuilder {
         } = args;
         self.prefix(prefix)
             .image(image)
-            .provisioner_host(provisioner_host)
+            .provisioner_uri(provisioner_uri)
             .auth_uri(auth_uri)
             .resource_recorder_uri(resource_recorder_uri)
             .network_name(network_name)
@@ -192,8 +192,8 @@ impl ContainerSettingsBuilder {
         self
     }
 
-    pub fn provisioner_host<S: ToString>(mut self, host: S) -> Self {
-        self.provisioner = Some(host.to_string());
+    pub fn provisioner_uri<S: ToString>(mut self, provisioner_uri: S) -> Self {
+        self.provisioner_uri = Some(provisioner_uri.to_string());
         self
     }
 
@@ -225,7 +225,7 @@ impl ContainerSettingsBuilder {
     pub async fn build(mut self) -> ContainerSettings {
         let prefix = self.prefix.take().unwrap();
         let image = self.image.take().unwrap();
-        let provisioner_host = self.provisioner.take().unwrap();
+        let provisioner_uri = self.provisioner_uri.take().unwrap();
         let auth_uri = self.auth_uri.take().unwrap();
         let resource_recorder_uri = self.resource_recorder_uri.take().unwrap();
         let extra_hosts = self.extra_hosts.take().unwrap();
@@ -236,7 +236,7 @@ impl ContainerSettingsBuilder {
         ContainerSettings {
             prefix,
             image,
-            provisioner_host,
+            provisioner_uri,
             auth_uri,
             resource_recorder_uri,
             network_name,
@@ -250,7 +250,7 @@ impl ContainerSettingsBuilder {
 pub struct ContainerSettings {
     pub prefix: String,
     pub image: String,
-    pub provisioner_host: String,
+    pub provisioner_uri: String,
     pub auth_uri: String,
     pub resource_recorder_uri: String,
     pub network_name: String,
@@ -279,7 +279,7 @@ pub struct GatewayService {
     hard_container_limit: u32,
 
     // We store these because we'll need them for the health checks
-    provisioner_host: Endpoint,
+    provisioner_uri: Endpoint,
     auth_host: Uri,
 }
 
@@ -342,7 +342,7 @@ impl GatewayService {
             task_router,
             state_dir,
             permit_client,
-            provisioner_host: Endpoint::new(format!("http://{}:8000", args.provisioner_host))
+            provisioner_uri: Endpoint::new(args.provisioner_uri)
                 .expect("to have a valid provisioner endpoint"),
             auth_host: args.auth_uri,
             cch_container_limit: args.cch_container_limit,
@@ -1056,8 +1056,8 @@ impl GatewayService {
             .expect("Can not parse admin credentials from path")
     }
 
-    pub fn provisioner_host(&self) -> &Endpoint {
-        &self.provisioner_host
+    pub fn provisioner_uri(&self) -> &Endpoint {
+        &self.provisioner_uri
     }
     pub fn auth_uri(&self) -> &Uri {
         &self.auth_host

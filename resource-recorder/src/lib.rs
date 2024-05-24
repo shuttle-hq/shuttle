@@ -2,7 +2,10 @@ use async_trait::async_trait;
 use dal::{Dal, DalError, Resource};
 use prost_types::TimestampError;
 use shuttle_backends::{auth::VerifyClaim, client::ServicesApiClient, ClaimExt};
-use shuttle_common::claims::{Claim, Scope};
+use shuttle_common::{
+    claims::{Claim, Scope},
+    resource::InvalidResourceType,
+};
 use shuttle_proto::resource_recorder::{
     self, resource_recorder_server::ResourceRecorder, ProjectResourcesRequest, RecordRequest,
     ResourceIds, ResourceResponse, ResourcesResponse, ResultResponse, ServiceResourcesRequest,
@@ -28,17 +31,13 @@ pub enum Error {
     Dal(#[from] DalError),
 
     #[error("could not parse resource type: {0}")]
-    String(String),
+    ResourceType(#[from] InvalidResourceType),
 
     #[error("could not parse timestamp: {0}")]
     Timestamp(#[from] TimestampError),
-}
 
-// thiserror is not happy to handle a `#[from] String`
-impl From<String> for Error {
-    fn from(value: String) -> Self {
-        Self::String(value)
-    }
+    #[error("{0}")]
+    String(String),
 }
 
 pub struct Service<D> {

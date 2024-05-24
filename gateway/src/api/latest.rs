@@ -15,7 +15,7 @@ use axum::{Json as AxumJson, Router};
 use fqdn::FQDN;
 use futures::Future;
 use http::header::AUTHORIZATION;
-use http::{HeaderValue, Method, StatusCode, Uri};
+use http::{request, HeaderValue, Method, StatusCode, Uri};
 use instant_acme::{AccountCredentials, ChallengeType};
 use serde::{Deserialize, Serialize};
 use shuttle_backends::auth::{AuthPublicKey, JwtAuthenticationLayer, ScopedLayer};
@@ -39,8 +39,8 @@ use shuttle_proto::provisioner::Ping;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::{Mutex, MutexGuard};
 use tower::ServiceBuilder;
-use tower_http::cors::CorsLayer;
-use tracing::{error, field, instrument, trace, Span};
+use tower_http::cors::{AllowOrigin, CorsLayer};
+use tracing::{debug, error, field, info, instrument, trace, warn, Span};
 use ttl_cache::TtlCache;
 use ulid::Ulid;
 use uuid::Uuid;
@@ -126,7 +126,6 @@ async fn get_project(
         id: project.id.to_uppercase(),
         name: scope.to_string(),
         state: project.state.into(),
-        deployment_state: None,
         idle_minutes,
         owner,
         is_admin,
@@ -166,7 +165,6 @@ async fn get_projects_list(
             id: project.id,
             name: project.name,
             state: project.state.into(),
-            deployment_state: None,
             idle_minutes,
             owner,
             is_admin,
@@ -229,7 +227,6 @@ async fn create_project(
         id: project.id.to_string().to_uppercase(),
         name: project_name.to_string(),
         state: project.state.into(),
-        deployment_state: None,
         idle_minutes,
         owner: project::Owner::User(claim.sub),
         is_admin: true,
@@ -265,7 +262,6 @@ async fn destroy_project(
         id: project.id.to_uppercase(),
         name: project_name.to_string(),
         state: project.state.into(),
-        deployment_state: None,
         idle_minutes,
         owner,
         is_admin,
@@ -313,49 +309,30 @@ async fn delete_project(
 
     let project_id = Ulid::from_string(&project.id).expect("stored project id to be a valid ULID");
 
-    // Try to startup destroyed, errored or outdated projects
-    let project_deletable = project.state.is_ready() || project.state.is_stopped();
-    let current_version: semver::Version = env!("CARGO_PKG_VERSION")
-        .parse()
-        .expect("to have a valid semver gateway version");
-
-    let version = project
-        .state
-        .container()
-        .and_then(|container_inspect_response| {
-            container_inspect_response.image.and_then(|inner| {
-                inner
-                    .strip_prefix("public.ecr.aws/shuttle/deployer:v")
-                    .and_then(|x| x.parse::<semver::Version>().ok())
-            })
-        })
-        // Defaulting to a version that introduced a breaking change.
-        // This was the last one that introduced it at the present
-        // moment.
-        .unwrap_or(semver::Version::new(0, 39, 0));
-
     // We restart the project before deletion everytime
-    // we detect it is outdated, so that we avoid by default
-    // breaking changes that can happen on the deployer
-    // side in the future.
-    if !project_deletable || version < current_version {
-        let handle = state
-            .service
-            .new_task()
-            .project(project_name.clone())
-            .and_then(task::restart(project_id))
-            .and_then(task::run_until_done())
-            .send(&state.sender)
-            .await?;
+    let handle = state
+        .service
+        .new_task()
+        .project(project_name.clone())
+        .and_then(task::destroy()) // This destroy might only recover the project from an errored state
+        .and_then(task::run_until_destroyed())
+        .and_then(task::restart(project_id))
+        .and_then(task::run_until_ready())
+        .and_then(task::destroy())
+        .and_then(task::run_until_destroyed())
+        .and_then(task::restart(project_id))
+        .and_then(task::run_until_ready())
+        .send(&state.sender)
+        .await?;
 
-        // Wait for the project to be ready
-        handle.await;
+    // Wait for the project to be ready
+    handle.await;
 
-        let new_state = state.service.find_project_by_name(&project_name).await?;
+    let new_state = state.service.find_project_by_name(&project_name).await?;
 
-        if !new_state.state.is_ready() {
-            return Err(ProjectCorrupted.into());
-        }
+    if !new_state.state.is_ready() {
+        warn!(state = ?new_state.state, "failed to restart project");
+        return Err(ProjectCorrupted.into());
     }
 
     let service = state.service.clone();
@@ -364,8 +341,10 @@ async fn delete_project(
     let project_caller =
         ProjectCaller::new(state.clone(), scoped_user.clone(), req.headers()).await?;
 
+    trace!("getting deployments");
     // check that a deployment is not running
     let mut deployments = project_caller.get_deployment_list().await?;
+    debug!(?deployments, "got deployments");
     deployments.sort_by_key(|d| d.last_update);
 
     // Make sure no deployment is in the building pipeline
@@ -380,6 +359,7 @@ async fn delete_project(
     });
 
     if has_bad_state {
+        warn!("has bad state");
         return Err(ProjectHasBuildingDeployment.into());
     }
 
@@ -388,6 +368,7 @@ async fn delete_project(
         .filter(|d| d.state == deployment::State::Running);
 
     for running_deployment in running_deployments {
+        info!(%running_deployment, "stopping running deployment");
         let res = project_caller
             .stop_deployment(&running_deployment.id)
             .await?;
@@ -397,11 +378,13 @@ async fn delete_project(
         }
     }
 
+    trace!("getting resources");
     // check if any resources exist
     let resources = project_caller.get_resources().await?;
     let mut delete_fails = Vec::new();
 
     for resource in resources {
+        info!(?resource, "deleting resource");
         let resource_type = resource.r#type.to_string();
         let res = project_caller.delete_resource(&resource_type).await?;
 
@@ -414,6 +397,7 @@ async fn delete_project(
         return Err(ProjectHasResources(delete_fails).into());
     }
 
+    trace!("deleting container");
     let task = service
         .new_task()
         .project(project_name.clone())
@@ -422,6 +406,7 @@ async fn delete_project(
         .await?;
     task.await;
 
+    trace!("removing project from state");
     service.delete_project(&project_name).await?;
 
     Ok(AxumJson("project successfully deleted".to_owned()))
@@ -539,7 +524,7 @@ async fn create_team(
     State(RouterState { service, .. }): State<RouterState>,
     CustomErrorPath(team_name): CustomErrorPath<String>,
     Claim { sub, .. }: Claim,
-) -> Result<String, ApiError> {
+) -> Result<AxumJson<team::Response>, ApiError> {
     if team_name.chars().count() > 30 {
         return Err(InvalidTeamName.into());
     }
@@ -553,7 +538,11 @@ async fn create_team(
 
     Span::current().record("shuttle.team.id", &team.id);
 
-    Ok("Team created".to_string())
+    Ok(AxumJson(team::Response {
+        id: team.id,
+        display_name: team.display_name,
+        is_admin: true,
+    }))
 }
 
 #[instrument(skip_all, fields(shuttle.team.id = %team_id))]
@@ -586,7 +575,6 @@ async fn get_team_projects(
             id: project.id,
             name: project.name,
             state: project.state.into(),
-            deployment_state: None,
             idle_minutes,
             owner,
             is_admin,
@@ -693,7 +681,7 @@ async fn get_status(
     };
 
     // Compute provisioner status.
-    let provisioner_status = if let Ok(channel) = service.provisioner_host().connect().await {
+    let provisioner_status = if let Ok(channel) = service.provisioner_uri().connect().await {
         let channel = ServiceBuilder::new().service(channel);
         let mut provisioner_client = ProvisionerClient::new(channel);
         if provisioner_client.health_check(Ping {}).await.is_ok() {
@@ -1206,15 +1194,17 @@ impl ApiBuilder {
     }
 
     pub fn with_cors(mut self, cors_origin: &str) -> Self {
+        let cors_origin = cors_origin.to_owned();
+
         let cors_layer = CorsLayer::new()
             .allow_methods(vec![Method::GET, Method::POST, Method::DELETE])
             .allow_headers(vec![AUTHORIZATION])
             .max_age(Duration::from_secs(60) * 10)
-            .allow_origin(
-                cors_origin
-                    .parse::<HeaderValue>()
-                    .expect("to be able to parse the CORS origin"),
-            );
+            .allow_origin(AllowOrigin::predicate(
+                move |origin: &HeaderValue, _request_parts: &request::Parts| {
+                    origin.as_bytes().ends_with(cors_origin.as_bytes())
+                },
+            ));
 
         self.router = self.router.layer(cors_layer);
 
@@ -1743,20 +1733,6 @@ pub mod tests {
 
     #[test_context(TestProject)]
     #[tokio::test]
-    async fn api_delete_project_that_has_resources_but_fails_to_remove_them(
-        project: &mut TestProject,
-    ) {
-        project.deploy("../examples/axum/metadata").await;
-        project.stop_service().await;
-
-        assert_eq!(
-            project.router_call(Method::DELETE, "/delete").await,
-            StatusCode::INTERNAL_SERVER_ERROR
-        );
-    }
-
-    #[test_context(TestProject)]
-    #[tokio::test]
     async fn api_delete_project_that_has_running_deployment(project: &mut TestProject) {
         project.deploy("../examples/axum/hello-world").await;
 
@@ -1772,11 +1748,11 @@ pub mod tests {
         project.just_deploy("../examples/axum/hello-world").await;
 
         // Wait a bit to it to progress in the queue
-        sleep(Duration::from_secs(2)).await;
+        sleep(Duration::from_secs(10)).await;
 
         assert_eq!(
             project.router_call(Method::DELETE, "/delete").await,
-            StatusCode::BAD_REQUEST
+            StatusCode::OK
         );
     }
 

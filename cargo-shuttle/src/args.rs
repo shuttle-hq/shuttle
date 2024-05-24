@@ -14,7 +14,6 @@ use clap::{
 use clap_complete::Shell;
 use shuttle_common::constants::{DEFAULT_IDLE_MINUTES, EXAMPLES_REPO};
 use shuttle_common::resource;
-use uuid::Uuid;
 
 #[derive(Parser)]
 #[command(
@@ -167,7 +166,7 @@ pub enum DeploymentCommand {
     /// View status of a deployment
     Status {
         /// ID of deployment to get status for
-        id: String,
+        id: Option<String>,
     },
 }
 
@@ -200,6 +199,7 @@ pub enum ResourceCommand {
 #[derive(Parser)]
 pub enum ProjectCommand {
     /// Create an environment for this project on Shuttle
+    #[command(visible_alias = "create")]
     Start(ProjectStartArgs),
     /// Check the status of this project's environment on Shuttle
     Status {
@@ -211,7 +211,7 @@ pub enum ProjectCommand {
     Stop,
     /// Destroy and create an environment for this project on Shuttle
     Restart(ProjectStartArgs),
-    /// List all projects belonging to the calling account
+    /// List all projects you have access to
     List {
         #[arg(long, default_value = "1")]
         /// (deprecated) Which page to display
@@ -409,8 +409,8 @@ impl InitTemplateArg {
 
 #[derive(Parser, Clone, Debug, Default)]
 pub struct LogsArgs {
-    /// Deployment ID to get logs for. Defaults to currently running deployment
-    pub id: Option<Uuid>,
+    /// Deployment ID to get logs for. Defaults to the current deployment
+    pub id: Option<String>,
     #[arg(short, long)]
     /// View logs from the most recent deployment (which is not always the latest running one)
     pub latest: bool,
@@ -429,6 +429,9 @@ pub struct LogsArgs {
     /// View all log lines
     #[arg(long, group = "output_mode")]
     pub all: bool,
+    /// Get logs from all deployments instead of one deployment
+    #[arg(long)]
+    pub all_deployments: bool,
 }
 
 /// Helper function to parse and return the absolute path

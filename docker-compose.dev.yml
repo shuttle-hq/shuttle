@@ -88,7 +88,7 @@ services:
       - "--provisioner-uri=http://provisioner:8000"
       - "--proxy-fqdn=${APPS_FQDN}"
       - "--use-tls=${USE_TLS}"
-      - "--cors-origin=http://localhost:3001"
+      - "--cors-origin=${CORS_ORIGIN}"
       - "--admin-key=${GATEWAY_ADMIN_KEY}"
       - "--permit-api-uri=https://api.eu-central-1.permit.io"
       - "--permit-pdp-uri=http://permit-pdp:7000"

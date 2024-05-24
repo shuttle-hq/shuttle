@@ -356,6 +356,9 @@ jobs:
       gateway-admin-key:
         description: "Admin API key that authorizes gateway requests to auth service, for key to jwt conversion."
         type: string
+      cors-origin:
+        description: "Where CORS requests are allowed from"
+        type: string
       permit-api-key:
         description: "Permit.io API key for the Permit environment that matches the current ${SHUTTLE_ENV}."
         type: string
@@ -386,6 +389,7 @@ jobs:
             AUTH_JWTSIGNING_PRIVATE_KEY=${<< parameters.jwt-signing-private-key >>} \
             CONTROL_DB_POSTGRES_URI=${<< parameters.control-db-postgres-uri >>} \
             GATEWAY_ADMIN_KEY=${<< parameters.gateway-admin-key >>} \
+            CORS_ORIGIN=<< parameters.cors-origin >> \
             PERMIT_API_KEY=${<< parameters.permit-api-key >>} \
             make deploy
       - when:
@@ -753,6 +757,7 @@ workflows:
           jwt-signing-private-key: DEV_AUTH_JWTSIGNING_PRIVATE_KEY
           control-db-postgres-uri: DEV_CONTROL_DB_POSTGRES_URI
           gateway-admin-key: DEV_GATEWAY_ADMIN_KEY
+          cors-origin: getsynth.vercel.app
           permit-api-key: STAGING_PERMIT_API_KEY
           requires:
             - build-and-push-unstable
@@ -838,6 +843,7 @@ workflows:
           jwt-signing-private-key: PROD_AUTH_JWTSIGNING_PRIVATE_KEY
           control-db-postgres-uri: PROD_CONTROL_DB_POSTGRES_URI
           gateway-admin-key: PROD_GATEWAY_ADMIN_KEY
+          cors-origin: console.shuttle.rs
           permit-api-key: PROD_PERMIT_API_KEY
           ssh-fingerprint: 6a:c5:33:fe:5b:c9:06:df:99:64:ca:17:0d:32:18:2e
           ssh-config-script: production-ssh-config.sh

@@ -98,6 +98,7 @@ services:
     ports:
       - 4317:4317
       - 4318:4318
+    restart: no # don't cycle restarts due to missing keys
   logger:
     ports:
       - 8010:8000

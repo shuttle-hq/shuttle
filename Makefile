@@ -14,7 +14,7 @@ BUILDX_FLAGS=$(BUILDX_OP) $(PLATFORM_FLAGS)
 
 # The Rust version used by our containers
 # Can be updated to the latest stable
-RUSTUP_TOOLCHAIN=1.76.0
+RUSTUP_TOOLCHAIN=1.78.0
 
 TAG?=$(shell git describe --tags --abbrev=0)
 AUTH_TAG?=$(TAG)

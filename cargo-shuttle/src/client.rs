@@ -37,7 +37,8 @@ impl ShuttleApiClient {
                     )]))
                     .unwrap(),
                 )
-                .timeout(Duration::from_secs(60))
+                // some operations, like project delete, can take a while.
+                .timeout(Duration::from_secs(60 * 5))
                 .build()
                 .unwrap(),
             api_url,

@@ -161,7 +161,8 @@ pub fn restart(project_id: Ulid) -> impl Task<ProjectContext, Output = Project> 
             .container()
             .and_then(|container| ProjectCreating::from_container(container, 0).ok())
             .unwrap_or_else(|| {
-                ProjectCreating::new_with_random_initial_key(ctx.project_name, project_id, 1)
+                // idle minutes 1 is generally buggy, therefore use 3.
+                ProjectCreating::new_with_random_initial_key(ctx.project_name, project_id, 3)
             });
 
         TaskResult::Done(Project::Creating(state))

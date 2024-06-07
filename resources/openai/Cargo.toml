@@ -1,0 +1,16 @@
+[package]
+name = "shuttle-openai"
+version = "0.45.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "Shuttle plugin for connecting to OpenAI"
+repository = "https://github.com/shuttle-hq/shuttle"
+keywords = ["shuttle-service", "qdrant"]
+
+[dependencies]
+async-openai = "0.23.0"
+async-trait = "0.1.56"
+serde_json = "1"
+shuttle-service = { path = "../../service", version = "0.45.0" }
+serde = { version = "1.0.203", features = ["derive"] }
+secrecy = "0.8.0"

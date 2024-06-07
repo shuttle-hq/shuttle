@@ -304,6 +304,11 @@ pub struct DeploymentRequestBuildArchiveBeta {
     /// Secrets to add before this deployment.
     /// TODO: Remove this in favour of a separate secrets uploading action.
     pub secrets: Option<HashMap<String, String>>,
+    pub build_meta: Option<BuildMetaBeta>,
+}
+
+#[derive(Default, Deserialize, Serialize)]
+pub struct BuildMetaBeta {
     pub git_commit_id: Option<String>,
     pub git_commit_msg: Option<String>,
     pub git_branch: Option<String>,

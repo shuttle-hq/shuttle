@@ -33,7 +33,7 @@ use ignore::WalkBuilder;
 use indicatif::ProgressBar;
 use indoc::{formatdoc, printdoc};
 use shuttle_common::models::deployment::{
-    DeploymentRequestBuildArchiveBeta, DeploymentRequestImageBeta,
+    BuildMetaBeta, DeploymentRequestBuildArchiveBeta, DeploymentRequestImageBeta,
 };
 use shuttle_common::{
     constants::{
@@ -1871,10 +1871,12 @@ impl Shuttle {
         // End early for beta
         if self.beta {
             deployment_req_buildarch_beta.data = deployment_req.data;
-            deployment_req_buildarch_beta.git_commit_id = deployment_req.git_commit_id;
-            deployment_req_buildarch_beta.git_commit_msg = deployment_req.git_commit_msg;
-            deployment_req_buildarch_beta.git_branch = deployment_req.git_branch;
-            deployment_req_buildarch_beta.git_dirty = deployment_req.git_dirty;
+            deployment_req_buildarch_beta.build_meta = Some(BuildMetaBeta {
+                git_commit_id: deployment_req.git_commit_id,
+                git_commit_msg: deployment_req.git_commit_msg,
+                git_branch: deployment_req.git_branch,
+                git_dirty: deployment_req.git_dirty,
+            });
             let deployment = client
                 .deploy_beta(
                     self.ctx.project_name(),

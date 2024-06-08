@@ -32,6 +32,7 @@ use ignore::overrides::OverrideBuilder;
 use ignore::WalkBuilder;
 use indicatif::ProgressBar;
 use indoc::{formatdoc, printdoc};
+use shuttle_common::resource::ResourceState;
 use shuttle_common::{
     constants::{
         API_URL_DEFAULT, DEFAULT_IDLE_MINUTES, EXAMPLES_REPO, EXECUTABLE_DIRNAME,
@@ -1369,6 +1370,7 @@ impl Shuttle {
                     *bytes = serde_json::to_vec(&ShuttleResourceOutput {
                         output: res,
                         custom: shuttle_resource.custom,
+                        state: ResourceState::Ready
                     })
                     .unwrap();
                 }
@@ -1382,6 +1384,7 @@ impl Shuttle {
                     *bytes = serde_json::to_vec(&ShuttleResourceOutput {
                         output: secrets.clone(),
                         custom: shuttle_resource.custom,
+                        state: ResourceState::Ready
                     })
                     .unwrap();
                 }
@@ -1400,6 +1403,7 @@ impl Shuttle {
                     *bytes = serde_json::to_vec(&ShuttleResourceOutput {
                         output: res,
                         custom: shuttle_resource.custom,
+                        state: ResourceState::Ready
                     })
                     .unwrap();
                 }

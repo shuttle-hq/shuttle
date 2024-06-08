@@ -17,7 +17,7 @@ use shuttle_common::{
         DEPLOYER_END_MSG_COMPLETED, DEPLOYER_END_MSG_CRASHED, DEPLOYER_END_MSG_STARTUP_ERR,
         DEPLOYER_END_MSG_STOPPED, DEPLOYER_RUNTIME_START_FAILED, DEPLOYER_RUNTIME_START_RESPONSE,
     },
-    resource::{self, ResourceInput, Type},
+    resource::{self, ResourceInput, ResourceState, Type},
     DatabaseResource, DbInput, SecretStore,
 };
 use shuttle_proto::{
@@ -536,6 +536,7 @@ async fn provision(
                 *bytes = serde_json::to_vec(&ShuttleResourceOutput {
                     output,
                     custom: shuttle_resource.custom,
+                    state: ResourceState::Ready
                 })
                 .expect("to serialize struct");
             }
@@ -549,6 +550,7 @@ async fn provision(
                 *bytes = serde_json::to_vec(&ShuttleResourceOutput {
                     output: new_secrets.clone(),
                     custom: shuttle_resource.custom,
+                    state: ResourceState::Ready
                 })
                 .expect("to serialize struct");
             }

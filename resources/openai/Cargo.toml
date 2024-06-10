@@ -5,7 +5,7 @@ edition = "2021"
 license = "Apache-2.0"
 description = "Shuttle plugin for connecting to OpenAI"
 repository = "https://github.com/shuttle-hq/shuttle"
-keywords = ["shuttle-service", "qdrant"]
+keywords = ["shuttle-service", "openai"]
 
 [dependencies]
 async-openai = "0.23.0"

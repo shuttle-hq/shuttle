@@ -70,7 +70,7 @@ impl IntoResource<Client<OpenAIConfig>> for Config {
             openai_config = openai_config.with_api_base(api_base)
         }
         if let Some(org_id) = self.org_id {
-            openai_config = openai_config.with_api_base(org_id)
+            openai_config = openai_config.with_org_id(org_id)
         }
         if let Some(project_id) = self.project_id {
             openai_config = openai_config.with_api_base(project_id)

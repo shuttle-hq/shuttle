@@ -137,7 +137,7 @@ async fn proxy(
         .typed_insert(XShuttleProject(project_name.to_string()));
 
     // cache project ip lookups to not overload the db during rapid requests
-    let target_ip = if let Some(ip) = { state.project_cache.get(project_name.as_str()) } {
+    let target_ip = if let Some(ip) = state.project_cache.get(project_name.as_str()) {
         ip
     } else {
         let (proj, was_stopped) = state

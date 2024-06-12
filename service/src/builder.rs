@@ -223,19 +223,8 @@ async fn compile(
         cmd.arg("--jobs=4");
     }
 
-    // TODO later:
-    //   Compile only one binary target in the package.
-    //   (Both package/binary flag should be configurable in Shuttle.toml, but the default should be auto discovered)
-    //   (These flags should also be determined at deploy time in CLI, since our new builder does not run any of this library's code)
+    // TODO: Compile only one binary target in the package.
     for package in &packages {
-        // Allows a custom feature set when compiling for Shuttle.
-        // ```toml
-        // [features]
-        // default = ["foo"]
-        // foo = []
-        // bar = []
-        // shuttle = ["default", "bar"]
-        // ```
         if package.features.contains_key("shuttle") {
             cmd.arg("--no-default-features").arg("--features=shuttle");
         }

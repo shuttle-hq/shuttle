@@ -24,8 +24,10 @@ args = [
     "--all-features",
     "--no-deps",
     "--",
-    "--D",
+    "-D",
     "warnings",
+    "-A",
+    "clippy::assigning_clones",
 ]
 
 # Provide the name of the workspace member

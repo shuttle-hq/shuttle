@@ -973,7 +973,7 @@ dependencies = [
 
 [[package]]
 name = "cargo-shuttle"
-version = "0.45.0"
+version = "0.46.0"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -3006,7 +3006,7 @@ dependencies = [
  "httpdate",
  "itoa",
  "pin-project-lite",
- "socket2 0.5.6",
+ "socket2 0.4.10",
  "tokio",
  "tower-service",
  "tracing",
@@ -4369,7 +4369,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "19de2de2a00075bf566bee3bd4db014b11587e84184d3f7a791bc17f1a8e9e48"
 dependencies = [
  "anyhow",
- "itertools 0.12.1",
+ "itertools 0.10.5",
  "proc-macro2",
  "quote",
  "syn 2.0.59",
@@ -5277,7 +5277,7 @@ checksum = "24188a676b6ae68c3b2cb3a01be17fbf7240ce009799bb56d5b1409051e78fde"
 
 [[package]]
 name = "shuttle-admin"
-version = "0.45.0"
+version = "0.46.0"
 dependencies = [
  "anyhow",
  "bytes",
@@ -5296,7 +5296,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-auth"
-version = "0.45.0"
+version = "0.46.0"
 dependencies = [
  "anyhow",
  "async-stripe",
@@ -5334,7 +5334,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-backends"
-version = "0.45.0"
+version = "0.46.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5384,7 +5384,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-codegen"
-version = "0.45.0"
+version = "0.46.0"
 dependencies = [
  "pretty_assertions",
  "proc-macro-error",
@@ -5401,7 +5401,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-common"
-version = "0.45.0"
+version = "0.46.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5439,7 +5439,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-common-tests"
-version = "0.45.0"
+version = "0.46.0"
 dependencies = [
  "cargo-shuttle",
  "hyper 0.14.28",
@@ -5457,7 +5457,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-deployer"
-version = "0.45.0"
+version = "0.46.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5503,7 +5503,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-gateway"
-version = "0.45.0"
+version = "0.46.0"
 dependencies = [
  "anyhow",
  "async-posthog",
@@ -5568,7 +5568,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-logger"
-version = "0.45.0"
+version = "0.46.0"
 dependencies = [
  "async-trait",
  "chrono",
@@ -5594,7 +5594,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-proto"
-version = "0.45.0"
+version = "0.46.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5614,7 +5614,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-provisioner"
-version = "0.45.0"
+version = "0.46.0"
 dependencies = [
  "aws-config",
  "aws-sdk-rds",
@@ -5641,7 +5641,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-resource-recorder"
-version = "0.45.0"
+version = "0.46.0"
 dependencies = [
  "async-trait",
  "chrono",
@@ -5666,7 +5666,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-runtime"
-version = "0.45.0"
+version = "0.46.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5689,7 +5689,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-service"
-version = "0.45.0"
+version = "0.46.0"
 dependencies = [
  "anyhow",
  "async-trait",

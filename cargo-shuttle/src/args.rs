@@ -259,6 +259,10 @@ pub struct LogoutArgs {
 }
 #[derive(Parser, Default)]
 pub struct DeployArgs {
+    /// BETA: Deploy this Docker image instead of building one
+    #[arg(long, short = 'i', hide = true)]
+    pub image: Option<String>, // TODO?: Make this a subcommand instead? `cargo shuttle deploy image ...`
+
     /// Allow deployment with uncommitted files
     #[arg(long, visible_alias = "ad")]
     pub allow_dirty: bool,

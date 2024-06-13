@@ -137,7 +137,7 @@ async fn proxy(
         .typed_insert(XShuttleProject(project_name.to_string()));
 
     // cache project ip lookups to not overload the db during rapid requests
-    let target_ip = if let Some(ip) = { state.project_cache.get(project_name.as_str()) } {
+    let target_ip = if let Some(ip) = state.project_cache.get(project_name.as_str()) {
         ip
     } else {
         let (proj, was_stopped) = state
@@ -214,7 +214,7 @@ async fn bounce(State(state): State<Arc<Bouncer>>, req: Request<Body>) -> Result
     let hostname = host.hostname();
     let fqdn = fqdn!(hostname);
 
-    let path = req.uri();
+    let path = req.uri().path();
 
     if fqdn.is_subdomain_of(&state.public)
         || state

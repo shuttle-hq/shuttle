@@ -24,7 +24,7 @@ args = [
     "--all-features",
     "--no-deps",
     "--",
-    "--D",
+    "-D",
     "warnings",
 ]
 

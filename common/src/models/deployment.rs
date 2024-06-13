@@ -275,7 +275,7 @@ pub fn get_deployments_table(
 
 #[derive(Default, Deserialize, Serialize)]
 pub struct DeploymentRequest {
-    /// Alpha: tar archive.
+    /// Tar archive
     pub data: Vec<u8>,
     pub no_test: bool,
     pub git_commit_id: Option<String>,
@@ -284,17 +284,41 @@ pub struct DeploymentRequest {
     pub git_dirty: Option<bool>,
 }
 
+#[derive(Deserialize, Serialize)]
+#[serde(untagged)]
+pub enum DeploymentRequestBeta {
+    /// Build an image from the source code in an attached zip archive
+    BuildArchive(DeploymentRequestBuildArchiveBeta),
+    // TODO?: Add GitRepo(DeploymentRequestGitRepoBeta)
+    /// Use this image directly. Can be used to skip the build step.
+    Image(DeploymentRequestImageBeta),
+}
+
 #[derive(Default, Deserialize, Serialize)]
-pub struct DeploymentRequestBeta {
-    /// Beta: zip archive.
+pub struct DeploymentRequestBuildArchiveBeta {
+    /// Zip archive
     pub data: Vec<u8>,
     /// The cargo package name to compile and run.
     pub package_name: String,
+    // TODO: Binary name, feature flags?, other cargo args?
     /// Secrets to add before this deployment.
-    /// Might remove this in favour of a separate secrets uploading action.
+    /// TODO: Remove this in favour of a separate secrets uploading action.
     pub secrets: Option<HashMap<String, String>>,
+    pub build_meta: Option<BuildMetaBeta>,
+}
+
+#[derive(Default, Deserialize, Serialize)]
+pub struct BuildMetaBeta {
     pub git_commit_id: Option<String>,
     pub git_commit_msg: Option<String>,
     pub git_branch: Option<String>,
     pub git_dirty: Option<bool>,
+}
+
+#[derive(Default, Deserialize, Serialize)]
+pub struct DeploymentRequestImageBeta {
+    pub image: String,
+    /// TODO: Remove this in favour of a separate secrets uploading action.
+    pub secrets: Option<HashMap<String, String>>,
+    // TODO: credentials fields for private repos??
 }

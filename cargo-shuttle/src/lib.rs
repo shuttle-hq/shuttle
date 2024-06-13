@@ -32,6 +32,9 @@ use ignore::overrides::OverrideBuilder;
 use ignore::WalkBuilder;
 use indicatif::ProgressBar;
 use indoc::{formatdoc, printdoc};
+use shuttle_common::models::deployment::{
+    BuildMetaBeta, DeploymentRequestBuildArchiveBeta, DeploymentRequestImageBeta,
+};
 use shuttle_common::resource::ResourceState;
 use shuttle_common::{
     constants::{
@@ -1755,18 +1758,9 @@ impl Shuttle {
     async fn deploy(&mut self, args: DeployArgs) -> Result<CommandOutcome> {
         let client = self.client.as_ref().unwrap();
         let working_directory = self.ctx.working_directory();
+        let manifest_path = working_directory.join("Cargo.toml");
 
-        let mut deployment_req = DeploymentRequest {
-            no_test: args.no_test,
-            ..Default::default()
-        };
-        let mut deployment_req_beta = DeploymentRequestBeta {
-            ..Default::default()
-        };
-
-        if self.beta {
-            let manifest_path = working_directory.join("Cargo.toml");
-
+        let secrets = if self.beta {
             // Look for a secrets file, first in the command args, and if it isn't there look
             // in the root of the crate or workspace.
             let secrets_file = args.secret_args.secrets.clone().or_else(|| {
@@ -1786,22 +1780,65 @@ impl Shuttle {
 
                     trace!(keys = ?secrets.keys(), "available secrets");
 
-                    deployment_req_beta.secrets = Some(secrets);
+                    Some(secrets)
                 } else {
                     trace!("No secrets were loaded");
+                    None
                 }
             } else {
                 trace!("No secrets file was found");
-            };
+                None
+            }
+        } else {
+            None
+        };
 
+        // Beta: Image deployment mode
+        if self.beta {
+            if let Some(image) = args.image {
+                let deployment_req_image_beta = DeploymentRequestImageBeta { image, secrets };
+
+                let deployment = client
+                    .deploy_beta(
+                        self.ctx.project_name(),
+                        DeploymentRequestBeta::Image(deployment_req_image_beta),
+                    )
+                    .await
+                    .map_err(suggestions::deploy::deploy_request_failure)?;
+
+                deployment.colored_println();
+                return Ok(CommandOutcome::Ok);
+            }
+        }
+
+        // Alpha and beta: Build archive deployment mode
+        let mut deployment_req = DeploymentRequest {
+            no_test: args.no_test,
+            ..Default::default()
+        };
+        let mut deployment_req_buildarch_beta = DeploymentRequestBuildArchiveBeta {
+            secrets,
+            ..Default::default()
+        };
+
+        if self.beta {
             let metadata = async_cargo_metadata(manifest_path.as_path()).await?;
             let packages = find_shuttle_packages(&metadata)?;
-            let package_name = packages
+            // TODO: support overriding this
+            let package = packages
                 .first()
-                .expect("at least one shuttle crate in the workspace")
-                .name
-                .to_owned();
-            deployment_req_beta.package_name = package_name;
+                .expect("at least one shuttle crate in the workspace");
+            let package_name = package.name.to_owned();
+            deployment_req_buildarch_beta.package_name = package_name;
+
+            // TODO: add these to the request and builder
+            let (_no_default_features, _features) = if package.features.contains_key("shuttle") {
+                (true, vec!["shuttle".to_owned()])
+            } else {
+                (false, vec![])
+            };
+            // TODO: determine which (one) binary to build
+            // TODO: have the above be configurable in CLI and Shuttle.toml
         }
 
         if let Ok(repo) = Repository::discover(working_directory) {
@@ -1844,15 +1881,20 @@ impl Shuttle {
             );
         }
 
-        // End this early for beta platform.
+        // End early for beta
         if self.beta {
-            deployment_req_beta.data = deployment_req.data;
-            deployment_req_beta.git_commit_id = deployment_req.git_commit_id;
-            deployment_req_beta.git_commit_msg = deployment_req.git_commit_msg;
-            deployment_req_beta.git_branch = deployment_req.git_branch;
-            deployment_req_beta.git_dirty = deployment_req.git_dirty;
+            deployment_req_buildarch_beta.data = deployment_req.data;
+            deployment_req_buildarch_beta.build_meta = Some(BuildMetaBeta {
+                git_commit_id: deployment_req.git_commit_id,
+                git_commit_msg: deployment_req.git_commit_msg,
+                git_branch: deployment_req.git_branch,
+                git_dirty: deployment_req.git_dirty,
+            });
             let deployment = client
-                .deploy_beta(self.ctx.project_name(), deployment_req_beta)
+                .deploy_beta(
+                    self.ctx.project_name(),
+                    DeploymentRequestBeta::BuildArchive(deployment_req_buildarch_beta),
+                )
                 .await
                 .map_err(suggestions::deploy::deploy_request_failure)?;
 

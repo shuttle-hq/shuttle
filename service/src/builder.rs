@@ -223,7 +223,11 @@ async fn compile(
         cmd.arg("--jobs=4");
     }
 
+    // TODO: Compile only one binary target in the package.
     for package in &packages {
+        if package.features.contains_key("shuttle") {
+            cmd.arg("--no-default-features").arg("--features=shuttle");
+        }
         cmd.arg("--package").arg(package.name.as_str());
     }
 

@@ -64,7 +64,7 @@ pub struct ShuttleResourceOutput<T> {
     pub custom: Value,
 
     /// The state of the resource.
-    pub state: ResourceState,
+    pub state: Option<ResourceState>,
 }
 
 /// Common type to hold all the information we need for a generic resource

@@ -214,7 +214,7 @@ async fn bounce(State(state): State<Arc<Bouncer>>, req: Request<Body>) -> Result
     let hostname = host.hostname();
     let fqdn = fqdn!(hostname);
 
-    let path = req.uri();
+    let path = req.uri().path();
 
     if fqdn.is_subdomain_of(&state.public)
         || state

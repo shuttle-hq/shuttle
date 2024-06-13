@@ -7,10 +7,3 @@ pub struct ResourceRequest {
     /// The resource input returned from the runtime::load call.
     pub resources: Vec<Vec<u8>>,
 }
-
-/// Used to request the provisioning or deletion of a shared DB from the provisioner service.
-#[derive(Deserialize, Serialize)]
-pub struct SharedDbRequest {
-    pub db_name: String,
-    pub role_name: String,
-}

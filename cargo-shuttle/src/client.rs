@@ -226,7 +226,9 @@ impl ShuttleApiClient {
     }
 
     pub async fn delete_project(&self, project: &str) -> Result<String> {
-        let mut builder = self.client.delete(format!("/projects/{project}/delete"));
+        let path = format!("/projects/{project}/delete");
+        let url = format!("{}{}", self.api_url, path);
+        let mut builder = self.client.delete(url);
         builder = self.set_auth_bearer(builder);
         // project delete on alpha can take a while
         builder = builder.timeout(Duration::from_secs(60 * 5));

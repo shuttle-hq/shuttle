@@ -7,10 +7,53 @@ See [conventional commits](https://www.conventionalcommits.org/) for commit guid
 
 **For proper release notes with more details such as upgrading guidelines, check out the [releases page](https://github.com/shuttle-hq/shuttle/releases).**
 
-## [0.45.0](https://github.com/shuttle-hq/shuttle/compare/v0.44.0..0.45.0) - 2024-05-09
+## [0.46.0](https://github.com/shuttle-hq/shuttle/compare/v0.45.0..0.46.0) - 2024-06-13
 
 ### Features
 
+- *(auth)* Add has_access_to_beta column ([#1779](https://github.com/shuttle-hq/shuttle/issues/1779)) - ([47f282b](https://github.com/shuttle-hq/shuttle/commit/47f282bdbbc0f20af2411efea6ff6654901041c9))
+- *(cargo-shuttle)* Beta deploy endpoint ([#1777](https://github.com/shuttle-hq/shuttle/issues/1777)) - ([6ef0312](https://github.com/shuttle-hq/shuttle/commit/6ef0312b152ae8b7372e15e0586eda84464d61c5))
+- *(cargo-shuttle)* Beta compact project and deployment tables ([#1778](https://github.com/shuttle-hq/shuttle/issues/1778)) - ([baeddf8](https://github.com/shuttle-hq/shuttle/commit/baeddf8f451410936bfa7f26297e3a7bae173b75))
+- Use 'shuttle' feature flag if it exists ([#1799](https://github.com/shuttle-hq/shuttle/issues/1799)) - ([d4c9500](https://github.com/shuttle-hq/shuttle/commit/d4c95000b757b89cd5f732c79939e57f9f28163b))
+- Beta deployment response, current deployment & logs ([#1782](https://github.com/shuttle-hq/shuttle/issues/1782)) - ([e5b20d7](https://github.com/shuttle-hq/shuttle/commit/e5b20d7c036751cc7986eb5181b84393af480268))
+- Update beta logs logic ([#1775](https://github.com/shuttle-hq/shuttle/issues/1775)) - ([60e2d26](https://github.com/shuttle-hq/shuttle/commit/60e2d267dcee163ca46f67fe1841558557afaa37))
+- List team projects on beta ([#1772](https://github.com/shuttle-hq/shuttle/issues/1772)) - ([f87b873](https://github.com/shuttle-hq/shuttle/commit/f87b8736969b32f6085836edde03f9f750800eaa))
+
+### Bug Fixes
+
+- *(backends)* Increase permit per page count ([#1781](https://github.com/shuttle-hq/shuttle/issues/1781)) - ([2d9f7d6](https://github.com/shuttle-hq/shuttle/commit/2d9f7d65d31e533e1b1f770ae68ebb2972858fc6))
+- *(cargo-shuttle)* Delete command url ([#1798](https://github.com/shuttle-hq/shuttle/issues/1798)) - ([c64cab0](https://github.com/shuttle-hq/shuttle/commit/c64cab0fe6afd73aef1f1a2185aec1ee77f320b8))
+- *(gateway)* Use req.path in bouncer ([#1797](https://github.com/shuttle-hq/shuttle/issues/1797)) - ([2a7e5ce](https://github.com/shuttle-hq/shuttle/commit/2a7e5ce1aacb0f0de6b47403c6eb5fe887492ef2))
+- Improve delete command reliability ([#1791](https://github.com/shuttle-hq/shuttle/issues/1791)) - ([7832610](https://github.com/shuttle-hq/shuttle/commit/78326105459e9a988be0682eeb0fcdee1c880ef3))
+- Recursive permissionsdal impl ([#1785](https://github.com/shuttle-hq/shuttle/issues/1785)) - ([7d1c9db](https://github.com/shuttle-hq/shuttle/commit/7d1c9db6b59a5b253eaf82f89238b0f7096ad2e5))
+
+### Refactor
+
+- Allow cors from preview environments ([#1773](https://github.com/shuttle-hq/shuttle/issues/1773)) - ([87245c9](https://github.com/shuttle-hq/shuttle/commit/87245c930eb0109d3c0198304f0c6669ab7289cb))
+- Implement permission dal when behind an arc ([#1784](https://github.com/shuttle-hq/shuttle/issues/1784)) - ([5d2311b](https://github.com/shuttle-hq/shuttle/commit/5d2311b90fea7f9b72f4fc5beb7f9e94ea0ac1b3))
+- Better errors ([#1783](https://github.com/shuttle-hq/shuttle/issues/1783)) - ([798f44c](https://github.com/shuttle-hq/shuttle/commit/798f44cf41e1019eb78e889eecedcb1d9915fa37))
+- Record the correct shuttle.user.id for the new platform ([#1780](https://github.com/shuttle-hq/shuttle/issues/1780)) - ([ac6cf7b](https://github.com/shuttle-hq/shuttle/commit/ac6cf7b5b2917731fd5f4ac254c0728c4cba5561))
+- ApiError helpers ([#1776](https://github.com/shuttle-hq/shuttle/issues/1776)) - ([97571c5](https://github.com/shuttle-hq/shuttle/commit/97571c5b535bbbc42f5789fcbe80bb236cfadacf))
+- Use list struct for project lists ([#1774](https://github.com/shuttle-hq/shuttle/issues/1774)) - ([7451353](https://github.com/shuttle-hq/shuttle/commit/745135378292b773ef3e1e942d3b8c6dc9c96ced))
+
+### Miscellaneous Tasks
+
+- 0.46.0 - ([38e9899](https://github.com/shuttle-hq/shuttle/commit/38e98991c4cfc607473cce322400efa71da2264d))
+- Bump Rust to 1.78.0 ([#1788](https://github.com/shuttle-hq/shuttle/issues/1788)) - ([934f0f5](https://github.com/shuttle-hq/shuttle/commit/934f0f5ed03a02e643ae26bde5656e519dc853c6))
+- Don't restart local otel collector ([#1786](https://github.com/shuttle-hq/shuttle/issues/1786)) - ([608ff28](https://github.com/shuttle-hq/shuttle/commit/608ff281d4012af547e3d9696f767b8e48f60350))
+- Windows builds ([#1770](https://github.com/shuttle-hq/shuttle/issues/1770)) - ([01c3763](https://github.com/shuttle-hq/shuttle/commit/01c3763430a690501880984846a38a48454c7d35))
+
+### Miscellaneous
+
+- Bump examples - ([30d22c3](https://github.com/shuttle-hq/shuttle/commit/30d22c36362be99963ee9dd99e40144ceeab5bea))
+- Remove model used for external provisioner reqs ([#1793](https://github.com/shuttle-hq/shuttle/issues/1793)) - ([36fc318](https://github.com/shuttle-hq/shuttle/commit/36fc318fe180d8b1a31b549ecb24161b7f10fbb2))
+
+## [0.45.0](https://github.com/shuttle-hq/shuttle/compare/v0.44.0..v0.45.0) - 2024-05-09
+
+### Features
+
+- *(cargo-shuttle)* Adapt project response for beta ([#1756](https://github.com/shuttle-hq/shuttle/issues/1756)) - ([7fd5723](https://github.com/shuttle-hq/shuttle/commit/7fd57237cc6253e5a3e8273fcbb8ee5c00251708))
+- *(cargo-shuttle)* Nits - ([f1f4b4e](https://github.com/shuttle-hq/shuttle/commit/f1f4b4e4fdee33a147c351c331c06ce824ce9d75))
 - *(runtime)* Version endpoint for runner version check - ([3757bfe](https://github.com/shuttle-hq/shuttle/commit/3757bfe55214ee19e9096661e20e4d369a7073f8))
 
 ### Bug Fixes
@@ -26,7 +69,6 @@ See [conventional commits](https://www.conventionalcommits.org/) for commit guid
 
 ### Refactor
 
-- *(cargo-shuttle)* Adapt project response for beta ([#1756](https://github.com/shuttle-hq/shuttle/issues/1756)) - ([7fd5723](https://github.com/shuttle-hq/shuttle/commit/7fd57237cc6253e5a3e8273fcbb8ee5c00251708))
 - *(cargo-shuttle)* Cleanup of beta branching & behaviour ([#1760](https://github.com/shuttle-hq/shuttle/issues/1760)) - ([43d7f28](https://github.com/shuttle-hq/shuttle/commit/43d7f28440290b8a969232b20a9d6a6584b13a15))
 - Return team details when creating a new team ([#1761](https://github.com/shuttle-hq/shuttle/issues/1761)) - ([399b525](https://github.com/shuttle-hq/shuttle/commit/399b525bb658d4d2b122c3008f65d5cf1e686299))
 - Rename organizations to teams ([#1754](https://github.com/shuttle-hq/shuttle/issues/1754)) - ([61ec530](https://github.com/shuttle-hq/shuttle/commit/61ec5303f2671a787b7b49e62e568f184a1f2767))
@@ -37,12 +79,10 @@ See [conventional commits](https://www.conventionalcommits.org/) for commit guid
 
 ### Miscellaneous Tasks
 
-- 0.45.0 - ([7bee979](https://github.com/shuttle-hq/shuttle/commit/7bee979e2529dee63ce641733ff4b8c86d66e237))
+- V0.45.0 ([#1767](https://github.com/shuttle-hq/shuttle/issues/1767)) - ([f00a098](https://github.com/shuttle-hq/shuttle/commit/f00a0987206857f2e39a47a5a390f4c8f52b5859))
 
 ### Miscellaneous
 
-- *(cargo-shuttle)* Nits - ([f1f4b4e](https://github.com/shuttle-hq/shuttle/commit/f1f4b4e4fdee33a147c351c331c06ce824ce9d75))
-- Bump examples - ([00a1bc4](https://github.com/shuttle-hq/shuttle/commit/00a1bc4ea3183c46b2b45f1b2dc0abf89509065f))
 - Arg for provisioner-uri ([#1763](https://github.com/shuttle-hq/shuttle/issues/1763)) - ([8671518](https://github.com/shuttle-hq/shuttle/commit/8671518d0e7f9183d48bc157f9a75b07f52f5a17))
 - Project delete ([#1762](https://github.com/shuttle-hq/shuttle/issues/1762)) - ([cf701a7](https://github.com/shuttle-hq/shuttle/commit/cf701a7d0d597d1a7d127281f758c0272e3944ca))
 - Merge pull request #1753 from shuttle-hq/feat/shuttle-ecs-common - ([3322112](https://github.com/shuttle-hq/shuttle/commit/332211226c346f86abe41e3da66770b778cc7a59))
@@ -55,10 +95,18 @@ See [conventional commits](https://www.conventionalcommits.org/) for commit guid
 ### Features
 
 - *(admin)* Change project owner ([#1725](https://github.com/shuttle-hq/shuttle/issues/1725)) - ([d26e6c8](https://github.com/shuttle-hq/shuttle/commit/d26e6c838ef478b513401e0c9fae77cfb2677840))
+- *(c-s beta)* Enable resource delete ([#1745](https://github.com/shuttle-hq/shuttle/issues/1745)) - ([fe9f49c](https://github.com/shuttle-hq/shuttle/commit/fe9f49c2c755f8d4eb32f7c07201f2b99a257271))
+- *(cargo-shuttle)* Beta deploy zip file, package name ([#1742](https://github.com/shuttle-hq/shuttle/issues/1742)) - ([81ecaae](https://github.com/shuttle-hq/shuttle/commit/81ecaaea3007c798c9ac1a307a4de4192f79d4c1))
+- *(cargo-shuttle)* Beta flag, remove project list pagination logic ([#1732](https://github.com/shuttle-hq/shuttle/issues/1732)) - ([72839f0](https://github.com/shuttle-hq/shuttle/commit/72839f07bf5b92063decae2393016c792852a6a0))
+- *(cargo-shuttle beta)* Enable resource list ([#1744](https://github.com/shuttle-hq/shuttle/issues/1744)) - ([82876bd](https://github.com/shuttle-hq/shuttle/commit/82876bdf469c0b0d1430e28a9d01c9a51a1cdd08))
+- *(common)* Add building EcsState ([#1752](https://github.com/shuttle-hq/shuttle/issues/1752)) - ([90bd111](https://github.com/shuttle-hq/shuttle/commit/90bd1118d41c2d37c10a96dc52b47eb56071fa4e))
 - *(gateway)* Compare permission checks to permit ([#1706](https://github.com/shuttle-hq/shuttle/issues/1706)) - ([9130d5b](https://github.com/shuttle-hq/shuttle/commit/9130d5bab0f3a70c3fcc58c2cf8324102bcbd9a7))
 - *(shuttle-turso)* Change turso resource output type to database  ([#1747](https://github.com/shuttle-hq/shuttle/issues/1747)) - ([86ca0c0](https://github.com/shuttle-hq/shuttle/commit/86ca0c0bab05d58a20b8b887571bdc6e4080e289))
 - Add `--head` and `--tail` to logs command ([#1629](https://github.com/shuttle-hq/shuttle/issues/1629)) - ([b5116c7](https://github.com/shuttle-hq/shuttle/commit/b5116c73661d0aab1192429fae3aab9d59dcb74f))
 - Get project owners and only personal projects ([#1733](https://github.com/shuttle-hq/shuttle/issues/1733)) - ([13b334f](https://github.com/shuttle-hq/shuttle/commit/13b334f2a00b8224be9fee5d27b1c6f1161e443a))
+- Support secrets on beta platform ([#1748](https://github.com/shuttle-hq/shuttle/issues/1748)) - ([b84ea8f](https://github.com/shuttle-hq/shuttle/commit/b84ea8fc64c237ce204e5868ab22af1a9d119b6f))
+- Add services client constructor for default headers ([#1737](https://github.com/shuttle-hq/shuttle/issues/1737)) - ([ae3c5b0](https://github.com/shuttle-hq/shuttle/commit/ae3c5b03927d06976efacb3f228cb077563a9bfb))
+- Add models and header for new ecs provisioner ([#1730](https://github.com/shuttle-hq/shuttle/issues/1730)) - ([d09d803](https://github.com/shuttle-hq/shuttle/commit/d09d8036c7374d009d77f0bfb3ad19f706c1d081))
 - Org members ([#1728](https://github.com/shuttle-hq/shuttle/issues/1728)) - ([37d5f6f](https://github.com/shuttle-hq/shuttle/commit/37d5f6f6a7bffd9ab9870fad3cfb6c6d174d0ba1))
 - Bump poem version ([#1724](https://github.com/shuttle-hq/shuttle/issues/1724)) - ([639b5ae](https://github.com/shuttle-hq/shuttle/commit/639b5ae78e5704cdd5e5ba9feba31d9be8e368ca))
 - Orgs ([#1720](https://github.com/shuttle-hq/shuttle/issues/1720)) - ([4c80f01](https://github.com/shuttle-hq/shuttle/commit/4c80f011fabf83c93f2bcbb1d68f92c5846e334f))
@@ -66,8 +114,10 @@ See [conventional commits](https://www.conventionalcommits.org/) for commit guid
 
 ### Bug Fixes
 
+- *(cargo-shuttle)* Deploy http method - ([cd7b71c](https://github.com/shuttle-hq/shuttle/commit/cd7b71c1c672078c7865da2be42471cc33ff06e5))
 - *(runtime)* Re-export Environment ([#1736](https://github.com/shuttle-hq/shuttle/issues/1736)) - ([7c42c05](https://github.com/shuttle-hq/shuttle/commit/7c42c05c42a756f7920398e03045939b9442abed))
 - Rustls and gix cargo audit failures ([#1749](https://github.com/shuttle-hq/shuttle/issues/1749)) - ([5157708](https://github.com/shuttle-hq/shuttle/commit/51577089cbedac1bc662b066a077c9b8a59dba43))
+- Runtime panic ([#1735](https://github.com/shuttle-hq/shuttle/issues/1735)) - ([2286c04](https://github.com/shuttle-hq/shuttle/commit/2286c0406669f170e69c73c665428b12b5ff2558))
 - Various fixes and corrections ([#1729](https://github.com/shuttle-hq/shuttle/issues/1729)) - ([1922b0e](https://github.com/shuttle-hq/shuttle/commit/1922b0ee2bb77a78504d746e91cafa493c1a55f0))
 
 ### Refactor
@@ -78,8 +128,7 @@ See [conventional commits](https://www.conventionalcommits.org/) for commit guid
 
 ### Miscellaneous Tasks
 
-- Bump examples - ([b0487f8](https://github.com/shuttle-hq/shuttle/commit/b0487f88869693cef791d276ae871ccdfae28b15))
-- Bump crates to v0.44.0 - ([c26999f](https://github.com/shuttle-hq/shuttle/commit/c26999f701e391ca5e85402ee8aed42741cd65bd))
+- V0.44.0 ([#1750](https://github.com/shuttle-hq/shuttle/issues/1750)) - ([8a1b1ce](https://github.com/shuttle-hq/shuttle/commit/8a1b1cee7f060cdf9fa4bac86415770e2d15ee96))
 - Bump h2 to patch continuation flood vulnerability ([#1719](https://github.com/shuttle-hq/shuttle/issues/1719)) - ([4eda51f](https://github.com/shuttle-hq/shuttle/commit/4eda51f66c43f06e344fd345e3361b95afe7b464))
 - Clean up dev deps ([#1712](https://github.com/shuttle-hq/shuttle/issues/1712)) - ([7c48569](https://github.com/shuttle-hq/shuttle/commit/7c48569b671a270485d00bf93a0535845e645645))
 - Set package.repository for all crates ([#1716](https://github.com/shuttle-hq/shuttle/issues/1716)) - ([0525f33](https://github.com/shuttle-hq/shuttle/commit/0525f33129f11122e502ec5b39e5ff81e24d3566))
@@ -87,6 +136,11 @@ See [conventional commits](https://www.conventionalcommits.org/) for commit guid
 ### Miscellaneous
 
 - Revert severity level on allowed project names ([#1739](https://github.com/shuttle-hq/shuttle/issues/1739)) - ([f8f9817](https://github.com/shuttle-hq/shuttle/commit/f8f9817dcca72063b77c24b393bf97af1456db3d))
+- Added beta deployment list ([#1741](https://github.com/shuttle-hq/shuttle/issues/1741)) - ([a44d095](https://github.com/shuttle-hq/shuttle/commit/a44d095a42c7967c14cf321c3293694692807948))
+- Add log streaming in beta platform ([#1743](https://github.com/shuttle-hq/shuttle/issues/1743)) - ([8767db4](https://github.com/shuttle-hq/shuttle/commit/8767db4b526f26d4dd80c152f07a58923a1ddf32))
+- Added beta deployment status  ([#1740](https://github.com/shuttle-hq/shuttle/issues/1740)) - ([6231811](https://github.com/shuttle-hq/shuttle/commit/6231811da58babffe2644b13d45138e4710f499d))
+- Update deploy cmd for beta platform  ([#1734](https://github.com/shuttle-hq/shuttle/issues/1734)) - ([d3f6c6b](https://github.com/shuttle-hq/shuttle/commit/d3f6c6b9d4818cc39aff1afe33a4e7af504a0193))
+- Merge branch 'main' into feat/shuttle-ecs-common - ([f732be0](https://github.com/shuttle-hq/shuttle/commit/f732be0451a0e44d9d1f54a8a65e78a4d031f701))
 - Nix shell ([#1726](https://github.com/shuttle-hq/shuttle/issues/1726)) - ([178e77c](https://github.com/shuttle-hq/shuttle/commit/178e77cede54ec58b9e50a37e16e68d2f2a185ff))
 
 ## [0.43.0](https://github.com/shuttle-hq/shuttle/compare/v0.42.0..v0.43.0) - 2024-04-02
@@ -96,6 +150,8 @@ See [conventional commits](https://www.conventionalcommits.org/) for commit guid
 - *(cargo-shuttle)* --debug ([#1689](https://github.com/shuttle-hq/shuttle/issues/1689)) - ([38510fb](https://github.com/shuttle-hq/shuttle/commit/38510fb16f4857806efeec6e753d8b2284e60c3a))
 - *(cargo-shuttle)* Remove retry client, add version header ([#1691](https://github.com/shuttle-hq/shuttle/issues/1691)) - ([0aac5d7](https://github.com/shuttle-hq/shuttle/commit/0aac5d7e6531ca1f0725f1fff7d18862486014c5))
 - Gateway command to sync permit ([#1705](https://github.com/shuttle-hq/shuttle/issues/1705)) - ([8a38a12](https://github.com/shuttle-hq/shuttle/commit/8a38a126e95a6c08f7b782a3503f30351e7d2a84))
+- Add resource request struct to backends ([#1718](https://github.com/shuttle-hq/shuttle/issues/1718)) - ([45e5d4e](https://github.com/shuttle-hq/shuttle/commit/45e5d4ed29915d6ae43fd37a895794f5d32b37cd))
+- Merge runtime updates in main ecs branch ([#1709](https://github.com/shuttle-hq/shuttle/issues/1709)) - ([e40002b](https://github.com/shuttle-hq/shuttle/commit/e40002bb9466ddbcd1cc240b7ec3a2c3aa7cc0c0))
 - Generated Permit client, project permission logic ([#1699](https://github.com/shuttle-hq/shuttle/issues/1699)) - ([e33329b](https://github.com/shuttle-hq/shuttle/commit/e33329bd8c0cc09866d9399f8fc07e8e63e36031))
 - Auth sync users with permit ([#1703](https://github.com/shuttle-hq/shuttle/issues/1703)) - ([e4e8e01](https://github.com/shuttle-hq/shuttle/commit/e4e8e01c7137e62f810a1750765b8bcd0d69e527))
 - Permit pdp in docker stack ([#1697](https://github.com/shuttle-hq/shuttle/issues/1697)) - ([1b7a8a1](https://github.com/shuttle-hq/shuttle/commit/1b7a8a12adfee02ae78526c7a0991854ff2baa68))
@@ -120,6 +176,12 @@ See [conventional commits](https://www.conventionalcommits.org/) for commit guid
 - Filter jobs based on if PR is from fork ([#1700](https://github.com/shuttle-hq/shuttle/issues/1700)) - ([998485d](https://github.com/shuttle-hq/shuttle/commit/998485de0e616083fc3e222407ab7fe0bc51921a))
 - Remove secrets, metadata crates ([#1688](https://github.com/shuttle-hq/shuttle/issues/1688)) - ([4ab5f08](https://github.com/shuttle-hq/shuttle/commit/4ab5f083d8bd98d1136974cbd7e89558b6bf4752))
 - Remove e2e crate, update development docs ([#1684](https://github.com/shuttle-hq/shuttle/issues/1684)) - ([5a5c08e](https://github.com/shuttle-hq/shuttle/commit/5a5c08e8ca44d2ab3629b805aec714fcd9f04426))
+
+### Miscellaneous
+
+- Merge remote-tracking branch 'upstream/main' into feat/shuttle-ecs-common - ([01b69a2](https://github.com/shuttle-hq/shuttle/commit/01b69a2c1017bc0eeb79199aeb5212ca40600e90))
+- Reinstate http otel exporter - ([222b613](https://github.com/shuttle-hq/shuttle/commit/222b61394e840d5671741af45cd702cfe49dbf22))
+- Add control backend type - ([f60106c](https://github.com/shuttle-hq/shuttle/commit/f60106cfbc1b85815e5ddb883e848764fa65f920))
 
 ## [0.42.0](https://github.com/shuttle-hq/shuttle/compare/v0.41.0..v0.42.0) - 2024-03-18
 
@@ -475,7 +537,6 @@ See [conventional commits](https://www.conventionalcommits.org/) for commit guid
 - *(logger)* Rate limit based on peer address ([#1351](https://github.com/shuttle-hq/shuttle/issues/1351)) - ([4a99d4a](https://github.com/shuttle-hq/shuttle/commit/4a99d4a9351e7e557759a9300c2178f47c68d746))
 - *(shuttle-serenity)* Support serenity 0.11 and 0.12, optional native tls ([#1416](https://github.com/shuttle-hq/shuttle/issues/1416)) - ([52c06a7](https://github.com/shuttle-hq/shuttle/commit/52c06a7ab9c17398ec8ff5328c99779736e3f819))
 - Limit rds access to pro users ([#1398](https://github.com/shuttle-hq/shuttle/issues/1398)) - ([30b6465](https://github.com/shuttle-hq/shuttle/commit/30b6465be9ff55f54a2b0d9f4b33e81d3401a60c))
-- feat(cargo-shuttle): ability to force a name to be used in init ([#1410](https://github.com/shuttle-hq/shuttle/issues/1410)) - ([8e6deae](https://github.com/shuttle-hq/shuttle/commit/8e6deaea60ffc2cba3d4ba136ef095c5fb351e58))
 - Remove panamax registry override from deployers ([#1399](https://github.com/shuttle-hq/shuttle/issues/1399)) - ([4798777](https://github.com/shuttle-hq/shuttle/commit/4798777273ae29435a3a8cb05dfe08dfeabf45ac))
 
 ### Bug Fixes
@@ -508,6 +569,7 @@ See [conventional commits](https://www.conventionalcommits.org/) for commit guid
 
 - *(auth)* Added service healthcheck ([#1394](https://github.com/shuttle-hq/shuttle/issues/1394)) - ([44dfa9b](https://github.com/shuttle-hq/shuttle/commit/44dfa9b08048897a9de5f025b672bbda3eee6479))
 - Delete a project even if the current state is destroyed ([#1413](https://github.com/shuttle-hq/shuttle/issues/1413)) - ([f37a0e8](https://github.com/shuttle-hq/shuttle/commit/f37a0e87c06938f0109e718c78085cb4c9267173))
+- feat(cargo-shuttle): ability to force a name to be used in init ([#1410](https://github.com/shuttle-hq/shuttle/issues/1410)) - ([8e6deae](https://github.com/shuttle-hq/shuttle/commit/8e6deaea60ffc2cba3d4ba136ef095c5fb351e58))
 - Rocket-0.5.0 stable ([#1401](https://github.com/shuttle-hq/shuttle/issues/1401)) - ([c88f0bc](https://github.com/shuttle-hq/shuttle/commit/c88f0bc9cc7ebcc56e2ecbaea30142e8d6e8ee35))
 
 ## [0.33.0](https://github.com/shuttle-hq/shuttle/compare/v0.32.0..v0.33.0) - 2023-11-16

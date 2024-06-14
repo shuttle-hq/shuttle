@@ -3,10 +3,16 @@
 This document demonstrates how to run the code in this repo, and general tips for developing it.
 See [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines about commit style, issues, PRs, and more.
 
-## Project Layout
+---
 
 > 🚨 NOTE 🚨: Big rewrites of Shuttle's infra and backends are ongoing.
-> Many details in this document will become outdated soon.
+> Many parts of this document will be outdated soon.
+
+---
+
+> 🚨 NOTE 🚨: Local development and testing is somewhat limited without a Permit.io API key.
+
+## Project Layout
 
 ### Binaries
 

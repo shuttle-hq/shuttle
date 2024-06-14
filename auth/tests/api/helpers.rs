@@ -37,6 +37,7 @@ pub(crate) struct TestApp {
 /// Initialize a router with an in-memory sqlite database for each test.
 pub(crate) async fn app() -> TestApp {
     let pg_pool = pgpool_init(PG.get_unique_uri().as_str()).await.unwrap();
+    sqlx::migrate!("./migrations").run(&pg_pool).await.unwrap();
 
     let mock_server = MockServer::start().await;
 

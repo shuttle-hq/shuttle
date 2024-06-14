@@ -536,6 +536,7 @@ async fn provision(
                 *bytes = serde_json::to_vec(&ShuttleResourceOutput {
                     output,
                     custom: shuttle_resource.custom,
+                    state: None
                 })
                 .expect("to serialize struct");
             }
@@ -549,6 +550,7 @@ async fn provision(
                 *bytes = serde_json::to_vec(&ShuttleResourceOutput {
                     output: new_secrets.clone(),
                     custom: shuttle_resource.custom,
+                    state: None
                 })
                 .expect("to serialize struct");
             }

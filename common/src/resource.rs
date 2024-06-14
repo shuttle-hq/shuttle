@@ -40,6 +40,19 @@ pub enum ResourceInput {
     Custom(Value),
 }
 
+/// The resource state represents the stage of the provisioning process the resource is in.
+#[derive(
+    Debug, Clone, PartialEq, Eq, strum::Display, strum::EnumString, Serialize, Deserialize,
+)]
+#[strum(serialize_all = "lowercase")]
+pub enum ResourceState {
+    Authorizing,
+    Provisioning,
+    Failed,
+    Ready,
+    Deleting,
+}
+
 /// Returned when provisioning a Shuttle resource
 #[derive(Serialize, Deserialize)]
 pub struct ShuttleResourceOutput<T> {
@@ -49,6 +62,9 @@ pub struct ShuttleResourceOutput<T> {
 
     /// Arbitrary extra data in this resource
     pub custom: Value,
+
+    /// The state of the resource.
+    pub state: Option<ResourceState>,
 }
 
 /// Common type to hold all the information we need for a generic resource
@@ -136,11 +152,12 @@ mod _sqlx {
     use std::{borrow::Cow, str::FromStr};
 
     use sqlx::{
+        postgres::{PgArgumentBuffer, PgValueRef},
         sqlite::{SqliteArgumentValue, SqliteValueRef},
-        Database, Sqlite,
+        Database, Postgres, Sqlite,
     };
 
-    use super::Type;
+    use super::{ResourceState, Type};
 
     impl<DB: Database> sqlx::Type<DB> for Type
     where
@@ -164,6 +181,30 @@ mod _sqlx {
             let value = <&str as sqlx::Decode<Sqlite>>::decode(value)?;
 
             Self::from_str(value).map_err(Into::into)
+        }
+    }
+
+    impl<DB: sqlx::Database> sqlx::Type<DB> for ResourceState
+    where
+        str: sqlx::Type<DB>,
+    {
+        fn type_info() -> <DB as sqlx::Database>::TypeInfo {
+            <str as sqlx::Type<DB>>::type_info()
+        }
+    }
+
+    impl<'q> sqlx::Encode<'q, sqlx::Postgres> for ResourceState {
+        fn encode_by_ref(&self, buf: &mut PgArgumentBuffer) -> sqlx::encode::IsNull {
+            <&str as sqlx::Encode<Postgres>>::encode(&self.to_string(), buf)
+        }
+    }
+
+    impl<'r> sqlx::Decode<'r, Postgres> for ResourceState {
+        fn decode(value: PgValueRef<'r>) -> Result<Self, sqlx::error::BoxDynError> {
+            let value = <&str as sqlx::Decode<Postgres>>::decode(value)?;
+
+            let state = ResourceState::from_str(value)?;
+            Ok(state)
         }
     }
 }

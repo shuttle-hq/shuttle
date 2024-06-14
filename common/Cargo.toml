@@ -67,7 +67,7 @@ extract_propagation = [
 ]
 models = ["async-trait", "reqwest", "service"]
 persist = ["sqlx", "rand"]
-sqlx = ["dep:sqlx", "sqlx/sqlite"]
+sqlx = ["dep:sqlx", "sqlx/sqlite", "sqlx/postgres"]
 service = ["chrono/serde", "display", "tracing", "tracing-subscriber", "uuid"]
 test-utils = ["wiremock"]
 tonic = ["dep:tonic"]

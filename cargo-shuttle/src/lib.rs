@@ -1372,6 +1372,7 @@ impl Shuttle {
                     *bytes = serde_json::to_vec(&ShuttleResourceOutput {
                         output: res,
                         custom: shuttle_resource.custom,
+                        state: None
                     })
                     .unwrap();
                 }
@@ -1385,6 +1386,7 @@ impl Shuttle {
                     *bytes = serde_json::to_vec(&ShuttleResourceOutput {
                         output: secrets.clone(),
                         custom: shuttle_resource.custom,
+                        state: None
                     })
                     .unwrap();
                 }
@@ -1403,6 +1405,7 @@ impl Shuttle {
                     *bytes = serde_json::to_vec(&ShuttleResourceOutput {
                         output: res,
                         custom: shuttle_resource.custom,
+                        state: None
                     })
                     .unwrap();
                 }

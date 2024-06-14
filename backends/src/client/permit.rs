@@ -413,13 +413,26 @@ impl PermissionsDal for Client {
     }
 
     async fn delete_project(&self, project_id: &str) -> Result<()> {
-        Ok(delete_resource_instance(
+        if let Err(e) = delete_resource_instance(
             &self.api,
             &self.proj_id,
             &self.env_id,
             format!("Project:{project_id}").as_str(),
         )
-        .await?)
+        .await
+        {
+            // Return all errors except 404's (project already deleted)
+            let e: Error = e.into();
+            if let Error::ResponseError(ref re) = e {
+                if re.status != StatusCode::NOT_FOUND {
+                    return Err(e);
+                }
+            } else {
+                return Err(e);
+            }
+        }
+
+        Ok(())
     }
 
     async fn get_personal_projects(&self, user_id: &str) -> Result<Vec<String>> {

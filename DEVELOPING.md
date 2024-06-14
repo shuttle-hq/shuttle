@@ -3,45 +3,16 @@
 This document demonstrates how to run the code in this repo, and general tips for developing it.
 See [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines about commit style, issues, PRs, and more.
 
+---
+
+> 🚨 NOTE 🚨: Big rewrites of Shuttle's infra and backends are ongoing.
+> Many parts of this document will be outdated soon.
+
+---
+
+> 🚨 NOTE 🚨: Local development and testing is somewhat limited without a Permit.io API key.
+
 ## Project Layout
-
-> 🚨 NOTE 🚨: Big rewrites during our Beta stage has made some details below outdated.
-> We intend to properly update the diagram(s) and descriptions when the new architecture stabilizes.
-
-The folders in this repository relate to each other as follow:
-
-```mermaid
-graph BT
-    classDef default fill:#1f1f1f,stroke-width:0,color:white;
-    classDef binary fill:#f25100,font-weight:bolder,stroke-width:0,color:white;
-    classDef external fill:#343434,font-style:italic,stroke:#f25100,color:white;
-
-    deployer:::binary
-    cargo-shuttle:::binary
-    common
-    codegen
-    proto
-    provisioner:::binary
-    service
-    gateway:::binary
-    auth:::binary
-    user([user service]):::external
-    gateway --> common
-    gateway -.->|starts instances| deployer
-    gateway -->|key| auth
-    auth -->|jwt| gateway
-    deployer --> proto
-    deployer -.->|calls| provisioner
-    service ---> common
-    deployer --> common
-    cargo-shuttle --->|"features = ['builder']"| service
-    deployer -->|"features = ['builder']"| service
-    cargo-shuttle --> common
-    service --> codegen
-    proto ---> common
-    provisioner --> proto
-    user -->|"features = ['codegen']"| service
-```
 
 ### Binaries
 

@@ -12,15 +12,13 @@ use shuttle_backends::client::{
     PermissionsDal,
 };
 use shuttle_common::{claims::AccountTier, ApiKey};
-use sqlx::{migrate::Migrator, query, PgPool};
+use sqlx::{query, PgPool};
 use tracing::info;
 pub use user::User;
 
 use crate::api::serve;
 pub use api::ApiBuilder;
 pub use args::{Args, Commands, InitArgs};
-
-pub static MIGRATIONS: Migrator = sqlx::migrate!("./migrations");
 
 pub async fn start(pool: PgPool, args: StartArgs) {
     let router = api::ApiBuilder::new()
@@ -135,7 +133,6 @@ pub async fn init(pool: PgPool, args: InitArgs, tier: AccountTier) -> Result<()>
 pub async fn pgpool_init(db_uri: &str) -> Result<PgPool> {
     let opts = db_uri.parse()?;
     let pool = PgPool::connect_with(opts).await?;
-    MIGRATIONS.run(&pool).await?;
 
     Ok(pool)
 }

@@ -81,7 +81,7 @@ impl AsRef<str> for ApiKey {
 ////// Resource Input/Output types
 
 /// The input given to Shuttle DB resources
-#[derive(Deserialize, Serialize, Default)]
+#[derive(Clone, Deserialize, Serialize, Default)]
 pub struct DbInput {
     pub local_uri: Option<String>,
     /// Override the default db name. Only applies to RDS.
@@ -158,6 +158,75 @@ impl DatabaseInfo {
                 self.role_password.redacted()
             },
             self.hostname_public,
+            self.port,
+            self.database_name,
+        )
+    }
+
+    pub fn role_name(&self) -> String {
+        self.role_name.to_string()
+    }
+
+    pub fn database_name(&self) -> String {
+        self.database_name.to_string()
+    }
+}
+
+/// The output produced by Shuttle DB resources
+#[derive(Deserialize, Serialize)]
+#[serde(untagged)]
+pub enum DatabaseResourceBeta {
+    ConnectionString(String),
+    Info(DatabaseInfoBeta),
+}
+
+/// Holds the data for building a database connection string on the Beta platform.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DatabaseInfoBeta {
+    engine: String,
+    role_name: String,
+    role_password: Secret<String>,
+    database_name: String,
+    port: String,
+    hostname: String,
+    // The RDS instance name. For shared PG it's the name of the multi-tenant RDS instance, for the
+    // rds resource it's the name of each individual RDS instance.
+    instance_name: String,
+}
+
+impl DatabaseInfoBeta {
+    pub fn new(
+        engine: String,
+        role_name: String,
+        role_password: String,
+        database_name: String,
+        port: String,
+        hostname: String,
+        instance_name: String,
+    ) -> Self {
+        Self {
+            engine,
+            role_name,
+            role_password: Secret::new(role_password),
+            database_name,
+            port,
+            hostname,
+            instance_name,
+        }
+    }
+
+    /// For connecting to the database.
+    pub fn connection_string(&self, show_password: bool) -> String {
+        format!(
+            "{}://{}:{}@{}:{}/{}",
+            self.engine,
+            self.role_name,
+            if show_password {
+                self.role_password.expose()
+            } else {
+                self.role_password.redacted()
+            },
+            self.hostname,
             self.port,
             self.database_name,
         )

@@ -108,7 +108,7 @@ mod _diesel_async {
         }
     }
 
-    #[cfg(feature = "mysql")]
+    #[cfg(any(feature = "mysql", feature = "mariadb"))]
     #[async_trait]
     impl IntoResource<diesel_async::AsyncMysqlConnection> for OutputWrapper {
         async fn into_resource(self) -> Result<diesel_async::AsyncMysqlConnection, Error> {
@@ -143,7 +143,7 @@ mod _diesel_async_bb8 {
         }
     }
 
-    #[cfg(feature = "mysql")]
+    #[cfg(any(feature = "mysql", feature = "mariadb"))]
     #[async_trait]
     impl IntoResource<diesel_bb8::Pool<diesel_async::AsyncMysqlConnection>> for OutputWrapper {
         async fn into_resource(
@@ -184,7 +184,7 @@ mod _diesel_async_deadpool {
         }
     }
 
-    #[cfg(feature = "mysql")]
+    #[cfg(any(feature = "mysql", feature = "mariadb"))]
     #[async_trait]
     impl IntoResource<diesel_deadpool::Pool<diesel_async::AsyncMysqlConnection>> for OutputWrapper {
         async fn into_resource(

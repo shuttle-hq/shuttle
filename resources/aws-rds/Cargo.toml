@@ -22,7 +22,7 @@ default = []
 # Database
 postgres = ["sqlx?/postgres", "diesel-async?/postgres"]
 mysql = ["sqlx?/mysql", "diesel-async?/mysql"]
-mariadb = ["sqlx?/mysql"]
+mariadb = ["sqlx?/mysql", "diesel-async?/mysql"]
 
 # Databases with diesel-async support
 diesel-async = ["dep:diesel-async"]

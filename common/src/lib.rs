@@ -239,6 +239,10 @@ impl DatabaseInfoBeta {
     pub fn database_name(&self) -> String {
         self.database_name.to_string()
     }
+
+    pub fn instance_name(&self) -> String {
+        self.instance_name.to_string()
+    }
 }
 
 /// Used to request a container from the local run provisioner

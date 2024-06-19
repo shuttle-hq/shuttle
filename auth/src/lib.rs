@@ -130,9 +130,12 @@ pub async fn init(pool: PgPool, args: InitArgs, tier: AccountTier) -> Result<()>
 }
 
 /// Initialize the connection pool to a Postgres database at the given URI.
-pub async fn pgpool_init(db_uri: &str) -> Result<PgPool> {
+pub async fn pgpool_init(db_uri: &str, migrate: bool) -> Result<PgPool> {
     let opts = db_uri.parse()?;
     let pool = PgPool::connect_with(opts).await?;
+    if migrate {
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+    }
 
     Ok(pool)
 }

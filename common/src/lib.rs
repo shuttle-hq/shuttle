@@ -189,9 +189,9 @@ pub struct DatabaseInfoBeta {
     database_name: String,
     port: String,
     hostname: String,
-    // The RDS instance name. For shared PG it's the name of the multi-tenant RDS instance, for the
-    // rds resource it's the name of each individual RDS instance.
-    instance_name: String,
+    /// The RDS instance name, which is required for deleting provisioned RDS instances, it's
+    /// optional because it isn't needed for shared PG deletion.
+    instance_name: Option<String>,
 }
 
 impl DatabaseInfoBeta {
@@ -202,7 +202,7 @@ impl DatabaseInfoBeta {
         database_name: String,
         port: String,
         hostname: String,
-        instance_name: String,
+        instance_name: Option<String>,
     ) -> Self {
         Self {
             engine,
@@ -240,8 +240,8 @@ impl DatabaseInfoBeta {
         self.database_name.to_string()
     }
 
-    pub fn instance_name(&self) -> String {
-        self.instance_name.to_string()
+    pub fn instance_name(&self) -> Option<String> {
+        self.instance_name.clone()
     }
 }
 

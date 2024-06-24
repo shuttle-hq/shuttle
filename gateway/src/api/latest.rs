@@ -147,8 +147,13 @@ async fn get_projects_list(
     State(RouterState { service, .. }): State<RouterState>,
     Claim { sub, .. }: Claim,
 ) -> Result<AxumJson<Vec<project::Response>>, ApiError> {
-    let mut projects = vec![];
-    for proj_id in service.permit_client.get_personal_projects(&sub).await? {
+    let project_ids = service.permit_client.get_personal_projects(&sub).await?;
+    let mut projects = Vec::with_capacity(project_ids.len());
+    for proj_id in project_ids {
+        // Ignore projects on the beta platform
+        if proj_id.starts_with("proj_") {
+            continue;
+        }
         let project = service.find_project_by_id(&proj_id).await?;
         let idle_minutes = project.state.idle_minutes();
         let owner = service
@@ -555,20 +560,22 @@ async fn get_team_projects(
         .permit_client
         .get_team_projects(&sub, &team_id)
         .await?;
-
     let mut projects = Vec::with_capacity(project_ids.len());
-
-    for project_id in project_ids {
-        let project = service.find_project_by_id(&project_id).await?;
+    for proj_id in project_ids {
+        // Ignore projects on the beta platform
+        if proj_id.starts_with("proj_") {
+            continue;
+        }
+        let project = service.find_project_by_id(&proj_id).await?;
         let idle_minutes = project.state.idle_minutes();
         let owner = service
             .permit_client
-            .get_project_owner(&sub, &project_id)
+            .get_project_owner(&sub, &proj_id)
             .await?
             .into();
         let is_admin = service
             .permit_client
-            .allowed(&sub, &project_id, "manage")
+            .allowed(&sub, &proj_id, "manage")
             .await?;
 
         projects.push(project::Response {

@@ -336,8 +336,10 @@ impl Default for BuildArgsBeta {
 }
 
 impl BuildArgsBeta {
-    pub fn into_vars(&self) -> [(&str, &str); 4] {
+    pub fn into_vars(&self) -> [(&str, &str); 6] {
         [
+            ("CARGO_CHEF", if self.cargo_chef { "true" } else { "" }),
+            ("CARGO_BUILD", if self.cargo_build { "true" } else { "" }),
             ("PACKAGE", self.package_name.as_deref().unwrap_or_default()),
             ("BIN", self.binary_name.as_deref().unwrap_or_default()),
             ("FEATURES", self.features.as_deref().unwrap_or_default()),

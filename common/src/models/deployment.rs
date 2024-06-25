@@ -298,13 +298,35 @@ pub enum DeploymentRequestBeta {
 pub struct DeploymentRequestBuildArchiveBeta {
     /// Zip archive
     pub data: Vec<u8>,
-    /// The cargo package name to compile and run.
-    pub package_name: String,
-    // TODO: Binary name, feature flags?, other cargo args?
+    pub build_args: Option<BuildArgsBeta>,
     /// Secrets to add before this deployment.
     /// TODO: Remove this in favour of a separate secrets uploading action.
     pub secrets: Option<HashMap<String, String>>,
     pub build_meta: Option<BuildMetaBeta>,
+}
+
+#[derive(Default, Deserialize, Serialize)]
+pub struct BuildArgsBeta {
+    /// The cargo package name to compile and run.
+    pub package_name: Option<String>,
+    pub binary_name: Option<String>,
+    pub features: Option<String>,
+    pub no_default_features: bool,
+    // TODO: more?
+}
+
+impl BuildArgsBeta {
+    pub fn into_vars(&self) -> [(&str, &str); 4] {
+        [
+            ("PACKAGE", self.package_name.as_deref().unwrap_or_default()),
+            ("BIN", self.binary_name.as_deref().unwrap_or_default()),
+            ("FEATURES", self.features.as_deref().unwrap_or_default()),
+            (
+                "NO_DEFAULT_FEATURES",
+                if self.no_default_features { "true" } else { "" },
+            ),
+        ]
+    }
 }
 
 #[derive(Default, Deserialize, Serialize)]

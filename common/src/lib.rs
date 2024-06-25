@@ -94,6 +94,7 @@ pub struct DbInput {
 pub enum DatabaseResource {
     ConnectionString(String),
     Info(DatabaseInfo),
+    Beta(DatabaseInfoBeta),
 }
 
 /// Holds the data for building a database connection string.
@@ -170,14 +171,6 @@ impl DatabaseInfo {
     pub fn database_name(&self) -> String {
         self.database_name.to_string()
     }
-}
-
-/// The output produced by Shuttle DB resources
-#[derive(Deserialize, Serialize)]
-#[serde(untagged)]
-pub enum DatabaseResourceBeta {
-    ConnectionString(String),
-    Info(DatabaseInfoBeta),
 }
 
 /// Holds the data for building a database connection string on the Beta platform.

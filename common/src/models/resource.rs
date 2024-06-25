@@ -124,6 +124,7 @@ fn get_databases_table(
                     info.connection_string_public(show_secrets)
                 }
             }
+            DatabaseResource::Beta(info) => info.connection_string(show_secrets),
         };
         table.add_row(vec![database.r#type.to_string(), conn_string]);
     }

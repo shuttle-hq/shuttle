@@ -305,14 +305,34 @@ pub struct DeploymentRequestBuildArchiveBeta {
     pub build_meta: Option<BuildMetaBeta>,
 }
 
-#[derive(Default, Deserialize, Serialize)]
+#[derive(Deserialize, Serialize)]
 pub struct BuildArgsBeta {
-    /// The cargo package name to compile and run.
+    /// Use the built in cargo chef setup for caching
+    pub cargo_chef: bool,
+    /// Build with the built in `cargo build` setup
+    pub cargo_build: bool,
+    /// The cargo package name to compile
     pub package_name: Option<String>,
+    /// The cargo binary name to compile
     pub binary_name: Option<String>,
+    /// comma-separated list of features to activate
     pub features: Option<String>,
+    /// Passed on to `cargo build`
     pub no_default_features: bool,
     // TODO: more?
+}
+
+impl Default for BuildArgsBeta {
+    fn default() -> Self {
+        Self {
+            cargo_chef: true,
+            cargo_build: true,
+            package_name: Default::default(),
+            binary_name: Default::default(),
+            features: Default::default(),
+            no_default_features: Default::default(),
+        }
+    }
 }
 
 impl BuildArgsBeta {

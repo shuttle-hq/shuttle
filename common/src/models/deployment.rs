@@ -319,7 +319,8 @@ pub struct BuildArgsBeta {
     pub features: Option<String>,
     /// Passed on to `cargo build`
     pub no_default_features: bool,
-    // TODO: more?
+    /// Use the mold linker
+    pub mold: bool,
 }
 
 impl Default for BuildArgsBeta {
@@ -331,12 +332,13 @@ impl Default for BuildArgsBeta {
             binary_name: Default::default(),
             features: Default::default(),
             no_default_features: Default::default(),
+            mold: Default::default(),
         }
     }
 }
 
 impl BuildArgsBeta {
-    pub fn into_vars(&self) -> [(&str, &str); 6] {
+    pub fn into_vars(&self) -> [(&str, &str); 7] {
         [
             ("CARGO_CHEF", if self.cargo_chef { "true" } else { "" }),
             ("CARGO_BUILD", if self.cargo_build { "true" } else { "" }),
@@ -347,6 +349,7 @@ impl BuildArgsBeta {
                 "NO_DEFAULT_FEATURES",
                 if self.no_default_features { "true" } else { "" },
             ),
+            ("MOLD", if self.mold { "true" } else { "" }),
         ]
     }
 }

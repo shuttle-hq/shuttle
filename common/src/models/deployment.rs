@@ -285,7 +285,7 @@ pub struct DeploymentRequest {
 }
 
 #[derive(Deserialize, Serialize)]
-#[serde(untagged)]
+#[serde(tag = "type", content = "content")]
 pub enum DeploymentRequestBeta {
     /// Build an image from the source code in an attached zip archive
     BuildArchive(DeploymentRequestBuildArchiveBeta),

@@ -125,7 +125,7 @@ Finally, before gateway will be able to work with some projects, we need to crea
 The following command inserts a gateway user into the `auth` state with deployer privileges:
 
 ```bash
-docker compose -f docker-compose.rendered.yml -p shuttle-dev exec auth /usr/local/bin/shuttle-auth --db-connection-uri=postgres://postgres:postgres@control-db init-deployer --name gateway --key gateway4deployes
+docker compose -f docker-compose.rendered.yml -p shuttle-dev exec auth /usr/local/bin/shuttle-auth --db-connection-uri=postgres://postgres:postgres@control-db init-deployer --user-id gateway --key gateway4deployes
 ```
 
 ### Deploying locally

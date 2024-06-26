@@ -17,7 +17,8 @@ async fn main() {
         return;
     }
 
-    let pool = pgpool_init(args.db_connection_uri.as_str())
+    // do the migrations in local development
+    let pool = pgpool_init(args.db_connection_uri.as_str(), cfg!(debug_assertions))
         .await
         .expect("couldn't setup the postgres connection");
 

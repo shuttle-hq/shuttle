@@ -273,6 +273,12 @@ pub fn get_deployments_table(
     }
 }
 
+#[derive(Deserialize, Serialize)]
+pub struct UploadArchiveResponseBeta {
+    /// The S3 object version ID of the uploaded object
+    pub archive_version_id: String,
+}
+
 #[derive(Default, Deserialize, Serialize)]
 pub struct DeploymentRequest {
     /// Tar archive

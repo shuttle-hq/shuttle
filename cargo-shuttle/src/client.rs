@@ -9,7 +9,9 @@ use reqwest::{RequestBuilder, Response};
 use serde::{Deserialize, Serialize};
 use shuttle_common::constants::headers::X_CARGO_SHUTTLE_VERSION;
 use shuttle_common::log::{LogsRange, LogsResponseBeta};
-use shuttle_common::models::deployment::{DeploymentRequest, DeploymentRequestBeta};
+use shuttle_common::models::deployment::{
+    DeploymentRequest, DeploymentRequestBeta, UploadArchiveResponseBeta,
+};
 use shuttle_common::models::team;
 use shuttle_common::models::{deployment, project, service, ToJson};
 use shuttle_common::{resource, ApiKey, LogItem, VersionInfo};
@@ -111,18 +113,29 @@ impl ShuttleApiClient {
         deployment_req: DeploymentRequestBeta,
     ) -> Result<deployment::ResponseBeta> {
         let path = format!("/projects/{project}/deployments");
-        let deployment_req = rmp_serde::to_vec(&deployment_req)
-            .context("serialize DeploymentRequest as a MessagePack byte vector")?;
+        self.post(path, Some(deployment_req))
+            .await
+            .context("failed to start deployment")?
+            .to_json()
+            .await
+    }
+
+    pub async fn upload_archive_beta(
+        &self,
+        project: &str,
+        data: Vec<u8>,
+    ) -> Result<UploadArchiveResponseBeta> {
+        let path = format!("/projects/{project}/deployments/archive");
 
         let url = format!("{}{}", self.api_url, path);
         let mut builder = self.client.post(url);
         builder = self.set_auth_bearer(builder);
 
         builder
-            .body(deployment_req)
+            .body(data)
             .send()
             .await
-            .context("failed to send deployment to the Shuttle server")?
+            .context("failed to upload archive")?
             .to_json()
             .await
     }

@@ -1832,13 +1832,14 @@ impl Shuttle {
             let package_name = package.name.to_owned();
             build_args.package_name = Some(package_name);
 
+            // activate shuttle feature is present
             let (no_default_features, features) = if package.features.contains_key("shuttle") {
-                (true, vec!["shuttle".to_owned()])
+                (true, Some(vec!["shuttle".to_owned()]))
             } else {
-                (false, vec![])
+                (false, None)
             };
             build_args.no_default_features = no_default_features;
-            build_args.features = Some(features.join(","));
+            build_args.features = features.map(|v| v.join(","));
 
             // TODO: determine which (one) binary to build
 

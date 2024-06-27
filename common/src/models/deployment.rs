@@ -296,8 +296,8 @@ pub enum DeploymentRequestBeta {
 
 #[derive(Default, Deserialize, Serialize)]
 pub struct DeploymentRequestBuildArchiveBeta {
-    /// Zip archive
-    pub data: Vec<u8>,
+    /// The S3 object version ID of the archive to use
+    pub archive_version_id: String,
     pub build_args: Option<BuildArgsBeta>,
     /// Secrets to add before this deployment.
     /// TODO: Remove this in favour of a separate secrets uploading action.

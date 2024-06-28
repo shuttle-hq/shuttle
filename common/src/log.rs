@@ -29,6 +29,7 @@ pub enum Backend {
     Provisioner,
     ResourceRecorder,
     Control,
+    Proxy,
     Runtime(String),
 }
 

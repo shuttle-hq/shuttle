@@ -27,7 +27,7 @@ dunce = { workspace = true }
 flate2 = { workspace = true }
 futures = { workspace = true }
 git2 = { version = "0.18.1", default-features = false }
-gix = { version = "0.62.0", default-features = false, features = [
+gix = { version = "0.63.0", default-features = false, features = [
   "blocking-http-transport-reqwest-rust-tls",
   "worktree-mutation",
 ] }

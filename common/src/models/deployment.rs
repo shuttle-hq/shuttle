@@ -285,7 +285,7 @@ pub struct DeploymentRequest {
 }
 
 #[derive(Deserialize, Serialize)]
-#[serde(untagged)]
+#[serde(tag = "type", content = "content")]
 pub enum DeploymentRequestBeta {
     /// Build an image from the source code in an attached zip archive
     BuildArchive(DeploymentRequestBuildArchiveBeta),
@@ -298,13 +298,60 @@ pub enum DeploymentRequestBeta {
 pub struct DeploymentRequestBuildArchiveBeta {
     /// Zip archive
     pub data: Vec<u8>,
-    /// The cargo package name to compile and run.
-    pub package_name: String,
-    // TODO: Binary name, feature flags?, other cargo args?
+    pub build_args: Option<BuildArgsBeta>,
     /// Secrets to add before this deployment.
     /// TODO: Remove this in favour of a separate secrets uploading action.
     pub secrets: Option<HashMap<String, String>>,
     pub build_meta: Option<BuildMetaBeta>,
+}
+
+#[derive(Deserialize, Serialize)]
+pub struct BuildArgsBeta {
+    /// Use the built in cargo chef setup for caching
+    pub cargo_chef: bool,
+    /// Build with the built in `cargo build` setup
+    pub cargo_build: bool,
+    /// The cargo package name to compile
+    pub package_name: Option<String>,
+    /// The cargo binary name to compile
+    pub binary_name: Option<String>,
+    /// comma-separated list of features to activate
+    pub features: Option<String>,
+    /// Passed on to `cargo build`
+    pub no_default_features: bool,
+    /// Use the mold linker
+    pub mold: bool,
+}
+
+impl Default for BuildArgsBeta {
+    fn default() -> Self {
+        Self {
+            cargo_chef: true,
+            cargo_build: true,
+            package_name: Default::default(),
+            binary_name: Default::default(),
+            features: Default::default(),
+            no_default_features: Default::default(),
+            mold: Default::default(),
+        }
+    }
+}
+
+impl BuildArgsBeta {
+    pub fn into_vars(&self) -> [(&str, &str); 7] {
+        [
+            ("CARGO_CHEF", if self.cargo_chef { "true" } else { "" }),
+            ("CARGO_BUILD", if self.cargo_build { "true" } else { "" }),
+            ("PACKAGE", self.package_name.as_deref().unwrap_or_default()),
+            ("BIN", self.binary_name.as_deref().unwrap_or_default()),
+            ("FEATURES", self.features.as_deref().unwrap_or_default()),
+            (
+                "NO_DEFAULT_FEATURES",
+                if self.no_default_features { "true" } else { "" },
+            ),
+            ("MOLD", if self.mold { "true" } else { "" }),
+        ]
+    }
 }
 
 #[derive(Default, Deserialize, Serialize)]

@@ -57,13 +57,9 @@ pub struct LogItem {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct LogItemBeta {
-    /// Time log was captured
     pub timestamp: DateTime<Utc>,
-
-    /// Stdout/stderr
+    /// Which container / log stream this line came from
     pub source: String,
-
-    /// The log line
     pub line: String,
 }
 

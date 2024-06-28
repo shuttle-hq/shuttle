@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use comfy_table::{
     modifiers::UTF8_ROUND_CORNERS,
-    presets::{NOTHING, UTF8_FULL},
+    presets::{NOTHING, UTF8_BORDERS_ONLY, UTF8_FULL},
     Attribute, Cell, CellAlignment, ContentArrangement, Table,
 };
 use crossterm::style::Stylize;
@@ -165,17 +165,9 @@ fn get_databases_table_beta(
             ]);
     } else {
         table
-            .load_preset(UTF8_FULL)
-            .apply_modifier(UTF8_ROUND_CORNERS)
-            .set_content_arrangement(ContentArrangement::DynamicFullWidth)
-            .set_header(vec![
-                Cell::new("Type")
-                    .set_alignment(CellAlignment::Center)
-                    .add_attribute(Attribute::Bold),
-                Cell::new("Connection string")
-                    .add_attribute(Attribute::Bold)
-                    .set_alignment(CellAlignment::Center),
-            ]);
+            .load_preset(UTF8_BORDERS_ONLY)
+            .set_content_arrangement(ContentArrangement::Disabled)
+            .set_header(vec![Cell::new("Type"), Cell::new("Connection string")]);
     }
 
     for database in databases {

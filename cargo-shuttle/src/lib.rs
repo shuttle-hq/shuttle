@@ -1055,7 +1055,14 @@ impl Shuttle {
             client.get_service_resources(self.ctx.project_name()).await
         }
         .map_err(suggestions::resources::get_service_resources_failure)?;
-        let table = get_resource_tables(&resources, self.ctx.project_name(), raw, show_secrets);
+
+        let table = get_resource_tables(
+            &resources,
+            self.ctx.project_name(),
+            raw,
+            show_secrets,
+            self.beta,
+        );
 
         println!("{table}");
 
@@ -1261,7 +1268,15 @@ impl Shuttle {
 
         println!(
             "{}",
-            get_resource_tables(&mocked_responses, service_name.as_str(), false, false)
+            get_resource_tables(
+                &mocked_responses,
+                service_name.as_str(),
+                false,
+                false,
+                // Set beta to false to avoid breaking local run with beta changes.
+                // TODO: make local run compatible with --beta.
+                false
+            )
         );
 
         //
@@ -2110,7 +2125,8 @@ impl Shuttle {
         let resources = client
             .get_service_resources(self.ctx.project_name())
             .await?;
-        let resources = get_resource_tables(&resources, self.ctx.project_name(), false, false);
+        let resources =
+            get_resource_tables(&resources, self.ctx.project_name(), false, false, self.beta);
 
         println!("{resources}{service}");
 

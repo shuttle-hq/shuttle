@@ -51,6 +51,7 @@ pub enum ResourceState {
     Failed,
     Ready,
     Deleting,
+    Deleted,
 }
 
 /// Returned when provisioning a Shuttle resource

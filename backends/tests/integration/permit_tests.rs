@@ -79,8 +79,8 @@ mod needs_docker {
     impl AsyncTestContext for Wrap {
         async fn setup() -> Self {
             let api_url = "https://api.eu-central-1.permit.io";
-            let api_key = std::env::var("PERMIT_API_KEY")
-                .expect("PERMIT_API_KEY to be set. You can copy the testing API key from the Testing environment on Permit.io.");
+            let api_key = std::env::var("PERMIT_TEST_API_KEY")
+                .expect("PERMIT_TEST_API_KEY to be set. You can copy the testing API key from the Testing environment on Permit.io.");
 
             PDP.get_or_init(|| {
                 println!("Starting PDP container...");
@@ -91,7 +91,7 @@ mod needs_docker {
                 api_url.to_owned(),
                 PDP.get().unwrap().uri.clone(),
                 "default".to_owned(),
-                std::env::var("PERMIT_ENV").unwrap_or_else(|_| "testing".to_owned()),
+                "testing".to_owned(),
                 api_key,
             );
 

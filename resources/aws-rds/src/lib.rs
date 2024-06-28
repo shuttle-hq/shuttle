@@ -71,7 +71,6 @@ impl IntoResource<String> for OutputWrapper {
         Ok(match self.0.output {
             DatabaseResource::ConnectionString(s) => s.clone(),
             DatabaseResource::Info(info) => info.connection_string_shuttle(),
-            DatabaseResource::Beta(info) => info.connection_string(true),
         })
     }
 }

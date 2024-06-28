@@ -94,7 +94,6 @@ pub struct DbInput {
 pub enum DatabaseResource {
     ConnectionString(String),
     Info(DatabaseInfo),
-    Beta(DatabaseInfoBeta),
 }
 
 /// Holds the data for building a database connection string.

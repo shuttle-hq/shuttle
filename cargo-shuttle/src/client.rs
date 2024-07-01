@@ -12,8 +12,7 @@ use shuttle_common::log::{LogsRange, LogsResponseBeta};
 use shuttle_common::models::deployment::{
     DeploymentRequest, DeploymentRequestBeta, UploadArchiveResponseBeta,
 };
-use shuttle_common::models::team;
-use shuttle_common::models::{deployment, project, service, ToJson};
+use shuttle_common::models::{deployment, project, service, team, user, ToJson};
 use shuttle_common::{resource, ApiKey, LogItem, VersionInfo};
 use tokio::net::TcpStream;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
@@ -82,6 +81,23 @@ impl ShuttleApiClient {
             .to_json()
             .await
             .context("parsing name check response")
+    }
+
+    pub async fn check_project_name_beta(&self, project_name: &str) -> Result<bool> {
+        let url = format!("{}/projects/{project_name}/name", self.api_url);
+
+        self.client
+            .get(url)
+            .send()
+            .await
+            .context("failed to check project name availability")?
+            .to_json()
+            .await
+            .context("parsing name check response")
+    }
+
+    pub async fn get_current_user(&self) -> Result<user::Response> {
+        self.get("/users/me".to_owned()).await
     }
 
     pub async fn deploy(

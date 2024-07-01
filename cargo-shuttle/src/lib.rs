@@ -179,6 +179,7 @@ impl Shuttle {
                 | Command::Deploy(..)
                 | Command::Status
                 | Command::Logs { .. }
+                | Command::Login(..)
                 | Command::Logout(..)
                 | Command::Deployment(..)
                 | Command::Resource(..)
@@ -189,7 +190,6 @@ impl Shuttle {
             let client = ShuttleApiClient::new(self.ctx.api_url(), self.ctx.api_key().ok());
             self.client = Some(client);
             if !args.offline && !self.beta {
-                // TODO: re-implement version checking in control to use the c-s version http header
                 self.check_api_versions().await?;
             }
         }
@@ -326,24 +326,16 @@ impl Shuttle {
         let git_template = args.git_template()?;
         let no_git = args.no_git;
 
-        let unauthorized = self.ctx.api_key().is_err() && args.login_args.api_key.is_none();
-
         let needs_name = project_args.name.is_none();
         let needs_template = git_template.is_none();
         let needs_path = !provided_path_to_init;
-        let needs_login = unauthorized;
+        let needs_login = self.ctx.api_key().is_err() && args.login_args.api_key.is_none();
         let interactive = needs_name || needs_template || needs_path || needs_login;
 
         let theme = ColorfulTheme::default();
 
         // 1. Log in (if not logged in yet)
-        if let Ok(api_key) = self.ctx.api_key() {
-            let login_args = LoginArgs {
-                api_key: Some(api_key.as_ref().to_string()),
-            };
-            // TODO: this re-applies an already loaded API key
-            self.login(login_args).await?;
-        } else if needs_login {
+        if needs_login {
             println!("First, let's log in to your Shuttle account.");
             self.login(args.login_args.clone()).await?;
             println!();
@@ -354,7 +346,7 @@ impl Shuttle {
         }
 
         // 2. Ask for project name or validate the given one
-        if needs_name {
+        if needs_name && !self.beta {
             printdoc! {"
                 What do you want to name your project?
                 It will be hosted at ${{project_name}}.shuttleapp.rs, so choose something unique!
@@ -647,13 +639,24 @@ impl Shuttle {
     /// true -> success/neutral. false -> try again.
     async fn check_project_name(&self, project_args: &mut ProjectArgs, name: String) -> bool {
         let client = self.client.as_ref().unwrap();
-        match client.check_project_name(&name).await {
+        match if self.beta {
+            client.check_project_name_beta(&name).await
+        } else {
+            client.check_project_name(&name).await
+        } {
             Ok(true) => {
+                // inner value is inverted on beta
+                if self.beta {
+                    project_args.name = Some(name);
+                    return true;
+                }
+
                 println!("{} {}", "Project name already taken:".red(), name);
                 println!("{}", "Try a different name.".yellow());
 
                 false
             }
+            // not possible on beta
             Ok(false) => {
                 project_args.name = Some(name);
 
@@ -717,6 +720,15 @@ impl Shuttle {
 
         if let Some(client) = self.client.as_mut() {
             client.set_api_key(api_key);
+
+            if self.beta {
+                client
+                    .get_current_user()
+                    .await
+                    .context("failed to check API key validity")?;
+
+                println!("Logged in successfully!\n")
+            }
         }
 
         Ok(CommandOutcome::Ok)

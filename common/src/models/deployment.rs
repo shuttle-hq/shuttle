@@ -343,23 +343,6 @@ impl Default for BuildArgsBeta {
     }
 }
 
-impl BuildArgsBeta {
-    pub fn into_vars(&self) -> [(&str, &str); 7] {
-        [
-            ("CARGO_CHEF", if self.cargo_chef { "true" } else { "" }),
-            ("CARGO_BUILD", if self.cargo_build { "true" } else { "" }),
-            ("PACKAGE", self.package_name.as_deref().unwrap_or_default()),
-            ("BIN", self.binary_name.as_deref().unwrap_or_default()),
-            ("FEATURES", self.features.as_deref().unwrap_or_default()),
-            (
-                "NO_DEFAULT_FEATURES",
-                if self.no_default_features { "true" } else { "" },
-            ),
-            ("MOLD", if self.mold { "true" } else { "" }),
-        ]
-    }
-}
-
 #[derive(Default, Deserialize, Serialize)]
 pub struct BuildMetaBeta {
     pub git_commit_id: Option<String>,

@@ -1847,7 +1847,7 @@ impl Shuttle {
             let package_name = package.name.to_owned();
             build_args.package_name = Some(package_name);
 
-            // activate shuttle feature is present
+            // activate shuttle feature if present
             let (no_default_features, features) = if package.features.contains_key("shuttle") {
                 (true, Some(vec!["shuttle".to_owned()]))
             } else {

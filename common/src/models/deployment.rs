@@ -273,6 +273,12 @@ pub fn get_deployments_table(
     }
 }
 
+#[derive(Deserialize, Serialize)]
+pub struct UploadArchiveResponseBeta {
+    /// The S3 object version ID of the uploaded object
+    pub archive_version_id: String,
+}
+
 #[derive(Default, Deserialize, Serialize)]
 pub struct DeploymentRequest {
     /// Tar archive
@@ -296,8 +302,8 @@ pub enum DeploymentRequestBeta {
 
 #[derive(Default, Deserialize, Serialize)]
 pub struct DeploymentRequestBuildArchiveBeta {
-    /// Zip archive
-    pub data: Vec<u8>,
+    /// The S3 object version ID of the archive to use
+    pub archive_version_id: String,
     pub build_args: Option<BuildArgsBeta>,
     /// Secrets to add before this deployment.
     /// TODO: Remove this in favour of a separate secrets uploading action.
@@ -334,23 +340,6 @@ impl Default for BuildArgsBeta {
             no_default_features: Default::default(),
             mold: Default::default(),
         }
-    }
-}
-
-impl BuildArgsBeta {
-    pub fn into_vars(&self) -> [(&str, &str); 7] {
-        [
-            ("CARGO_CHEF", if self.cargo_chef { "true" } else { "" }),
-            ("CARGO_BUILD", if self.cargo_build { "true" } else { "" }),
-            ("PACKAGE", self.package_name.as_deref().unwrap_or_default()),
-            ("BIN", self.binary_name.as_deref().unwrap_or_default()),
-            ("FEATURES", self.features.as_deref().unwrap_or_default()),
-            (
-                "NO_DEFAULT_FEATURES",
-                if self.no_default_features { "true" } else { "" },
-            ),
-            ("MOLD", if self.mold { "true" } else { "" }),
-        ]
     }
 }
 

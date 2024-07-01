@@ -40,12 +40,10 @@ impl ToJson for reqwest::Response {
             trace!("parsing response to common error");
             let res: error::ApiError = match serde_json::from_slice(&full) {
                 Ok(res) => res,
-                _ => {
-                    error::ApiError {
-                        message: "Did not understand the response from the server. Please log a ticket for this".to_string(),
-                        status_code: status_code.as_u16(),
-                    }
-                }
+                _ => error::ApiError {
+                    message: "Failed to parse response from the server.".to_string(),
+                    status_code: status_code.as_u16(),
+                },
             };
 
             Err(res.into())

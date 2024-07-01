@@ -714,6 +714,7 @@ impl Shuttle {
             }
         };
 
+        // TODO(beta): don't validate the key in c-s
         let api_key = ApiKey::parse(&api_key_str)?;
 
         self.ctx.set_api_key(api_key.clone())?;

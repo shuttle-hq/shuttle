@@ -312,7 +312,14 @@ pub struct DeploymentRequestBuildArchiveBeta {
 }
 
 #[derive(Deserialize, Serialize)]
-pub struct BuildArgsBeta {
+#[serde(tag = "type", content = "content")]
+pub enum BuildArgsBeta {
+    Rust(BuildArgsRustBeta),
+    Python(BuildArgsPythonBeta),
+}
+
+#[derive(Deserialize, Serialize)]
+pub struct BuildArgsRustBeta {
     /// Use the built in cargo chef setup for caching
     pub cargo_chef: bool,
     /// Build with the built in `cargo build` setup
@@ -329,7 +336,7 @@ pub struct BuildArgsBeta {
     pub mold: bool,
 }
 
-impl Default for BuildArgsBeta {
+impl Default for BuildArgsRustBeta {
     fn default() -> Self {
         Self {
             cargo_chef: true,
@@ -342,6 +349,9 @@ impl Default for BuildArgsBeta {
         }
     }
 }
+
+#[derive(Deserialize, Serialize)]
+pub struct BuildArgsPythonBeta;
 
 #[derive(Default, Deserialize, Serialize)]
 pub struct BuildMetaBeta {

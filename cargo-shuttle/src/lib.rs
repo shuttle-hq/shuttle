@@ -1919,7 +1919,7 @@ impl Shuttle {
             let deployment = client
                 .deploy_beta(
                     self.ctx.project_name(),
-                    DeploymentRequestBeta::BuildArchive(deployment_req_buildarch_beta),
+                    DeploymentRequestBeta::BuildRustArchive(deployment_req_buildarch_beta),
                 )
                 .await
                 .map_err(suggestions::deploy::deploy_request_failure)?;

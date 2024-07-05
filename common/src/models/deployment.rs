@@ -311,11 +311,13 @@ pub struct DeploymentRequestBuildArchiveBeta {
     pub build_meta: Option<BuildMetaBeta>,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, Default)]
 #[serde(tag = "type", content = "content")]
 pub enum BuildArgsBeta {
     Rust(BuildArgsRustBeta),
     Python(BuildArgsPythonBeta),
+    #[default]
+    Unknown,
 }
 
 #[derive(Deserialize, Serialize)]

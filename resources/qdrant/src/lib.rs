@@ -70,7 +70,7 @@ impl ResourceInputBuilder for Qdrant {
                     serde_json::to_value(ContainerRequest {
                         project_name: md.project_name,
                         container_name: "qdrant".to_string(),
-                        image: "docker.io/qdrant/qdrant:v1.7.4".to_string(),
+                        image: "docker.io/qdrant/qdrant:v1.10.0".to_string(),
                         port: "6334/tcp".to_string(),
                         env: vec![],
                     })

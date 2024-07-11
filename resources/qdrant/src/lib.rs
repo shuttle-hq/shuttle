@@ -1,5 +1,4 @@
 use async_trait::async_trait;
-use qdrant_client::prelude::*;
 use serde::{Deserialize, Serialize};
 use shuttle_service::{
     error::{CustomError, Error},
@@ -98,8 +97,8 @@ pub struct QdrantClientConfigWrap {
 }
 
 #[async_trait]
-impl IntoResource<QdrantClient> for OutputWrapper {
-    async fn into_resource(self) -> Result<QdrantClient, Error> {
+impl IntoResource<qdrant_client::Qdrant> for OutputWrapper {
+    async fn into_resource(self) -> Result<qdrant_client::Qdrant, Error> {
         let config = match self {
             Self::Container(output) => QdrantClientConfigWrap {
                 url: format!("http://localhost:{}", output.output.host_port),
@@ -107,8 +106,9 @@ impl IntoResource<QdrantClient> for OutputWrapper {
             },
             Self::Config(c) => c,
         };
-        Ok(QdrantClientConfig::from_url(&config.url)
-            .with_api_key(config.api_key)
-            .build()?)
+        Ok(qdrant_client::config::QdrantConfig::from_url(&config.url)
+            .api_key(config.api_key)
+            .build()
+            .map_err(|err| Error::Custom(err.into()))?)
     }
 }

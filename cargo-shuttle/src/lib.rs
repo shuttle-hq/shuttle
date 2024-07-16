@@ -1837,7 +1837,6 @@ impl Shuttle {
         };
 
         if self.beta {
-            // TODO: this assumes Rust
             let mut rust_build_args = BuildArgsRustBeta::default();
 
             let metadata = async_cargo_metadata(manifest_path.as_path()).await?;

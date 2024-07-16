@@ -315,7 +315,6 @@ pub struct DeploymentRequestBuildArchiveBeta {
 #[serde(tag = "type", content = "content")]
 pub enum BuildArgsBeta {
     Rust(BuildArgsRustBeta),
-    Python(BuildArgsPythonBeta),
     #[default]
     Unknown,
 }
@@ -351,9 +350,6 @@ impl Default for BuildArgsRustBeta {
         }
     }
 }
-
-#[derive(Deserialize, Serialize)]
-pub struct BuildArgsPythonBeta;
 
 #[derive(Default, Deserialize, Serialize)]
 pub struct BuildMetaBeta {

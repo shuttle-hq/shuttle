@@ -208,7 +208,7 @@ impl Shuttle {
             Command::Generate(GenerateCommand::Shell { shell, output }) => {
                 self.complete(shell, output)
             }
-            Command::Login(login_args) => self.login(login_args).await,
+            Command::Login(login_args) => self.login(login_args, args.offline).await,
             Command::Logout(logout_args) => self.logout(logout_args).await,
             Command::Feedback => self.feedback(),
             Command::Run(run_args) => self.local_run(run_args).await,
@@ -337,10 +337,10 @@ impl Shuttle {
         // 1. Log in (if not logged in yet)
         if needs_login {
             println!("First, let's log in to your Shuttle account.");
-            self.login(args.login_args.clone()).await?;
+            self.login(args.login_args.clone(), offline).await?;
             println!();
         } else if args.login_args.api_key.is_some() {
-            self.login(args.login_args.clone()).await?;
+            self.login(args.login_args.clone(), offline).await?;
         } else if args.create_env {
             bail!("Tried to login to create a Shuttle environment, but no API key was set.")
         }
@@ -700,12 +700,16 @@ impl Shuttle {
     }
 
     /// Log in with the given API key or after prompting the user for one.
-    async fn login(&mut self, login_args: LoginArgs) -> Result<CommandOutcome> {
+    async fn login(&mut self, login_args: LoginArgs, offline: bool) -> Result<CommandOutcome> {
         let api_key_str = match login_args.api_key {
             Some(api_key) => api_key,
             None => {
-                let _ = webbrowser::open(SHUTTLE_LOGIN_URL);
-                println!("If your browser did not automatically open, go to {SHUTTLE_LOGIN_URL}");
+                if !offline {
+                    let _ = webbrowser::open(SHUTTLE_LOGIN_URL);
+                    println!(
+                        "If your browser did not automatically open, go to {SHUTTLE_LOGIN_URL}"
+                    );
+                }
 
                 Password::with_theme(&ColorfulTheme::default())
                     .with_prompt("API key")
@@ -723,12 +727,15 @@ impl Shuttle {
             client.set_api_key(api_key);
 
             if self.beta {
-                client
-                    .get_current_user()
-                    .await
-                    .context("failed to check API key validity")?;
-
-                println!("Logged in successfully!\n")
+                if offline {
+                    eprintln!("INFO: Skipping API key verification");
+                } else {
+                    let u = client
+                        .get_current_user()
+                        .await
+                        .context("failed to check API key validity")?;
+                    println!("Logged in as {} ({})", u.name.bold(), u.id.bold());
+                }
             }
         }
 
@@ -744,7 +751,7 @@ impl Shuttle {
             println!(" -> Go to {SHUTTLE_LOGIN_URL} to get a new one.\n");
         }
         self.ctx.clear_api_key()?;
-        println!("Successfully logged out of shuttle.");
+        println!("Successfully logged out.");
 
         Ok(CommandOutcome::Ok)
     }

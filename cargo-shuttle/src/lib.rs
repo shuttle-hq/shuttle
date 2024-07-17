@@ -881,7 +881,11 @@ impl Shuttle {
             client.get_deployment_logs_beta(proj_name, &id).await?.logs
         };
         for log in logs {
-            println!("{}", log);
+            if args.raw {
+                println!("{}", log.line);
+            } else {
+                println!("{log}");
+            }
         }
 
         Ok(CommandOutcome::Ok)

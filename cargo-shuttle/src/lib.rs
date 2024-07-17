@@ -33,7 +33,8 @@ use ignore::WalkBuilder;
 use indicatif::ProgressBar;
 use indoc::{formatdoc, printdoc};
 use shuttle_common::models::deployment::{
-    BuildArgsBeta, BuildMetaBeta, DeploymentRequestBuildArchiveBeta, DeploymentRequestImageBeta,
+    BuildArgsBeta, BuildArgsRustBeta, BuildMetaBeta, DeploymentRequestBuildArchiveBeta,
+    DeploymentRequestImageBeta,
 };
 use shuttle_common::{
     constants::{
@@ -1849,7 +1850,7 @@ impl Shuttle {
         };
 
         if self.beta {
-            let mut build_args = BuildArgsBeta::default();
+            let mut rust_build_args = BuildArgsRustBeta::default();
 
             let metadata = async_cargo_metadata(manifest_path.as_path()).await?;
             let packages = find_shuttle_packages(&metadata)?;
@@ -1858,7 +1859,7 @@ impl Shuttle {
                 .first()
                 .expect("at least one shuttle crate in the workspace");
             let package_name = package.name.to_owned();
-            build_args.package_name = Some(package_name);
+            rust_build_args.package_name = Some(package_name);
 
             // activate shuttle feature if present
             let (no_default_features, features) = if package.features.contains_key("shuttle") {
@@ -1866,12 +1867,12 @@ impl Shuttle {
             } else {
                 (false, None)
             };
-            build_args.no_default_features = no_default_features;
-            build_args.features = features.map(|v| v.join(","));
+            rust_build_args.no_default_features = no_default_features;
+            rust_build_args.features = features.map(|v| v.join(","));
 
             // TODO: determine which (one) binary to build
 
-            deployment_req_buildarch_beta.build_args = Some(build_args);
+            deployment_req_buildarch_beta.build_args = Some(BuildArgsBeta::Rust(rust_build_args));
 
             // TODO: have all of the above be configurable in CLI and Shuttle.toml
         }

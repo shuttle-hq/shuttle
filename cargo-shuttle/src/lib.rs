@@ -234,28 +234,28 @@ impl Shuttle {
                 resource_type,
                 confirmation: ConfirmationArgs { yes },
             }) => self.resource_delete(&resource_type, yes).await,
-            Command::Project(ProjectCommand::Start(ProjectStartArgs { idle_minutes })) => {
-                if self.beta {
-                    self.project_start_beta().await
-                } else {
-                    self.project_start(idle_minutes).await
+            Command::Project(cmd) => match cmd {
+                ProjectCommand::Start(ProjectStartArgs { idle_minutes }) => {
+                    if self.beta {
+                        self.project_start_beta().await
+                    } else {
+                        self.project_start(idle_minutes).await
+                    }
                 }
-            }
-            Command::Project(ProjectCommand::Restart(ProjectStartArgs { idle_minutes })) => {
-                self.project_restart(idle_minutes).await
-            }
-            Command::Project(ProjectCommand::Status { follow }) => {
-                if self.beta {
-                    self.project_status_beta().await
-                } else {
-                    self.project_status(follow).await
+                ProjectCommand::Restart(ProjectStartArgs { idle_minutes }) => {
+                    self.project_restart(idle_minutes).await
                 }
-            }
-            Command::Project(ProjectCommand::List { raw, .. }) => self.projects_list(raw).await,
-            Command::Project(ProjectCommand::Stop) => self.project_stop().await,
-            Command::Project(ProjectCommand::Delete(ConfirmationArgs { yes })) => {
-                self.project_delete(yes).await
-            }
+                ProjectCommand::Status { follow } => {
+                    if self.beta {
+                        self.project_status_beta().await
+                    } else {
+                        self.project_status(follow).await
+                    }
+                }
+                ProjectCommand::List { raw, .. } => self.projects_list(raw).await,
+                ProjectCommand::Stop => self.project_stop().await,
+                ProjectCommand::Delete(ConfirmationArgs { yes }) => self.project_delete(yes).await,
+            },
         };
 
         for w in self.version_warnings {

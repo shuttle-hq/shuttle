@@ -37,6 +37,33 @@ pub struct ResponseBeta {
     pub is_admin: bool,
 }
 
+impl ResponseBeta {
+    pub fn colored_println(&self) {
+        let state = self.deployment_state.as_ref().map(|state| {
+            format!(
+                "{}",
+                state
+                    .to_string()
+                    // Unwrap is safe because Color::from_str returns the color white if the argument is not a Color.
+                    .with(crossterm::style::Color::from_str(state.get_color()).unwrap())
+            )
+        });
+
+        // TODO: make this look nicer
+        println!("Project Name: {}", self.name.as_str().bold(),);
+        println!("Project Id: {}", self.id.as_str().bold());
+        println!(
+            "Deployment state: {}",
+            state.unwrap_or_else(|| "N/A".dark_grey().to_string())
+        );
+        let owner = match self.owner {
+            Owner::User(ref s) => s,
+            Owner::Team(ref s) => s,
+        };
+        println!("Owner: {}", owner.as_str().bold());
+    }
+}
+
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 pub struct ResponseListBeta {
     pub projects: Vec<ResponseBeta>,

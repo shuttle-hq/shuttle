@@ -2400,8 +2400,7 @@ impl Shuttle {
     async fn project_status_beta(&self) -> Result<CommandOutcome> {
         let client = self.client.as_ref().unwrap();
         let project = client.get_project_beta(self.ctx.project_name()).await?;
-        // TODO: Make a proper way to display project info
-        println!("{project:?}");
+        project.colored_println();
 
         Ok(CommandOutcome::Ok)
     }

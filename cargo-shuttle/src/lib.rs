@@ -862,12 +862,31 @@ impl Shuttle {
     }
 
     async fn logs_beta(&self, args: LogsArgs) -> Result<CommandOutcome> {
+        if args.follow {
+            println!("Streamed logs are not yet supported on beta");
+            return Ok(CommandOutcome::Ok);
+        }
+        // TODO: implement logs range
         let client = self.client.as_ref().unwrap();
         let proj_name = self.ctx.project_name();
         let logs = if args.all_deployments {
             client.get_project_logs_beta(proj_name).await?.logs
         } else {
-            let id = if let Some(id) = args.id {
+            let id = if args.latest {
+                // Find latest deployment (not always an active one)
+                let deployments = client
+                    .get_deployments_beta(proj_name)
+                    .await
+                    .map_err(|err| {
+                        suggestions::logs::get_logs_failure(
+                            err,
+                            "Fetching the latest deployment failed",
+                        )
+                    })?;
+                let most_recent = deployments.first().context("No deployments found")?;
+                eprintln!("Getting logs from: {}", most_recent.id);
+                most_recent.id.to_string()
+            } else if let Some(id) = args.id {
                 id
             } else {
                 let d = client.get_current_deployment_beta(proj_name).await?;

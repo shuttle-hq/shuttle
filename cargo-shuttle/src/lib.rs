@@ -875,6 +875,7 @@ impl Shuttle {
                     println!("No deployment found");
                     return Ok(CommandOutcome::Ok);
                 };
+                eprintln!("Getting logs from: {}", d.id);
                 d.id
             };
             client.get_deployment_logs_beta(proj_name, &id).await?.logs

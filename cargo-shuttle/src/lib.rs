@@ -870,7 +870,12 @@ impl Shuttle {
             let id = if let Some(id) = args.id {
                 id
             } else {
-                client.get_current_deployment_beta(proj_name).await?.id
+                let d = client.get_current_deployment_beta(proj_name).await?;
+                let Some(d) = d else {
+                    println!("No deployment found");
+                    return Ok(CommandOutcome::Ok);
+                };
+                d.id
             };
             client.get_deployment_logs_beta(proj_name, &id).await?.logs
         };
@@ -1033,9 +1038,14 @@ impl Shuttle {
                         .await
                 }
                 None => {
-                    client
+                    let d = client
                         .get_current_deployment_beta(self.ctx.project_name())
-                        .await
+                        .await?;
+                    let Some(d) = d else {
+                        println!("No deployment found");
+                        return Ok(CommandOutcome::Ok);
+                    };
+                    Ok(d)
                 }
             }
             .map_err(suggestions::deployment::get_deployment_status_failure)?;

@@ -366,7 +366,7 @@ impl ShuttleApiClient {
     pub async fn get_current_deployment_beta(
         &self,
         project: &str,
-    ) -> Result<deployment::ResponseBeta> {
+    ) -> Result<Option<deployment::ResponseBeta>> {
         let path = format!("/projects/{project}/deployments/current");
 
         self.get(path).await

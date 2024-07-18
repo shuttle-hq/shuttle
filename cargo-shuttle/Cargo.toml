@@ -41,6 +41,8 @@ percent-encoding = { workspace = true }
 portpicker = { workspace = true }
 regex = "1.9.5"
 reqwest = { workspace = true, features = ["json"] }
+reqwest-middleware = "0.2.5"
+reqwest-tracing = "0.4.8"
 rmp-serde = { workspace = true }
 semver = { workspace = true }
 serde = { workspace = true, features = ["derive"] }

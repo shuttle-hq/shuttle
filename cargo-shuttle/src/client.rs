@@ -5,7 +5,8 @@ use anyhow::{Context, Result};
 use headers::{Authorization, HeaderMapExt};
 use percent_encoding::utf8_percent_encode;
 use reqwest::header::HeaderMap;
-use reqwest::{RequestBuilder, Response};
+use reqwest::Response;
+use reqwest_middleware::{ClientWithMiddleware, RequestBuilder};
 use serde::{Deserialize, Serialize};
 use shuttle_common::constants::headers::X_CARGO_SHUTTLE_VERSION;
 use shuttle_common::log::{LogsRange, LogsResponseBeta};
@@ -22,25 +23,29 @@ use uuid::Uuid;
 
 #[derive(Clone)]
 pub struct ShuttleApiClient {
-    client: reqwest::Client,
+    client: ClientWithMiddleware,
     api_url: String,
     api_key: Option<ApiKey>,
 }
 
 impl ShuttleApiClient {
     pub fn new(api_url: String, api_key: Option<ApiKey>) -> Self {
-        Self {
-            client: reqwest::Client::builder()
-                .default_headers(
-                    HeaderMap::try_from(&HashMap::from([(
-                        X_CARGO_SHUTTLE_VERSION.clone(),
-                        crate::VERSION.to_owned(),
-                    )]))
-                    .unwrap(),
-                )
-                .timeout(Duration::from_secs(60))
-                .build()
+        let client = reqwest::Client::builder()
+            .default_headers(
+                HeaderMap::try_from(&HashMap::from([(
+                    X_CARGO_SHUTTLE_VERSION.clone(),
+                    crate::VERSION.to_owned(),
+                )]))
                 .unwrap(),
+            )
+            .timeout(Duration::from_secs(60))
+            .build()
+            .unwrap();
+        let client = reqwest_middleware::ClientBuilder::new(client)
+            .with(reqwest_tracing::TracingMiddleware::default())
+            .build();
+        Self {
+            client,
             api_url,
             api_key,
         }

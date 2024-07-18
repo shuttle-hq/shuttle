@@ -446,6 +446,7 @@ impl ShuttleApiClient {
 
         if let Some(body) = body {
             let body = serde_json::to_string(&body)?;
+            debug!("Outgoing body: {}", body);
             builder = builder.body(body);
             builder = builder.header("Content-Type", "application/json");
         }
@@ -461,6 +462,7 @@ impl ShuttleApiClient {
 
         if let Some(body) = body {
             let body = serde_json::to_string(&body)?;
+            debug!("Outgoing body: {}", body);
             builder = builder.body(body);
             builder = builder.header("Content-Type", "application/json");
         }

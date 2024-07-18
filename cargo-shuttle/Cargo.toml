@@ -41,12 +41,14 @@ percent-encoding = { workspace = true }
 portpicker = { workspace = true }
 regex = "1.9.5"
 reqwest = { workspace = true, features = ["json"] }
+reqwest-middleware = "0.2.5"
 rmp-serde = { workspace = true }
 semver = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 strum = { workspace = true }
 tar = { workspace = true }
+task-local-extensions = "0.1.4"
 tempfile = { workspace = true }
 tokio = { workspace = true, features = ["macros", "signal", "rt-multi-thread"] }
 tokio-tungstenite = { version = "0.20.1", features = [

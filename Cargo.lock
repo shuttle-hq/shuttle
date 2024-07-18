@@ -1009,6 +1009,7 @@ dependencies = [
  "portpicker",
  "regex",
  "reqwest 0.11.27",
+ "reqwest-middleware",
  "rexpect",
  "rmp-serde",
  "semver 1.0.23",
@@ -1020,6 +1021,7 @@ dependencies = [
  "shuttle-service",
  "strum 0.26.3",
  "tar",
+ "task-local-extensions",
  "tempfile",
  "tokio",
  "tokio-tungstenite",
@@ -4717,6 +4719,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "reqwest-middleware"
+version = "0.2.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5a735987236a8e238bf0296c7e351b999c188ccc11477f311b82b55c93984216"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "http 0.2.12",
+ "reqwest 0.11.27",
+ "serde",
+ "task-local-extensions",
+ "thiserror",
+]
+
+[[package]]
 name = "resolv-conf"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6308,6 +6325,15 @@ dependencies = [
  "filetime",
  "libc",
  "xattr",
+]
+
+[[package]]
+name = "task-local-extensions"
+version = "0.1.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ba323866e5d033818e3240feeb9f7db2c4296674e4d9e16b97b7bf8f490434e8"
+dependencies = [
+ "pin-utils",
 ]
 
 [[package]]

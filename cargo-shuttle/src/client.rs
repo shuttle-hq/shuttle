@@ -5,7 +5,8 @@ use anyhow::{Context, Result};
 use headers::{Authorization, HeaderMapExt};
 use percent_encoding::utf8_percent_encode;
 use reqwest::header::HeaderMap;
-use reqwest::{RequestBuilder, Response};
+use reqwest::{Request, Response};
+use reqwest_middleware::{ClientWithMiddleware, Middleware, Next, RequestBuilder};
 use serde::{Deserialize, Serialize};
 use shuttle_common::constants::headers::X_CARGO_SHUTTLE_VERSION;
 use shuttle_common::log::{LogsRange, LogsResponseBeta};
@@ -14,33 +15,38 @@ use shuttle_common::models::deployment::{
 };
 use shuttle_common::models::{deployment, project, service, team, user, ToJson};
 use shuttle_common::{resource, ApiKey, LogItem, VersionInfo};
+use task_local_extensions::Extensions;
 use tokio::net::TcpStream;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
-use tracing::error;
+use tracing::{debug, error};
 use uuid::Uuid;
 
 #[derive(Clone)]
 pub struct ShuttleApiClient {
-    client: reqwest::Client,
+    client: ClientWithMiddleware,
     api_url: String,
     api_key: Option<ApiKey>,
 }
 
 impl ShuttleApiClient {
     pub fn new(api_url: String, api_key: Option<ApiKey>) -> Self {
-        Self {
-            client: reqwest::Client::builder()
-                .default_headers(
-                    HeaderMap::try_from(&HashMap::from([(
-                        X_CARGO_SHUTTLE_VERSION.clone(),
-                        crate::VERSION.to_owned(),
-                    )]))
-                    .unwrap(),
-                )
-                .timeout(Duration::from_secs(60))
-                .build()
+        let client = reqwest::Client::builder()
+            .default_headers(
+                HeaderMap::try_from(&HashMap::from([(
+                    X_CARGO_SHUTTLE_VERSION.clone(),
+                    crate::VERSION.to_owned(),
+                )]))
                 .unwrap(),
+            )
+            .timeout(Duration::from_secs(60))
+            .build()
+            .unwrap();
+        let client = reqwest_middleware::ClientBuilder::new(client)
+            .with(LoggingMiddleware)
+            .build();
+        Self {
+            client,
             api_url,
             api_key,
         }
@@ -477,5 +483,29 @@ impl ShuttleApiClient {
             .context("failed to make delete request")?
             .to_json()
             .await
+    }
+}
+
+struct LoggingMiddleware;
+
+#[async_trait::async_trait]
+impl Middleware for LoggingMiddleware {
+    async fn handle(
+        &self,
+        req: Request,
+        extensions: &mut Extensions,
+        next: Next<'_>,
+    ) -> reqwest_middleware::Result<Response> {
+        debug!("Request: {} {}", req.method(), req.url());
+        let res = next.run(req, extensions).await;
+        match res {
+            Ok(ref res) => {
+                debug!("Response: {}", res.status());
+            }
+            Err(ref e) => {
+                debug!("Response error: {}", e);
+            }
+        }
+        res
     }
 }

@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Context, Result};
 use serde::{Deserialize, Serialize};
+use shuttle_common::constants::API_URL_BETA;
 use shuttle_common::{constants::API_URL_DEFAULT, ApiKey};
 use tracing::trace;
 
@@ -315,11 +316,13 @@ impl RequestContext {
         self.api_url = api_url;
     }
 
-    pub fn api_url(&self) -> String {
+    pub fn api_url(&self, beta: bool) -> String {
         if let Some(api_url) = self.api_url.clone() {
             api_url
         } else if let Some(api_url) = self.global.as_ref().unwrap().api_url() {
             api_url
+        } else if beta {
+            API_URL_BETA.to_string()
         } else {
             API_URL_DEFAULT.to_string()
         }

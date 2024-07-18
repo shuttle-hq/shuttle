@@ -186,7 +186,8 @@ impl Shuttle {
                 | Command::Clean
                 | Command::Project(..)
         ) {
-            let client = ShuttleApiClient::new(self.ctx.api_url(), self.ctx.api_key().ok());
+            let client =
+                ShuttleApiClient::new(self.ctx.api_url(self.beta), self.ctx.api_key().ok());
             self.client = Some(client);
             if !args.offline && !self.beta {
                 self.check_api_versions().await?;

@@ -303,6 +303,8 @@ pub enum BuildArgsBeta {
 
 #[derive(Deserialize, Serialize)]
 pub struct BuildArgsRustBeta {
+    /// Version of shuttle_runtime used in this crate
+    pub shuttle_runtime_version: Option<String>,
     /// Use the built in cargo chef setup for caching
     pub cargo_chef: bool,
     /// Build with the built in `cargo build` setup
@@ -322,6 +324,7 @@ pub struct BuildArgsRustBeta {
 impl Default for BuildArgsRustBeta {
     fn default() -> Self {
         Self {
+            shuttle_runtime_version: Default::default(),
             cargo_chef: true,
             cargo_build: true,
             package_name: Default::default(),

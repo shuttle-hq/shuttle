@@ -1010,7 +1010,6 @@ dependencies = [
  "regex",
  "reqwest 0.11.27",
  "reqwest-middleware",
- "reqwest-tracing",
  "rexpect",
  "rmp-serde",
  "semver 1.0.23",
@@ -1022,6 +1021,7 @@ dependencies = [
  "shuttle-service",
  "strum 0.26.3",
  "tar",
+ "task-local-extensions",
  "tempfile",
  "tokio",
  "tokio-tungstenite",
@@ -4731,22 +4731,6 @@ dependencies = [
  "serde",
  "task-local-extensions",
  "thiserror",
-]
-
-[[package]]
-name = "reqwest-tracing"
-version = "0.4.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "190838e54153d7a7e2ea98851304b3ce92daeabf14c54d32b01b84a3e636f683"
-dependencies = [
- "anyhow",
- "async-trait",
- "getrandom 0.2.15",
- "matchit",
- "reqwest 0.11.27",
- "reqwest-middleware",
- "task-local-extensions",
- "tracing",
 ]
 
 [[package]]

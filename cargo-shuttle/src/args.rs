@@ -35,7 +35,7 @@ pub struct ShuttleArgs {
     /// Disable network requests that are not strictly necessary. Limits some features.
     #[arg(long, env = "SHUTTLE_OFFLINE")]
     pub offline: bool,
-    /// Turn on tracing output for cargo-shuttle and shuttle libraries.
+    /// Turn on tracing output for Shuttle libraries. (WARNING: can print sensitive data)
     #[arg(long, env = "SHUTTLE_DEBUG")]
     pub debug: bool,
     /// Target Shuttle's development environment

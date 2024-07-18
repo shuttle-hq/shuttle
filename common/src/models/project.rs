@@ -1,5 +1,6 @@
 use std::fmt::Display;
 use std::fmt::Formatter;
+use std::fmt::Write;
 use std::str::FromStr;
 
 use comfy_table::{
@@ -38,29 +39,27 @@ pub struct ResponseBeta {
 }
 
 impl ResponseBeta {
-    pub fn colored_println(&self) {
-        let state = self.deployment_state.as_ref().map(|state| {
-            format!(
-                "{}",
-                state
-                    .to_string()
-                    // Unwrap is safe because Color::from_str returns the color white if the argument is not a Color.
-                    .with(crossterm::style::Color::from_str(state.get_color()).unwrap())
-            )
-        });
-
+    pub fn to_string_colored(&self) -> String {
         // TODO: make this look nicer
-        println!("Project Name: {}", self.name.as_str().bold(),);
-        println!("Project Id: {}", self.id.as_str().bold());
-        println!(
+        let mut s = String::new();
+        writeln!(&mut s, "Project Name: {}", self.name.as_str().bold()).unwrap();
+        writeln!(&mut s, "Project Id: {}", self.id.as_str().bold()).unwrap();
+        writeln!(
+            &mut s,
             "Deployment state: {}",
-            state.unwrap_or_else(|| "N/A".dark_grey().to_string())
-        );
+            self.deployment_state
+                .as_ref()
+                .map(|s| s.to_string_colored())
+                .unwrap_or_else(|| "N/A".dark_grey().to_string())
+        )
+        .unwrap();
         let owner = match self.owner {
             Owner::User(ref s) => s,
             Owner::Team(ref s) => s,
         };
-        println!("Owner: {}", owner.as_str().bold());
+        writeln!(&mut s, "Owner: {}", owner.as_str().bold()).unwrap();
+
+        s
     }
 }
 

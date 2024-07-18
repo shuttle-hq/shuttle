@@ -32,22 +32,20 @@ use ignore::overrides::OverrideBuilder;
 use ignore::WalkBuilder;
 use indicatif::ProgressBar;
 use indoc::{formatdoc, printdoc};
-use shuttle_common::models::deployment::{
-    BuildArgsBeta, BuildArgsRustBeta, BuildMetaBeta, DeploymentRequestBuildArchiveBeta,
-    DeploymentRequestImageBeta,
-};
 use shuttle_common::{
     constants::{
         API_URL_DEFAULT, DEFAULT_IDLE_MINUTES, EXAMPLES_REPO, EXECUTABLE_DIRNAME,
         RESOURCE_SCHEMA_VERSION, SHUTTLE_GH_ISSUE_URL, SHUTTLE_IDLE_DOCS_URL,
         SHUTTLE_INSTALL_DOCS_URL, SHUTTLE_LOGIN_URL, STORAGE_DIRNAME, TEMPLATES_SCHEMA_VERSION,
     },
-    deployment::{DEPLOYER_END_MESSAGES_BAD, DEPLOYER_END_MESSAGES_GOOD},
+    deployment::{EcsState, DEPLOYER_END_MESSAGES_BAD, DEPLOYER_END_MESSAGES_GOOD},
     log::LogsRange,
     models::{
         deployment::{
-            deployments_table_beta, get_deployments_table, DeploymentRequest,
-            DeploymentRequestBeta, CREATE_SERVICE_BODY_LIMIT, GIT_STRINGS_MAX_LENGTH,
+            deployments_table_beta, get_deployments_table, BuildArgsBeta, BuildArgsRustBeta,
+            BuildMetaBeta, DeploymentRequest, DeploymentRequestBeta,
+            DeploymentRequestBuildArchiveBeta, DeploymentRequestImageBeta,
+            CREATE_SERVICE_BODY_LIMIT, GIT_STRINGS_MAX_LENGTH,
         },
         error::ApiError,
         project,
@@ -771,7 +769,7 @@ impl Shuttle {
     async fn stop(&self) -> Result<CommandOutcome> {
         let client = self.client.as_ref().unwrap();
         let p = self.ctx.project_name();
-        wait_with_spinner(|i, pb| async move {
+        wait_with_spinner(500, |i, pb| async move {
             let service = if i == 0 {
                 client.stop_service(p).await?
             } else {
@@ -1081,7 +1079,7 @@ impl Shuttle {
                 }
             }
             .map_err(suggestions::deployment::get_deployment_status_failure)?;
-            deployment.colored_println();
+            println!("{}", deployment.to_string_colored());
         } else {
             let deployment_id = deployment_id.expect("deployment id required on alpha platform");
             let deployment = client
@@ -1828,6 +1826,7 @@ impl Shuttle {
         let client = self.client.as_ref().unwrap();
         let working_directory = self.ctx.working_directory();
         let manifest_path = working_directory.join("Cargo.toml");
+        let project_name = self.ctx.project_name();
 
         let secrets = if self.beta {
             // Look for a secrets file, first in the command args, and if it isn't there look
@@ -1869,13 +1868,13 @@ impl Shuttle {
 
                 let deployment = client
                     .deploy_beta(
-                        self.ctx.project_name(),
+                        project_name,
                         DeploymentRequestBeta::Image(deployment_req_image_beta),
                     )
                     .await
                     .map_err(suggestions::deploy::deploy_request_failure)?;
 
-                deployment.colored_println();
+                println!("{}", deployment.to_string_colored());
                 return Ok(CommandOutcome::Ok);
             }
         }
@@ -1962,7 +1961,7 @@ impl Shuttle {
         // End early for beta
         if self.beta {
             let arch = client
-                .upload_archive_beta(self.ctx.project_name(), deployment_req.data)
+                .upload_archive_beta(project_name, deployment_req.data)
                 .await?;
             deployment_req_buildarch_beta.archive_version_id = arch.archive_version_id;
             deployment_req_buildarch_beta.build_meta = Some(BuildMetaBeta {
@@ -1973,13 +1972,48 @@ impl Shuttle {
             });
             let deployment = client
                 .deploy_beta(
-                    self.ctx.project_name(),
+                    project_name,
                     DeploymentRequestBeta::BuildArchive(deployment_req_buildarch_beta),
                 )
                 .await
                 .map_err(suggestions::deploy::deploy_request_failure)?;
 
-            deployment.colored_println();
+            if args.no_follow {
+                println!("{}", deployment.to_string_colored());
+                return Ok(CommandOutcome::Ok);
+            }
+
+            let id = &deployment.id;
+            wait_with_spinner(2000, |_, pb| async move {
+                let deployment = client.get_deployment_beta(project_name, id).await?;
+
+                let state = deployment.state.clone();
+                pb.set_message(deployment.to_string_summary_colored());
+                let cleanup = move || {
+                    println!("{}", deployment.to_string_colored());
+                };
+                match state {
+                    EcsState::Pending | EcsState::Building | EcsState::InProgress => Ok(None),
+                    EcsState::Running => Ok(Some(cleanup)),
+                    EcsState::Stopped | EcsState::Stopping | EcsState::Unknown => Ok(Some(cleanup)),
+                    EcsState::Failed => {
+                        for log in client
+                            .get_deployment_logs_beta(project_name, id)
+                            .await?
+                            .logs
+                        {
+                            if args.raw {
+                                println!("{}", log.line);
+                            } else {
+                                println!("{log}");
+                            }
+                        }
+                        Ok(Some(cleanup))
+                    }
+                }
+            })
+            .await?;
+
             return Ok(CommandOutcome::Ok);
         }
 
@@ -2197,7 +2231,7 @@ impl Shuttle {
         let config = &project::Config { idle_minutes };
 
         let p = self.ctx.project_name();
-        wait_with_spinner(|i, pb| async move {
+        wait_with_spinner(500, |i, pb| async move {
             let project = if i == 0 {
                 client.create_project(p, config).await?
             } else {
@@ -2353,7 +2387,7 @@ impl Shuttle {
         let client = self.client.as_ref().unwrap();
         if follow {
             let p = self.ctx.project_name();
-            wait_with_spinner(|_, pb| async move {
+            wait_with_spinner(500, |_, pb| async move {
                 let project = client.get_project(p).await?;
                 pb.set_message(format!("{project}"));
 
@@ -2401,7 +2435,7 @@ impl Shuttle {
     async fn project_status_beta(&self) -> Result<CommandOutcome> {
         let client = self.client.as_ref().unwrap();
         let project = client.get_project_beta(self.ctx.project_name()).await?;
-        project.colored_println();
+        println!("{}", project.to_string_colored());
 
         Ok(CommandOutcome::Ok)
     }
@@ -2410,7 +2444,7 @@ impl Shuttle {
         let client = self.client.as_ref().unwrap();
 
         let p = self.ctx.project_name();
-        wait_with_spinner(|i, pb| async move {
+        wait_with_spinner(500, |i, pb| async move {
             let project = if i == 0 {
                 client.stop_project(p).await?
             } else {
@@ -2745,12 +2779,13 @@ impl std::fmt::Display for VersionMismatchError {
 
 impl std::error::Error for VersionMismatchError {}
 
-/// Calls async function `f` in a loop with sleep,
-/// while providing iteration count and reference to update the progress bar.
+/// Calls async function `f` in a loop with `millis` sleep between iterations,
+/// providing iteration count and reference to update the progress bar.
 /// `f` returns Some with a cleanup function if done.
 /// The cleanup function is called after teardown of progress bar,
 /// and its return value is returned from here.
 async fn wait_with_spinner<Fut, C, O>(
+    millis: u64,
     f: impl Fn(usize, ProgressBar) -> Fut,
 ) -> Result<O, anyhow::Error>
 where
@@ -2764,7 +2799,7 @@ where
             break cleanup;
         }
         count += 1;
-        sleep(Duration::from_millis(300)).await;
+        sleep(Duration::from_millis(millis)).await;
     };
     progress_bar.finish_and_clear();
 
@@ -2773,7 +2808,7 @@ where
 
 fn create_spinner() -> ProgressBar {
     let pb = indicatif::ProgressBar::new_spinner();
-    pb.enable_steady_tick(std::time::Duration::from_millis(350));
+    pb.enable_steady_tick(std::time::Duration::from_millis(250));
     pb.set_style(
         indicatif::ProgressStyle::with_template("{spinner:.orange} {msg}")
             .unwrap()

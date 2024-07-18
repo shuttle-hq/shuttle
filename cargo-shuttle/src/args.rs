@@ -262,6 +262,9 @@ pub struct DeployArgs {
     /// BETA: Deploy this Docker image instead of building one
     #[arg(long, short = 'i', hide = true)]
     pub image: Option<String>, // TODO?: Make this a subcommand instead? `cargo shuttle deploy image ...`
+    /// BETA: Don't follow the deployment status, exit after the deployment begins
+    #[arg(long, visible_alias = "nf", hide = true)]
+    pub no_follow: bool,
 
     /// Allow deployment with uncommitted files
     #[arg(long, visible_alias = "ad")]

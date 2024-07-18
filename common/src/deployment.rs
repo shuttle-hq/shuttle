@@ -1,5 +1,6 @@
-use std::path::PathBuf;
+use std::{path::PathBuf, str::FromStr};
 
+use crossterm::style::Stylize;
 use serde::{Deserialize, Serialize};
 use strum::{Display, EnumString};
 
@@ -34,6 +35,30 @@ pub enum EcsState {
     Failed,
     /// Fallback
     Unknown,
+}
+
+impl EcsState {
+    /// We return a &str rather than a Color here, since `comfy-table` re-exports
+    /// crossterm::style::Color and we depend on both `comfy-table` and `crossterm`
+    /// we may end up with two different versions of Color.
+    pub fn get_color(&self) -> &str {
+        match self {
+            EcsState::Pending => "dark_yellow",
+            EcsState::Building => "yellow",
+            EcsState::InProgress => "cyan",
+            EcsState::Running => "green",
+            EcsState::Stopped => "dark_blue",
+            EcsState::Stopping => "blue",
+            EcsState::Failed => "red",
+            EcsState::Unknown => "grey",
+        }
+    }
+    pub fn to_string_colored(&self) -> String {
+        // Unwrap is safe because Color::from_str returns the color white if the argument is not a Color.
+        self.to_string()
+            .with(crossterm::style::Color::from_str(self.get_color()).unwrap())
+            .to_string()
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

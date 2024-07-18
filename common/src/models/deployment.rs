@@ -58,20 +58,20 @@ impl Display for Response {
 }
 
 impl ResponseBeta {
-    pub fn colored_println(&self) {
-        let state = format!(
-            "{}",
-            self.state
-                .to_string()
-                // Unwrap is safe because Color::from_str returns the color white if the argument is not a Color.
-                .with(crossterm::style::Color::from_str(self.state.get_color()).unwrap())
-        );
-
+    pub fn to_string_summary_colored(&self) -> String {
         // TODO: make this look nicer
-        println!(
+        format!(
+            "Deployment {} - {}",
+            self.id.as_str().bold(),
+            self.state.to_string_colored(),
+        )
+    }
+    pub fn to_string_colored(&self) -> String {
+        // TODO: make this look nicer
+        format!(
             "Deployment {} - {}\n{}",
             self.id.as_str().bold(),
-            state,
+            self.state.to_string_colored(),
             self.uris.join("\n"),
         )
     }
@@ -88,24 +88,6 @@ impl State {
             State::Completed | State::Stopped => "blue",
             State::Crashed => "red",
             State::Unknown => "yellow",
-        }
-    }
-}
-
-impl EcsState {
-    /// We return a &str rather than a Color here, since `comfy-table` re-exports
-    /// crossterm::style::Color and we depend on both `comfy-table` and `crossterm`
-    /// we may end up with two different versions of Color.
-    pub fn get_color(&self) -> &str {
-        match self {
-            EcsState::Pending => "dark_yellow",
-            EcsState::Building => "yellow",
-            EcsState::InProgress => "cyan",
-            EcsState::Running => "green",
-            EcsState::Stopped => "dark_blue",
-            EcsState::Stopping => "blue",
-            EcsState::Failed => "red",
-            EcsState::Unknown => "grey",
         }
     }
 }

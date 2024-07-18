@@ -303,7 +303,7 @@ pub enum BuildArgsBeta {
 
 #[derive(Deserialize, Serialize)]
 pub struct BuildArgsRustBeta {
-    /// Version of shuttle_runtime used in this crate
+    /// Version of shuttle-runtime used by this crate
     pub shuttle_runtime_version: Option<String>,
     /// Use the built in cargo chef setup for caching
     pub cargo_chef: bool,

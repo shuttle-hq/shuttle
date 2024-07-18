@@ -209,7 +209,7 @@ impl Shuttle {
             Command::Generate(GenerateCommand::Shell { shell, output }) => {
                 self.complete(shell, output)
             }
-            Command::Login(login_args) => self.login(login_args).await,
+            Command::Login(login_args) => self.login(login_args, args.offline).await,
             Command::Logout(logout_args) => self.logout(logout_args).await,
             Command::Feedback => self.feedback(),
             Command::Run(run_args) => self.local_run(run_args).await,
@@ -235,28 +235,28 @@ impl Shuttle {
                 resource_type,
                 confirmation: ConfirmationArgs { yes },
             }) => self.resource_delete(&resource_type, yes).await,
-            Command::Project(ProjectCommand::Start(ProjectStartArgs { idle_minutes })) => {
-                if self.beta {
-                    self.project_start_beta().await
-                } else {
-                    self.project_start(idle_minutes).await
+            Command::Project(cmd) => match cmd {
+                ProjectCommand::Start(ProjectStartArgs { idle_minutes }) => {
+                    if self.beta {
+                        self.project_start_beta().await
+                    } else {
+                        self.project_start(idle_minutes).await
+                    }
                 }
-            }
-            Command::Project(ProjectCommand::Restart(ProjectStartArgs { idle_minutes })) => {
-                self.project_restart(idle_minutes).await
-            }
-            Command::Project(ProjectCommand::Status { follow }) => {
-                if self.beta {
-                    self.project_status_beta().await
-                } else {
-                    self.project_status(follow).await
+                ProjectCommand::Restart(ProjectStartArgs { idle_minutes }) => {
+                    self.project_restart(idle_minutes).await
                 }
-            }
-            Command::Project(ProjectCommand::List { raw, .. }) => self.projects_list(raw).await,
-            Command::Project(ProjectCommand::Stop) => self.project_stop().await,
-            Command::Project(ProjectCommand::Delete(ConfirmationArgs { yes })) => {
-                self.project_delete(yes).await
-            }
+                ProjectCommand::Status { follow } => {
+                    if self.beta {
+                        self.project_status_beta().await
+                    } else {
+                        self.project_status(follow).await
+                    }
+                }
+                ProjectCommand::List { raw, .. } => self.projects_list(raw).await,
+                ProjectCommand::Stop => self.project_stop().await,
+                ProjectCommand::Delete(ConfirmationArgs { yes }) => self.project_delete(yes).await,
+            },
         };
 
         for w in self.version_warnings {
@@ -338,10 +338,10 @@ impl Shuttle {
         // 1. Log in (if not logged in yet)
         if needs_login {
             println!("First, let's log in to your Shuttle account.");
-            self.login(args.login_args.clone()).await?;
+            self.login(args.login_args.clone(), offline).await?;
             println!();
         } else if args.login_args.api_key.is_some() {
-            self.login(args.login_args.clone()).await?;
+            self.login(args.login_args.clone(), offline).await?;
         } else if args.create_env {
             bail!("Tried to login to create a Shuttle environment, but no API key was set.")
         }
@@ -701,12 +701,16 @@ impl Shuttle {
     }
 
     /// Log in with the given API key or after prompting the user for one.
-    async fn login(&mut self, login_args: LoginArgs) -> Result<CommandOutcome> {
+    async fn login(&mut self, login_args: LoginArgs, offline: bool) -> Result<CommandOutcome> {
         let api_key_str = match login_args.api_key {
             Some(api_key) => api_key,
             None => {
-                let _ = webbrowser::open(SHUTTLE_LOGIN_URL);
-                println!("If your browser did not automatically open, go to {SHUTTLE_LOGIN_URL}");
+                if !offline {
+                    let _ = webbrowser::open(SHUTTLE_LOGIN_URL);
+                    println!(
+                        "If your browser did not automatically open, go to {SHUTTLE_LOGIN_URL}"
+                    );
+                }
 
                 Password::with_theme(&ColorfulTheme::default())
                     .with_prompt("API key")
@@ -724,12 +728,15 @@ impl Shuttle {
             client.set_api_key(api_key);
 
             if self.beta {
-                client
-                    .get_current_user()
-                    .await
-                    .context("failed to check API key validity")?;
-
-                println!("Logged in successfully!\n")
+                if offline {
+                    eprintln!("INFO: Skipping API key verification");
+                } else {
+                    let u = client
+                        .get_current_user()
+                        .await
+                        .context("failed to check API key validity")?;
+                    println!("Logged in as {} ({})", u.name.bold(), u.id.bold());
+                }
             }
         }
 
@@ -745,7 +752,7 @@ impl Shuttle {
             println!(" -> Go to {SHUTTLE_LOGIN_URL} to get a new one.\n");
         }
         self.ctx.clear_api_key()?;
-        println!("Successfully logged out of shuttle.");
+        println!("Successfully logged out.");
 
         Ok(CommandOutcome::Ok)
     }
@@ -863,20 +870,49 @@ impl Shuttle {
     }
 
     async fn logs_beta(&self, args: LogsArgs) -> Result<CommandOutcome> {
+        if args.follow {
+            println!("Streamed logs are not yet supported on beta");
+            return Ok(CommandOutcome::Ok);
+        }
+        // TODO: implement logs range
         let client = self.client.as_ref().unwrap();
         let proj_name = self.ctx.project_name();
         let logs = if args.all_deployments {
             client.get_project_logs_beta(proj_name).await?.logs
         } else {
-            let id = if let Some(id) = args.id {
+            let id = if args.latest {
+                // Find latest deployment (not always an active one)
+                let deployments = client
+                    .get_deployments_beta(proj_name)
+                    .await
+                    .map_err(|err| {
+                        suggestions::logs::get_logs_failure(
+                            err,
+                            "Fetching the latest deployment failed",
+                        )
+                    })?;
+                let most_recent = deployments.first().context("No deployments found")?;
+                eprintln!("Getting logs from: {}", most_recent.id);
+                most_recent.id.to_string()
+            } else if let Some(id) = args.id {
                 id
             } else {
-                client.get_current_deployment_beta(proj_name).await?.id
+                let d = client.get_current_deployment_beta(proj_name).await?;
+                let Some(d) = d else {
+                    println!("No deployment found");
+                    return Ok(CommandOutcome::Ok);
+                };
+                eprintln!("Getting logs from: {}", d.id);
+                d.id
             };
             client.get_deployment_logs_beta(proj_name, &id).await?.logs
         };
         for log in logs {
-            println!("{}", log);
+            if args.raw {
+                println!("{}", log.line);
+            } else {
+                println!("{log}");
+            }
         }
 
         Ok(CommandOutcome::Ok)
@@ -1034,9 +1070,14 @@ impl Shuttle {
                         .await
                 }
                 None => {
-                    client
+                    let d = client
                         .get_current_deployment_beta(self.ctx.project_name())
-                        .await
+                        .await?;
+                    let Some(d) = d else {
+                        println!("No deployment found");
+                        return Ok(CommandOutcome::Ok);
+                    };
+                    Ok(d)
                 }
             }
             .map_err(suggestions::deployment::get_deployment_status_failure)?;
@@ -2360,8 +2401,7 @@ impl Shuttle {
     async fn project_status_beta(&self) -> Result<CommandOutcome> {
         let client = self.client.as_ref().unwrap();
         let project = client.get_project_beta(self.ctx.project_name()).await?;
-        // TODO: Make a proper way to display project info
-        println!("{project:?}");
+        project.colored_println();
 
         Ok(CommandOutcome::Ok)
     }

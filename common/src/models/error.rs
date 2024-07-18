@@ -56,7 +56,7 @@ impl ApiError {
         }
     }
 
-    fn bad_request(error: impl std::error::Error) -> Self {
+    pub fn bad_request(error: impl std::error::Error) -> Self {
         Self {
             message: error.to_string(),
             status_code: StatusCode::BAD_REQUEST.as_u16(),

@@ -1897,7 +1897,7 @@ impl Shuttle {
             // TODO: support overriding this
             let package = packages
                 .first()
-                .expect("at least one shuttle crate in the workspace");
+                .expect("Expected at least one crate with shuttle-runtime in the workspace");
             let package_name = package.name.to_owned();
             rust_build_args.package_name = Some(package_name);
 

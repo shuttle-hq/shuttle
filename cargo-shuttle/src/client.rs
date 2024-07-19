@@ -168,6 +168,12 @@ impl ShuttleApiClient {
         self.delete(path).await
     }
 
+    pub async fn stop_service_beta(&self, project: &str) -> Result<String> {
+        let path = format!("/projects/{project}/deployments");
+
+        self.delete(path).await
+    }
+
     pub async fn get_service(&self, project: &str) -> Result<service::Summary> {
         let path = format!("/projects/{project}/services/{project}");
 

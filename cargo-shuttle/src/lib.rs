@@ -44,7 +44,7 @@ use shuttle_common::{
         deployment::{
             deployments_table_beta, get_deployments_table, BuildArgsBeta, BuildArgsRustBeta,
             BuildMetaBeta, DeploymentRequest, DeploymentRequestBeta,
-            DeploymentRequestBuildArchiveBeta, DeploymentRequestImageBeta,
+            DeploymentRequestBuildArchiveBeta, DeploymentRequestImageBeta, ResponseBeta,
             CREATE_SERVICE_BODY_LIMIT, GIT_STRINGS_MAX_LENGTH,
         },
         error::ApiError,
@@ -133,10 +133,12 @@ impl Shuttle {
             ) {
                 unimplemented!("This command is deprecated on the beta platform");
             }
-            if matches!(args.cmd, Command::Stop | Command::Clean) {
+            if matches!(args.cmd, Command::Clean) {
                 unimplemented!("This command is not yet implemented on the beta platform");
             }
             eprintln!("INFO: Using beta platform API");
+        } else if matches!(args.cmd, Command::Deployment(DeploymentCommand::Stop)) {
+            unimplemented!("This command is not supported on the legacy platform");
         }
         if let Some(ref url) = args.api_url {
             if url != API_URL_DEFAULT {
@@ -204,10 +206,10 @@ impl Shuttle {
                 )
                 .await
             }
-            Command::Generate(GenerateCommand::Manpage) => self.generate_manpage(),
-            Command::Generate(GenerateCommand::Shell { shell, output }) => {
-                self.complete(shell, output)
-            }
+            Command::Generate(cmd) => match cmd {
+                GenerateCommand::Manpage => self.generate_manpage(),
+                GenerateCommand::Shell { shell, output } => self.complete(shell, output),
+            },
             Command::Login(login_args) => self.login(login_args, args.offline).await,
             Command::Logout(logout_args) => self.logout(logout_args).await,
             Command::Feedback => self.feedback(),
@@ -221,19 +223,24 @@ impl Shuttle {
                     self.logs(logs_args).await
                 }
             }
-            Command::Deployment(DeploymentCommand::List { page, limit, raw }) => {
-                self.deployments_list(page, limit, raw).await
-            }
-            Command::Deployment(DeploymentCommand::Status { id }) => self.deployment_get(id).await,
-            Command::Resource(ResourceCommand::List { raw, show_secrets }) => {
-                self.resources_list(raw, show_secrets).await
-            }
+            Command::Deployment(cmd) => match cmd {
+                DeploymentCommand::List { page, limit, raw } => {
+                    self.deployments_list(page, limit, raw).await
+                }
+                DeploymentCommand::Status { id } => self.deployment_get(id).await,
+                DeploymentCommand::Stop => self.stop_beta().await,
+            },
             Command::Stop => self.stop().await,
             Command::Clean => self.clean().await,
-            Command::Resource(ResourceCommand::Delete {
-                resource_type,
-                confirmation: ConfirmationArgs { yes },
-            }) => self.resource_delete(&resource_type, yes).await,
+            Command::Resource(cmd) => match cmd {
+                ResourceCommand::List { raw, show_secrets } => {
+                    self.resources_list(raw, show_secrets).await
+                }
+                ResourceCommand::Delete {
+                    resource_type,
+                    confirmation: ConfirmationArgs { yes },
+                } => self.resource_delete(&resource_type, yes).await,
+            },
             Command::Project(cmd) => match cmd {
                 ProjectCommand::Start(ProjectStartArgs { idle_minutes }) => {
                     if self.beta {
@@ -765,6 +772,44 @@ impl Shuttle {
                 Err(anyhow!("Resetting API key failed."))
             }
         })
+    }
+
+    async fn stop_beta(&self) -> Result<CommandOutcome> {
+        let client = self.client.as_ref().unwrap();
+        let p = self.ctx.project_name();
+        let res = client.stop_service_beta(p).await?;
+        println!("{res}");
+        wait_with_spinner(2000, |_, pb| async move {
+            let deployment = client.get_current_deployment_beta(p).await?;
+
+            let get_cleanup = |d: Option<ResponseBeta>| {
+                move || {
+                    if let Some(d) = d {
+                        println!("{}", d.to_string_colored());
+                    }
+                }
+            };
+            let Some(deployment) = deployment else {
+                return Ok(Some(get_cleanup(None)));
+            };
+
+            let state = deployment.state.clone();
+            pb.set_message(deployment.to_string_summary_colored());
+            let cleanup = get_cleanup(Some(deployment));
+            match state {
+                    EcsState::Pending
+                    | EcsState::Stopping
+                    | EcsState::InProgress
+                    | EcsState::Running => Ok(None),
+                    EcsState::Building // a building deployment should take it back to InProgress then Running, so don't follow that sequence
+                    | EcsState::Failed
+                    | EcsState::Stopped
+                    | EcsState::Unknown => Ok(Some(cleanup)),
+                }
+        })
+        .await?;
+
+        Ok(CommandOutcome::Ok)
     }
 
     async fn stop(&self) -> Result<CommandOutcome> {

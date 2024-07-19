@@ -277,6 +277,9 @@ pub struct DeployArgs {
     /// Don't display timestamps and log origin tags
     #[arg(long)]
     pub raw: bool,
+    /// Output the deployment archive to a file instead of sending a deployment request
+    #[arg(long)]
+    pub output_archive: Option<PathBuf>,
 
     #[command(flatten)]
     pub secret_args: SecretsArgs,

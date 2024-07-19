@@ -2003,23 +2003,29 @@ impl Shuttle {
             }
         }
 
-        deployment_req.data = self.make_archive(args.secret_args.secrets.clone(), self.beta)?;
-        // TODO: Make size warning server-side on beta.
-        if !self.beta && deployment_req.data.len() > CREATE_SERVICE_BODY_LIMIT {
+        let archive = self.make_archive(args.secret_args.secrets.clone(), self.beta)?;
+
+        if let Some(path) = args.output_archive {
+            eprintln!("Writing archive to {}...", path.display());
+            std::fs::write(path, archive).context("writing archive")?;
+            eprintln!("Done");
+
+            return Ok(CommandOutcome::Ok);
+        }
+
+        if !self.beta && archive.len() > CREATE_SERVICE_BODY_LIMIT {
             bail!(
                 r#"The project is too large - the limit is {} MB. \
                 Your project archive is {:.1} MB. \
                 Run with `cargo shuttle --debug` to see which files are being packed."#,
                 CREATE_SERVICE_BODY_LIMIT / 1_000_000,
-                deployment_req.data.len() as f32 / 1_000_000f32,
+                archive.len() as f32 / 1_000_000f32,
             );
         }
 
         // End early for beta
         if self.beta {
-            let arch = client
-                .upload_archive_beta(project_name, deployment_req.data)
-                .await?;
+            let arch = client.upload_archive_beta(project_name, archive).await?;
             deployment_req_buildarch_beta.archive_version_id = arch.archive_version_id;
             deployment_req_buildarch_beta.build_meta = Some(BuildMetaBeta {
                 git_commit_id: deployment_req.git_commit_id,
@@ -2074,6 +2080,7 @@ impl Shuttle {
             return Ok(CommandOutcome::Ok);
         }
 
+        deployment_req.data = archive;
         let deployment = client
             .deploy(self.ctx.project_name(), deployment_req)
             .await

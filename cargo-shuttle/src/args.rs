@@ -168,6 +168,8 @@ pub enum DeploymentCommand {
         /// ID of deployment to get status for
         id: Option<String>,
     },
+    /// BETA: Stop running deployment(s)
+    Stop,
 }
 
 #[derive(Parser)]

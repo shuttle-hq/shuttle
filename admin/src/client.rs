@@ -1,6 +1,6 @@
 use anyhow::Result;
 use shuttle_api_client::ShuttleApiClient;
-use shuttle_common::models::{admin::ProjectResponse, stats, ToJson};
+use shuttle_common::models::{admin::ProjectResponse, stats};
 
 pub struct Client {
     pub inner: ShuttleApiClient,
@@ -15,17 +15,13 @@ impl Client {
 
     pub async fn revive(&self) -> Result<String> {
         self.inner
-            .post("/admin/revive", Option::<()>::None)
-            .await?
-            .to_json()
+            .post_json("/admin/revive", Option::<()>::None)
             .await
     }
 
     pub async fn destroy(&self) -> Result<String> {
         self.inner
-            .post("/admin/destroy", Option::<()>::None)
-            .await?
-            .to_json()
+            .post_json("/admin/destroy", Option::<()>::None)
             .await
     }
 

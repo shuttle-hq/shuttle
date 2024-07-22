@@ -3,7 +3,7 @@ use async_openai::Client;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use shuttle_service::{
-    CustomError, Error, IntoResource, ResourceFactory, ResourceInputBuilder, Secret,
+    CustomError, Error, IntoResource, ResourceFactory, ResourceInputBuilder,
 };
 
 pub use async_openai;
@@ -11,7 +11,7 @@ pub use async_openai;
 #[derive(Default, Serialize)]
 pub struct OpenAI {
     api_base: Option<String>,
-    api_key: Option<Secret<String>>,
+    api_key: Option<String>,
     org_id: Option<String>,
     project_id: Option<String>,
 }
@@ -22,7 +22,7 @@ impl OpenAI {
         self
     }
     pub fn api_key(mut self, api_key: &str) -> Self {
-        self.api_key = Some(api_key.to_string().into());
+        self.api_key = Some(api_key.to_string());
         self
     }
     pub fn org_id(mut self, org_id: &str) -> Self {
@@ -38,7 +38,7 @@ impl OpenAI {
 #[derive(Serialize, Deserialize)]
 pub struct Config {
     api_base: Option<String>,
-    api_key: Secret<String>,
+    api_key: String,
     org_id: Option<String>,
     project_id: Option<String>,
 }
@@ -65,7 +65,7 @@ impl ResourceInputBuilder for OpenAI {
 #[async_trait]
 impl IntoResource<Client<OpenAIConfig>> for Config {
     async fn into_resource(self) -> Result<Client<OpenAIConfig>, Error> {
-        let mut openai_config = OpenAIConfig::new().with_api_key(self.api_key.expose());
+        let mut openai_config = OpenAIConfig::new().with_api_key(self.api_key);
         if let Some(api_base) = self.api_base {
             openai_config = openai_config.with_api_base(api_base)
         }

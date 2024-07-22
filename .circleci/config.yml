@@ -622,11 +622,12 @@ workflows:
             parameters:
               path:
                 - resources/aws-rds
+                - resources/openai
+                - resources/opendal
                 - resources/persist
                 - resources/qdrant
                 - resources/shared-db
                 - resources/turso
-                - resources/opendal
                 - services/shuttle-actix-web
                 - services/shuttle-axum
                 - services/shuttle-poem
@@ -883,11 +884,12 @@ workflows:
             parameters:
               path:
                 - resources/aws-rds
+                - resources/openai
+                - resources/opendal
                 - resources/persist
                 - resources/qdrant
                 - resources/shared-db
                 - resources/turso
-                - resources/opendal
           name: publish-<< matrix.path >>
           requires:
             - publish-service

@@ -5,6 +5,7 @@ edition = "2021"
 publish = false
 
 [dependencies]
+shuttle-api-client = { workspace = true }
 shuttle-common = { workspace = true, features = ["models"] }
 shuttle-backends = { workspace = true }
 

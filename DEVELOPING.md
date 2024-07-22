@@ -27,6 +27,7 @@ and renewing SSL certificates through the acme client in the `gateway`.
 
 ### Libraries
 
+- `api-client` is a reqwest client for calling the backends.
 - `common` contains shared models and functions used by the other libraries and binaries.
 - `codegen` contains our proc-macro code which gets exposed to user services from `runtime`.
   The redirect through `runtime` is to make it available under the prettier name of `shuttle_runtime::main`.

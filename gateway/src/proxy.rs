@@ -32,7 +32,6 @@ use shuttle_common::models::error::{
 use thiserror::Error;
 use tokio::net::TcpSocket;
 use tokio::sync::mpsc::Sender;
-use tower_sanitize_path::SanitizePath;
 use tracing::{debug, debug_span, error, field, trace, Instrument};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
@@ -294,18 +293,17 @@ impl UserServiceBuilder {
             .user_binds_to
             .expect("a socket address to bind to is required");
 
-        let san = SanitizePath::sanitize_paths(
-            axum::Router::new()
-                .fallback(proxy) // catch all routes
-                .with_state(Arc::new(ProxyState {
-                    gateway: service.clone(),
-                    task_sender,
-                    public: public.clone(),
-                    project_cache: CacheManager::new(1024),
-                    domain_cache: CacheManager::new(256),
-                })),
-        );
-        let user_proxy = axum::ServiceExt::into_make_service_with_connect_info::<SocketAddr>(san);
+        let router = axum::Router::new()
+            .fallback(proxy) // catch all routes
+            .with_state(Arc::new(ProxyState {
+                gateway: service.clone(),
+                task_sender,
+                public: public.clone(),
+                project_cache: CacheManager::new(1024),
+                domain_cache: CacheManager::new(256),
+            }));
+        let user_proxy =
+            axum::ServiceExt::into_make_service_with_connect_info::<SocketAddr>(router);
 
         let bouncer = self.bouncer_binds_to.as_ref().map(|_| {
             axum::Router::new()

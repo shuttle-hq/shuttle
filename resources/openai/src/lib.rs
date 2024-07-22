@@ -2,9 +2,7 @@ use async_openai::config::OpenAIConfig;
 use async_openai::Client;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
-use shuttle_service::{
-    CustomError, Error, IntoResource, ResourceFactory, ResourceInputBuilder,
-};
+use shuttle_service::{CustomError, Error, IntoResource, ResourceFactory, ResourceInputBuilder};
 
 pub use async_openai;
 

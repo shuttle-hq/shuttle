@@ -1005,23 +1005,21 @@ dependencies = [
  "ignore",
  "indicatif",
  "indoc",
- "percent-encoding",
  "portpicker",
  "regex",
  "reqwest 0.11.27",
- "reqwest-middleware",
  "rexpect",
  "rmp-serde",
  "semver 1.0.23",
  "serde",
  "serde_json",
+ "shuttle-api-client",
  "shuttle-common",
  "shuttle-common-tests",
  "shuttle-proto",
  "shuttle-service",
  "strum 0.26.3",
  "tar",
- "task-local-extensions",
  "tempfile",
  "tokio",
  "tokio-tungstenite",
@@ -5371,18 +5369,38 @@ name = "shuttle-admin"
 version = "0.46.0"
 dependencies = [
  "anyhow",
- "bytes",
  "clap",
  "dirs",
- "reqwest 0.11.27",
- "serde",
  "serde_json",
+ "shuttle-api-client",
  "shuttle-backends",
  "shuttle-common",
  "tokio",
  "toml",
  "tracing",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "shuttle-api-client"
+version = "0.46.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "headers",
+ "percent-encoding",
+ "reqwest 0.11.27",
+ "reqwest-middleware",
+ "rmp-serde",
+ "serde",
+ "serde_json",
+ "shuttle-common",
+ "task-local-extensions",
+ "tokio",
+ "tokio-tungstenite",
+ "tracing",
+ "url",
+ "uuid",
 ]
 
 [[package]]

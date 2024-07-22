@@ -872,6 +872,7 @@ workflows:
           matrix:
             parameters:
               path:
+                - api-client
                 - proto
                 - service
           name: publish-<< matrix.path >>
@@ -898,6 +899,7 @@ workflows:
                 - cargo-shuttle
           name: publish-<< matrix.path >>
           requires:
+            - publish-api-client
             - publish-service
             - publish-proto
       - publish-crate:

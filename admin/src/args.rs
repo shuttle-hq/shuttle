@@ -39,6 +39,13 @@ pub enum Command {
 
     /// Forcefully idle CCH projects.
     IdleCch,
+
+    SetBetaAccess {
+        user_id: String,
+    },
+    UnsetBetaAccess {
+        user_id: String,
+    },
 }
 
 #[derive(Subcommand, Debug)]

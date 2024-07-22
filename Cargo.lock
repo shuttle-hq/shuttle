@@ -5371,11 +5371,8 @@ name = "shuttle-admin"
 version = "0.46.0"
 dependencies = [
  "anyhow",
- "bytes",
  "clap",
  "dirs",
- "reqwest 0.11.27",
- "serde",
  "serde_json",
  "shuttle-api-client",
  "shuttle-backends",

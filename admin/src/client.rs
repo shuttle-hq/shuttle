@@ -95,4 +95,16 @@ impl Client {
     pub async fn clear_load(&self) -> Result<stats::LoadResponse> {
         self.inner.delete_json("/admin/stats/load").await
     }
+
+    pub async fn set_beta_access(&self, user_id: &str, access: bool) -> Result<()> {
+        if access {
+            self.inner
+                .put(format!("/users/{user_id}/beta"), Option::<()>::None)
+                .await?;
+        } else {
+            self.inner.delete(format!("/users/{user_id}/beta")).await?;
+        }
+
+        Ok(())
+    }
 }

@@ -1,4 +1,3 @@
-use clap::Parser;
 use shuttle_admin::{
     args::{AcmeCommand, Args, Command, StatsCommand},
     client::Client,
@@ -11,7 +10,7 @@ use tracing::trace;
 async fn main() {
     tracing_subscriber::fmt::init();
 
-    let args = Args::parse();
+    let args: Args = clap::Parser::parse();
 
     trace!(?args, "starting with args");
 
@@ -103,6 +102,14 @@ async fn main() {
                 .await
                 .unwrap();
             println!("Changed project owner: {project_name} -> {new_user_id}")
+        }
+        Command::SetBetaAccess { user_id } => {
+            client.set_beta_access(&user_id, true).await.unwrap();
+            println!("Set user {user_id} beta access");
+        }
+        Command::UnsetBetaAccess { user_id } => {
+            client.set_beta_access(&user_id, false).await.unwrap();
+            println!("Unset user {user_id} beta access");
         }
     };
 }

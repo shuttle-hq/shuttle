@@ -36,13 +36,7 @@ pub trait ClaimExt {
     async fn owns_project<G: ProjectsDal>(
         &self,
         projects_dal: &G,
-        project_name: &str,
-    ) -> Result<bool, client::Error>;
-    /// Verify if the claim subject has ownership of a project.
-    async fn owns_project_id<G: ProjectsDal>(
-        &self,
-        projects_dal: &G,
-        project_id: &str,
+        project_ident: &str,
     ) -> Result<bool, client::Error>;
 }
 
@@ -84,20 +78,9 @@ impl ClaimExt for Claim {
     async fn owns_project<G: ProjectsDal>(
         &self,
         projects_dal: &G,
-        project_name: &str,
+        project_ident: &str,
     ) -> Result<bool, client::Error> {
         let token = self.token.as_ref().expect("token to be set");
-        projects_dal.head_user_project(token, project_name).await
-    }
-
-    #[instrument(skip_all)]
-    async fn owns_project_id<G: ProjectsDal>(
-        &self,
-        projects_dal: &G,
-        project_id: &str,
-    ) -> Result<bool, client::Error> {
-        let token = self.token.as_ref().expect("token to be set");
-        let projects = projects_dal.get_user_project_ids(token).await?;
-        Ok(projects.iter().any(|id| id == project_id))
+        projects_dal.head_user_project(token, project_ident).await
     }
 }

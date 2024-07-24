@@ -117,7 +117,7 @@ where
         if !claim.is_admin()
             && !claim.is_deployer()
             && !claim
-                .owns_project_id(&self.gateway_client, project_id)
+                .owns_project(&self.gateway_client, project_id)
                 .await
                 .map_err(|_| Status::internal("could not verify project ownership"))?
         {

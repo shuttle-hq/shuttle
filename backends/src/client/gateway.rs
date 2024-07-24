@@ -52,10 +52,14 @@ impl ProjectsDal for ServicesApiClient {
     }
 
     #[instrument(skip_all)]
-    async fn head_user_project(&self, user_token: &str, project_name: &str) -> Result<bool, Error> {
+    async fn head_user_project(
+        &self,
+        user_token: &str,
+        project_ident: &str,
+    ) -> Result<bool, Error> {
         self.request_raw(
             Method::HEAD,
-            format!("projects/{}", project_name).as_str(),
+            format!("projects/{}", project_ident).as_str(),
             None::<()>,
             Some(header_map_with_bearer(user_token)),
         )

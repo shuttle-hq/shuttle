@@ -82,17 +82,20 @@ where
         let RouterState { service, .. } = RouterState::from_ref(state);
 
         // Enables checking HEAD at /projects/{ulid}, used by res-rec to check permission for a proj id
-        let scope = if let Ok(Path(ulid)) = Path::<Ulid>::from_request_parts(parts, state).await {
-            let p = service.find_project_by_id(&ulid.to_string()).await?;
-            ProjectName::new(&p.name).expect("valid project name")
-        } else {
-            // Normal check for project name in path
-            match Path::<ProjectName>::from_request_parts(parts, state).await {
-                Ok(Path(p)) => p,
-                Err(_) => Path::<(ProjectName, String)>::from_request_parts(parts, state)
-                    .await
-                    .map(|Path((p, _))| p)
-                    .map_err(|_| InvalidProjectName)?,
+        let scope = match Path::<Ulid>::from_request_parts(parts, state).await {
+            Ok(Path(ulid)) => {
+                let p = service.find_project_by_id(&ulid.to_string()).await?;
+                ProjectName::new(&p.name).expect("valid project name")
+            }
+            Err(_) => {
+                // Normal check for project name in path
+                match Path::<ProjectName>::from_request_parts(parts, state).await {
+                    Ok(Path(p)) => p,
+                    Err(_) => Path::<(ProjectName, String)>::from_request_parts(parts, state)
+                        .await
+                        .map(|Path((p, _))| p)
+                        .map_err(|_| InvalidProjectName)?,
+                }
             }
         };
 

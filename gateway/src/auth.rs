@@ -9,6 +9,7 @@ use shuttle_common::claims::Claim;
 use shuttle_common::models::error::{ApiError, InvalidProjectName, ProjectNotFound};
 use thiserror::Error;
 use tracing::error;
+use ulid::Ulid;
 
 use crate::api::latest::RouterState;
 use crate::service;
@@ -78,17 +79,24 @@ where
             .await
             .map_err(Error::StatusCode)?;
 
-        let scope = match Path::<ProjectName>::from_request_parts(parts, state).await {
-            Ok(Path(p)) => p,
-            Err(_) => Path::<(ProjectName, String)>::from_request_parts(parts, state)
-                .await
-                .map(|Path((p, _))| p)
-                .map_err(|_| InvalidProjectName)?,
-        };
-
         let RouterState { service, .. } = RouterState::from_ref(state);
 
-        let allowed = claim.is_admin()
+        // Enables checking HEAD at /projects/{ulid}, used by res-rec to check permission for a proj id
+        let scope = if let Ok(Path(ulid)) = Path::<Ulid>::from_request_parts(parts, state).await {
+            let p = service.find_project_by_id(&ulid.to_string()).await?;
+            ProjectName::new(&p.name).expect("valid project name")
+        } else {
+            // Normal check for project name in path
+            match Path::<ProjectName>::from_request_parts(parts, state).await {
+                Ok(Path(p)) => p,
+                Err(_) => Path::<(ProjectName, String)>::from_request_parts(parts, state)
+                    .await
+                    .map(|Path((p, _))| p)
+                    .map_err(|_| InvalidProjectName)?,
+            }
+        };
+
+        if claim.is_admin()
             || claim.is_deployer()
             || service
                 .permit_client
@@ -97,9 +105,8 @@ where
                     &service.find_project_by_name(&scope).await?.id,
                     "develop", // TODO: make this configurable per endpoint?
                 )
-                .await?;
-
-        if allowed {
+                .await?
+        {
             Ok(Self { claim, scope })
         } else {
             Err(ProjectNotFound(scope.to_string()).into())

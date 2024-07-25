@@ -10,7 +10,6 @@ use std::{
 
 use anyhow::Context;
 use async_trait::async_trait;
-use core::future::Future;
 use shuttle_common::{extract_propagation::ExtractPropagationLayer, secrets::Secret};
 use shuttle_proto::runtime::{
     runtime_server::{Runtime, RuntimeServer},
@@ -23,144 +22,35 @@ use tokio::sync::{
     mpsc, oneshot,
 };
 use tokio_stream::wrappers::ReceiverStream;
-use tokio_util::sync::CancellationToken;
 use tonic::{transport::Server, Request, Response, Status};
 
-use crate::version;
+use crate::{
+    __internals::{Loader, Runner},
+    version,
+};
 
-#[derive(Default)]
-struct Args {
-    /// Enable compatibility with beta platform
-    beta: bool,
-    /// Alpha (required): Port to open gRPC server on
-    port: Option<u16>,
-    /// Beta (required): Address to bind the gRPC server to
-    address: Option<SocketAddr>,
-}
-
-impl Args {
-    // uses simple arg parsing logic instead of clap to reduce dependency weight
-    fn parse() -> anyhow::Result<Self> {
-        let mut args = Self::default();
-
-        // The first argument is the path of the executable
-        let mut args_iter = std::env::args().skip(1);
-
-        while let Some(arg) = args_iter.next() {
-            match arg.as_str() {
-                "--beta" => {
-                    args.beta = true;
-                }
-                "--port" => {
-                    let port = args_iter
-                        .next()
-                        .context("missing port value")?
-                        .parse()
-                        .context("invalid port value")?;
-                    args.port = Some(port);
-                }
-                "--address" => {
-                    let address = args_iter
-                        .next()
-                        .context("missing address value")?
-                        .parse()
-                        .context("invalid address value")?;
-                    args.address = Some(address);
-                }
-                _ => {}
-            }
-        }
-
-        if args.beta {
-            if args.address.is_none() {
-                return Err(anyhow::anyhow!("--address is required with --beta"));
-            }
-        } else if args.port.is_none() {
-            return Err(anyhow::anyhow!("--port is required"));
-        }
-
-        Ok(args)
-    }
-}
-
-pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + Send + 'static) {
-    // `--version` overrides any other arguments. Used by cargo-shuttle to check compatibility on local runs.
-    if std::env::args().any(|arg| arg == "--version") {
-        println!("{}", version());
-        return;
-    }
-
-    let args = match Args::parse() {
-        Ok(args) => args,
-        Err(e) => {
-            eprintln!("Runtime received malformed or incorrect args, {e}");
-            let help_str = "[HINT]: Run your Shuttle app with `cargo shuttle run`";
-            let wrapper_str = "-".repeat(help_str.len());
-            eprintln!("{wrapper_str}\n{help_str}\n{wrapper_str}");
-            return;
-        }
-    };
-
-    println!("{} {} executable started", crate::NAME, crate::VERSION);
-
-    // this is handled after arg parsing to not interfere with --version above
-    #[cfg(feature = "setup-tracing")]
-    {
-        use colored::Colorize;
-        use tracing_subscriber::prelude::*;
-
-        colored::control::set_override(true); // always apply color
-
-        tracing_subscriber::registry()
-            .with(tracing_subscriber::fmt::layer().without_time())
-            .with(
-                // let user override RUST_LOG in local run if they want to
-                tracing_subscriber::EnvFilter::try_from_default_env()
-                    // otherwise use our default
-                    .or_else(|_| tracing_subscriber::EnvFilter::try_new("info,shuttle=trace"))
-                    .unwrap(),
-            )
-            .init();
-
-        println!(
-            "{}",
-            "Shuttle's default tracing subscriber is initialized!".yellow(),
-        );
-        println!("To disable it and use your own, check the docs: https://docs.shuttle.rs/configuration/logs");
-    }
-
+pub async fn start(
+    port: u16,
+    loader: impl Loader + Send + 'static,
+    runner: impl Runner + Send + 'static,
+) {
     // where to serve the gRPC control layer
-    let addr = if args.beta {
-        args.address.unwrap()
-    } else {
-        SocketAddr::new(Ipv4Addr::LOCALHOST.into(), args.port.unwrap())
-    };
+    let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port);
 
     let mut server_builder = Server::builder()
         .http2_keepalive_interval(Some(Duration::from_secs(60)))
         .layer(ExtractPropagationLayer);
 
-    // A cancellation token we can use to kill the runtime if it does not start in time.
-    let token = CancellationToken::new();
-    let cloned_token = token.clone();
-
     let router = {
-        let alpha = Alpha::new(args.beta, loader, runner, token);
+        let alpha = Alpha::new(loader, runner);
 
         let svc = RuntimeServer::new(alpha);
         server_builder.add_service(svc)
     };
 
-    tokio::select! {
-        res = router.serve(addr) => {
-            match res{
-                Ok(_) => println!("router completed on its own"),
-                Err(e) => panic!("Error while serving address {addr}: {e}")
-            }
-        }
-        _ = cloned_token.cancelled() => {
-            panic!("runtime future was cancelled")
-        }
+    match router.serve(addr).await {
+        Ok(_) => println!("router completed on its own"),
+        Err(e) => panic!("Error while serving address {addr}: {e}"),
     }
 }
 
@@ -171,8 +61,6 @@ pub enum State {
 }
 
 pub struct Alpha<L, R> {
-    /// alter behaviour to interact with the new platform
-    beta: bool,
     // Mutexes are for interior mutability
     stopped_tx: Sender<(StopReason, String)>,
     kill_tx: Mutex<Option<oneshot::Sender<String>>>,
@@ -181,60 +69,19 @@ pub struct Alpha<L, R> {
     /// The current state of the runtime, which is used by the ECS task to determine if the runtime
     /// is healthy.
     state: Arc<Mutex<State>>,
-    // A cancellation token we can use to kill the runtime if it does not start in time.
-    cancellation_token: CancellationToken,
 }
 
 impl<L, R> Alpha<L, R> {
-    pub fn new(beta: bool, loader: L, runner: R, cancellation_token: CancellationToken) -> Self {
+    pub fn new(loader: L, runner: R) -> Self {
         let (stopped_tx, _stopped_rx) = broadcast::channel(10);
 
         Self {
-            beta,
             stopped_tx,
             kill_tx: Mutex::new(None),
             loader: Mutex::new(Some(loader)),
             runner: Mutex::new(Some(runner)),
             state: Arc::new(Mutex::new(State::Unhealthy)),
-            cancellation_token,
         }
-    }
-}
-
-#[async_trait]
-pub trait Loader {
-    async fn load(self, factory: ResourceFactory) -> Result<Vec<Vec<u8>>, shuttle_service::Error>;
-}
-
-#[async_trait]
-impl<F, O> Loader for F
-where
-    F: FnOnce(ResourceFactory) -> O + Send,
-    O: Future<Output = Result<Vec<Vec<u8>>, shuttle_service::Error>> + Send,
-{
-    async fn load(self, factory: ResourceFactory) -> Result<Vec<Vec<u8>>, shuttle_service::Error> {
-        (self)(factory).await
-    }
-}
-
-#[async_trait]
-pub trait Runner {
-    type Service: Service;
-
-    async fn run(self, resources: Vec<Vec<u8>>) -> Result<Self::Service, shuttle_service::Error>;
-}
-
-#[async_trait]
-impl<F, O, S> Runner for F
-where
-    F: FnOnce(Vec<Vec<u8>>) -> O + Send,
-    O: Future<Output = Result<S, shuttle_service::Error>> + Send,
-    S: Service,
-{
-    type Service = S;
-
-    async fn run(self, resources: Vec<Vec<u8>>) -> Result<Self::Service, shuttle_service::Error> {
-        (self)(resources).await
     }
 }
 
@@ -301,24 +148,6 @@ where
         };
 
         *self.state.lock().unwrap() = State::Loading;
-
-        let state = self.state.clone();
-        let cancellation_token = self.cancellation_token.clone();
-
-        // State and cancellation is not used in alpha
-        if self.beta {
-            // Ensure that the runtime is set to unhealthy if it doesn't reach the running state after
-            // it has sent a load response, so that the ECS task will fail.
-            tokio::spawn(async move {
-                // Note: The timeout is quite long since RDS can take a long time to provision.
-                tokio::time::sleep(Duration::from_secs(270)).await;
-                if !matches!(state.lock().unwrap().deref(), State::Running) {
-                    println!("the runtime failed to enter the running state before timing out");
-
-                    cancellation_token.cancel();
-                }
-            });
-        }
 
         Ok(Response::new(LoadResponse {
             success: true,

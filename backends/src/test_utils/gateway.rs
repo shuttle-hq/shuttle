@@ -68,7 +68,7 @@ pub async fn get_mocked_gateway_server() -> MockServer {
 
     let p = projects.clone();
     Mock::given(method(http::Method::HEAD))
-        .and(path_regex("/projects/[a-z0-9-]+"))
+        .and(path_regex("/projects/[a-zA-Z0-9-]+"))
         .respond_with(move |req: &Request| {
             let Some(bearer) = req.headers.get("AUTHORIZATION") else {
                 return ResponseTemplate::new(401);
@@ -77,7 +77,9 @@ pub async fn get_mocked_gateway_server() -> MockServer {
 
             let user = bearer.to_str().unwrap().split_whitespace().nth(1).unwrap();
 
-            if p.iter().any(|p| p.owner_id == user && p.name == project) {
+            if p.iter()
+                .any(|p| p.owner_id == user && (p.name == project || p.id == project))
+            {
                 ResponseTemplate::new(200)
             } else {
                 ResponseTemplate::new(401)

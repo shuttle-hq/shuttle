@@ -130,16 +130,26 @@ impl Shuttle {
             if matches!(
                 args.cmd,
                 Command::Project(ProjectCommand::Stop { .. } | ProjectCommand::Restart { .. })
-                    | Command::Status
             ) {
-                unimplemented!("This command is deprecated on the beta platform");
+                eprintln!("This command is discontinued on the beta platform.");
+                return Ok(CommandOutcome::Ok);
+            }
+            if matches!(args.cmd, Command::Status) {
+                eprintln!("This command is deprecated on the beta platform. Use `deployment status` instead.");
+                return Ok(CommandOutcome::Ok);
+            }
+            if matches!(args.cmd, Command::Stop) {
+                eprintln!("This command is deprecated on the beta platform. Use `deployment stop` instead.");
+                return Ok(CommandOutcome::Ok);
             }
             if matches!(args.cmd, Command::Clean) {
-                unimplemented!("This command is not yet implemented on the beta platform");
+                eprintln!("This command is not yet implemented on the beta platform.");
+                return Ok(CommandOutcome::Ok);
             }
             eprintln!("INFO: Using beta platform API");
         } else if matches!(args.cmd, Command::Deployment(DeploymentCommand::Stop)) {
-            unimplemented!("This command is not supported on the legacy platform");
+            eprintln!("This command is not supported on the legacy platform.");
+            return Ok(CommandOutcome::Ok);
         }
         if let Some(ref url) = args.api_url {
             if url != API_URL_DEFAULT {

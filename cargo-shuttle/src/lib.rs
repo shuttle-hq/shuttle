@@ -2570,22 +2570,41 @@ impl Shuttle {
         let client = self.client.as_ref().unwrap();
 
         if !no_confirm {
-            println!(
-                "{}",
-                formatdoc!(
-                    r#"
-                    WARNING:
-                        Are you sure you want to delete "{}"?
-                        This will...
-                        - Delete any databases, secrets, and shuttle-persist data in this project.
-                        - Delete any custom domains linked to this project.
-                        - Release the project name from your account.
-                        This action is permanent."#,
-                    self.ctx.project_name()
-                )
-                .bold()
-                .red()
-            );
+            if self.beta {
+                println!(
+                    "{}",
+                    formatdoc!(
+                        r#"
+                        WARNING:
+                            Are you sure you want to delete "{}"?
+                            This will...
+                            - Shut down you service.
+                            - Delete any databases and secrets in this project.
+                            - Delete any custom domains linked to this project.
+                            This action is permanent."#,
+                        self.ctx.project_name()
+                    )
+                    .bold()
+                    .red()
+                );
+            } else {
+                println!(
+                    "{}",
+                    formatdoc!(
+                        r#"
+                        WARNING:
+                            Are you sure you want to delete "{}"?
+                            This will...
+                            - Delete any databases, secrets, and shuttle-persist data in this project.
+                            - Delete any custom domains linked to this project.
+                            - Release the project name from your account.
+                            This action is permanent."#,
+                        self.ctx.project_name()
+                    )
+                    .bold()
+                    .red()
+                );
+            }
             if !Confirm::with_theme(&ColorfulTheme::default())
                 .with_prompt("Are you sure?")
                 .default(false)

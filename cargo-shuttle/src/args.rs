@@ -155,8 +155,8 @@ pub enum DeploymentCommand {
         /// Which page to display
         page: u32,
 
-        #[arg(long, default_value = "10")]
-        /// How many projects per page to display
+        #[arg(long, default_value = "10", visible_alias = "per-page")]
+        /// How many deployments per page to display
         limit: u32,
 
         #[arg(long, default_value_t = false)]
@@ -180,11 +180,8 @@ pub enum ResourceCommand {
         /// Output table without borders
         raw: bool,
 
-        #[arg(
-            long,
-            default_value_t = false,
-            help = "Show secrets from resources (e.g. a password in a connection string)"
-        )]
+        #[arg(long, default_value_t = false)]
+        /// Show secrets from resources (e.g. a password in a connection string)
         show_secrets: bool,
     },
     /// Delete a resource
@@ -215,12 +212,10 @@ pub enum ProjectCommand {
     Restart(ProjectStartArgs),
     /// List all projects you have access to
     List {
-        #[arg(long, default_value = "1")]
-        /// (deprecated) Which page to display
+        // deprecated args, kept around to not break
+        #[arg(long, hide = true)]
         page: u32,
-
-        #[arg(long, default_value = "15")]
-        /// (deprecated) How many projects per page to display
+        #[arg(long, hide = true)]
         limit: u32,
 
         #[arg(long, default_value_t = false)]

@@ -935,7 +935,7 @@ impl Shuttle {
 
     async fn logs_beta(&self, args: LogsArgs) -> Result<CommandOutcome> {
         if args.follow {
-            println!("Streamed logs are not yet supported on beta");
+            eprintln!("Streamed logs are not yet supported on beta.");
             return Ok(CommandOutcome::Ok);
         }
         // TODO: implement logs range
@@ -946,15 +946,16 @@ impl Shuttle {
         } else {
             let id = if args.latest {
                 // Find latest deployment (not always an active one)
-                let deployments = client
-                    .get_deployments_beta(proj_name)
-                    .await
-                    .map_err(|err| {
-                        suggestions::logs::get_logs_failure(
-                            err,
-                            "Fetching the latest deployment failed",
-                        )
-                    })?;
+                let deployments =
+                    client
+                        .get_deployments_beta(proj_name, 1, 1)
+                        .await
+                        .map_err(|err| {
+                            suggestions::logs::get_logs_failure(
+                                err,
+                                "Fetching the latest deployment failed",
+                            )
+                        })?;
                 let most_recent = deployments.first().context("No deployments found")?;
                 eprintln!("Getting logs from: {}", most_recent.id);
                 most_recent.id.to_string()
@@ -1085,10 +1086,16 @@ impl Shuttle {
         let proj_name = self.ctx.project_name();
 
         let deployments_len = if self.beta {
-            let deployments = client
-                .get_deployments_beta(proj_name)
+            let mut deployments = client
+                .get_deployments_beta(proj_name, page as i32, limit as i32)
                 .await
                 .map_err(suggestions::deployment::get_deployments_list_failure)?;
+            let page_hint = if deployments.len() == limit as usize {
+                deployments.pop();
+                true
+            } else {
+                false
+            };
             let table = deployments_table_beta(&deployments);
 
             println!(
@@ -1096,6 +1103,10 @@ impl Shuttle {
                 format!("Deployments in project '{}'", proj_name).bold()
             );
             println!("{table}");
+            if page_hint {
+                println!("View the next page using `--page {}`", page + 1);
+            }
+
             deployments.len()
         } else {
             let mut deployments = client
@@ -1109,8 +1120,8 @@ impl Shuttle {
                 false
             };
             let table = get_deployments_table(&deployments, proj_name, page, raw, page_hint);
-
             println!("{table}");
+
             deployments.len()
         };
 

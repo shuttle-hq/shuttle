@@ -356,8 +356,14 @@ impl ShuttleApiClient {
     pub async fn get_deployments_beta(
         &self,
         project: &str,
+        page: i32,
+        per_page: i32,
     ) -> Result<Vec<deployment::ResponseBeta>> {
-        let path = format!("/projects/{project}/deployments");
+        let path = format!(
+            "/projects/{project}/deployments?page={}&per_page={}",
+            page.saturating_sub(1).max(0),
+            per_page.max(1),
+        );
 
         self.get_json(path).await
     }

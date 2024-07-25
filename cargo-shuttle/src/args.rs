@@ -148,6 +148,13 @@ pub enum GenerateCommand {
 }
 
 #[derive(Parser)]
+pub struct TableArgs {
+    #[arg(long, default_value_t = false)]
+    /// Output tables without borders
+    pub raw: bool,
+}
+
+#[derive(Parser)]
 pub enum DeploymentCommand {
     /// List all the deployments for a service
     List {
@@ -159,9 +166,8 @@ pub enum DeploymentCommand {
         /// How many deployments per page to display
         limit: u32,
 
-        #[arg(long, default_value_t = false)]
-        /// Output table without borders
-        raw: bool,
+        #[command(flatten)]
+        table: TableArgs,
     },
     /// View status of a deployment
     Status {
@@ -176,9 +182,8 @@ pub enum DeploymentCommand {
 pub enum ResourceCommand {
     /// List all the resources for a project
     List {
-        #[arg(long, default_value_t = false)]
-        /// Output table without borders
-        raw: bool,
+        #[command(flatten)]
+        table: TableArgs,
 
         #[arg(long, default_value_t = false)]
         /// Show secrets from resources (e.g. a password in a connection string)
@@ -214,13 +219,12 @@ pub enum ProjectCommand {
     List {
         // deprecated args, kept around to not break
         #[arg(long, hide = true)]
-        page: u32,
+        page: Option<u32>,
         #[arg(long, hide = true)]
-        limit: u32,
+        limit: Option<u32>,
 
-        #[arg(long, default_value_t = false)]
-        /// Output table without borders
-        raw: bool,
+        #[command(flatten)]
+        table: TableArgs,
     },
     /// Delete a project and all linked data
     Delete(ConfirmationArgs),

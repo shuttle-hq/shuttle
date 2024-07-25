@@ -15,7 +15,7 @@ use std::process::exit;
 use std::str::FromStr;
 
 use anyhow::{anyhow, bail, Context, Result};
-use args::{ConfirmationArgs, GenerateCommand};
+use args::{ConfirmationArgs, GenerateCommand, TableArgs};
 use clap::{parser::ValueSource, CommandFactory, FromArgMatches};
 use clap_complete::{generate, Shell};
 use clap_mangen::Man;
@@ -244,8 +244,8 @@ impl Shuttle {
                 }
             }
             Command::Deployment(cmd) => match cmd {
-                DeploymentCommand::List { page, limit, raw } => {
-                    self.deployments_list(page, limit, raw).await
+                DeploymentCommand::List { page, limit, table } => {
+                    self.deployments_list(page, limit, table).await
                 }
                 DeploymentCommand::Status { id } => self.deployment_get(id).await,
                 DeploymentCommand::Stop => self.stop_beta().await,
@@ -253,9 +253,10 @@ impl Shuttle {
             Command::Stop => self.stop().await,
             Command::Clean => self.clean().await,
             Command::Resource(cmd) => match cmd {
-                ResourceCommand::List { raw, show_secrets } => {
-                    self.resources_list(raw, show_secrets).await
-                }
+                ResourceCommand::List {
+                    table,
+                    show_secrets,
+                } => self.resources_list(table, show_secrets).await,
                 ResourceCommand::Delete {
                     resource_type,
                     confirmation: ConfirmationArgs { yes },
@@ -279,7 +280,7 @@ impl Shuttle {
                         self.project_status(follow).await
                     }
                 }
-                ProjectCommand::List { raw, .. } => self.projects_list(raw).await,
+                ProjectCommand::List { table, .. } => self.projects_list(table).await,
                 ProjectCommand::Stop => self.project_stop().await,
                 ProjectCommand::Delete(ConfirmationArgs { yes }) => self.project_delete(yes).await,
             },
@@ -956,19 +957,21 @@ impl Shuttle {
                                 "Fetching the latest deployment failed",
                             )
                         })?;
-                let most_recent = deployments.first().context("No deployments found")?;
+                let Some(most_recent) = deployments.first() else {
+                    println!("No deployments found");
+                    return Ok(CommandOutcome::Ok);
+                };
                 eprintln!("Getting logs from: {}", most_recent.id);
                 most_recent.id.to_string()
             } else if let Some(id) = args.id {
                 id
             } else {
-                let d = client.get_current_deployment_beta(proj_name).await?;
-                let Some(d) = d else {
-                    println!("No deployment found");
+                let Some(current) = client.get_current_deployment_beta(proj_name).await? else {
+                    println!("No deployments found");
                     return Ok(CommandOutcome::Ok);
                 };
-                eprintln!("Getting logs from: {}", d.id);
-                d.id
+                eprintln!("Getting logs from: {}", current.id);
+                current.id
             };
             client.get_deployment_logs_beta(proj_name, &id).await?.logs
         };
@@ -1075,7 +1078,12 @@ impl Shuttle {
         Ok(CommandOutcome::Ok)
     }
 
-    async fn deployments_list(&self, page: u32, limit: u32, raw: bool) -> Result<CommandOutcome> {
+    async fn deployments_list(
+        &self,
+        page: u32,
+        limit: u32,
+        table_args: TableArgs,
+    ) -> Result<CommandOutcome> {
         let client = self.client.as_ref().unwrap();
         if limit == 0 {
             println!();
@@ -1096,7 +1104,7 @@ impl Shuttle {
             } else {
                 false
             };
-            let table = deployments_table_beta(&deployments);
+            let table = deployments_table_beta(&deployments, table_args.raw);
 
             println!(
                 "{}",
@@ -1119,7 +1127,8 @@ impl Shuttle {
             } else {
                 false
             };
-            let table = get_deployments_table(&deployments, proj_name, page, raw, page_hint);
+            let table =
+                get_deployments_table(&deployments, proj_name, page, table_args.raw, page_hint);
             println!("{table}");
 
             deployments.len()
@@ -1175,7 +1184,11 @@ impl Shuttle {
         Ok(CommandOutcome::Ok)
     }
 
-    async fn resources_list(&self, raw: bool, show_secrets: bool) -> Result<CommandOutcome> {
+    async fn resources_list(
+        &self,
+        table_args: TableArgs,
+        show_secrets: bool,
+    ) -> Result<CommandOutcome> {
         let client = self.client.as_ref().unwrap();
         let resources = if self.beta {
             client
@@ -1186,10 +1199,11 @@ impl Shuttle {
         }
         .map_err(suggestions::resources::get_service_resources_failure)?;
 
+        // TODO: Beta table formats
         let table = get_resource_tables(
             &resources,
             self.ctx.project_name(),
-            raw,
+            table_args.raw,
             show_secrets,
             self.beta,
         );
@@ -2403,7 +2417,7 @@ impl Shuttle {
         Ok(CommandOutcome::Ok)
     }
 
-    async fn projects_list(&self, raw: bool) -> Result<CommandOutcome> {
+    async fn projects_list(&self, table_args: TableArgs) -> Result<CommandOutcome> {
         let client = self.client.as_ref().unwrap();
 
         let projects_table = if self.beta {
@@ -2420,6 +2434,7 @@ impl Shuttle {
                         )
                     })?
                     .projects,
+                table_args.raw,
             )
         } else {
             project::get_projects_table(
@@ -2431,7 +2446,7 @@ impl Shuttle {
                         "getting the projects list fails repeatedly",
                     )
                 })?,
-                raw,
+                table_args.raw,
             )
         };
 
@@ -2454,7 +2469,7 @@ impl Shuttle {
                         )
                     })?
                     .projects;
-                project::get_projects_table_beta(&team_projects)
+                project::get_projects_table_beta(&team_projects, table_args.raw)
             } else {
                 let team_projects =
                     client
@@ -2468,7 +2483,7 @@ impl Shuttle {
                                 "getting the team projects list fails repeatedly",
                             )
                         })?;
-                project::get_projects_table(&team_projects, raw)
+                project::get_projects_table(&team_projects, table_args.raw)
             };
 
             println!("{}", format!("{}'s Projects", team.display_name).bold());

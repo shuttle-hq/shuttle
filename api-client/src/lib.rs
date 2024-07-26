@@ -9,11 +9,13 @@ use reqwest::header::HeaderMap;
 use reqwest::Response;
 use reqwest_middleware::{ClientWithMiddleware, RequestBuilder};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use shuttle_common::log::{LogsRange, LogsResponseBeta};
 use shuttle_common::models::deployment::{
     DeploymentRequest, DeploymentRequestBeta, UploadArchiveResponseBeta,
 };
 use shuttle_common::models::{deployment, project, service, team, user, ToJson};
+use shuttle_common::resource::{ProvisionResourceRequest, ShuttleResourceOutput};
 use shuttle_common::{resource, LogItem, VersionInfo};
 use tokio::net::TcpStream;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
@@ -206,6 +208,14 @@ impl ShuttleApiClient {
         let r#type = utf8_percent_encode(&r#type, percent_encoding::NON_ALPHANUMERIC).to_owned();
 
         self.delete_json(format!("/projects/{project}/resources/{}", r#type))
+            .await
+    }
+    pub async fn provision_resource_beta(
+        &self,
+        project: &str,
+        req: ProvisionResourceRequest,
+    ) -> Result<ShuttleResourceOutput<Value>> {
+        self.post_json(format!("/projects/{project}/resources"), Some(req))
             .await
     }
 

@@ -10,6 +10,7 @@ description = "Runtime to start and manage any service that runs on shuttle"
 doctest = false
 
 [dependencies]
+shuttle-api-client = { workspace = true }
 shuttle-codegen = { workspace = true }
 shuttle-common = { workspace = true, features = ["extract_propagation"] }
 shuttle-proto = { workspace = true, features = ["runtime"] }

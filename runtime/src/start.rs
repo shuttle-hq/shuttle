@@ -11,8 +11,8 @@ struct Args {
     beta: bool,
     /// Alpha (required): Port to open gRPC server on
     port: Option<u16>,
-    /// Beta (required): Address of the resource API
-    api: Option<String>,
+    /// Beta (required): Run the app (allows erroring when `cargo run` is used)
+    run: bool,
 }
 
 impl Args {
@@ -25,9 +25,6 @@ impl Args {
 
         while let Some(arg) = args_iter.next() {
             match arg.as_str() {
-                "--beta" => {
-                    args.beta = true;
-                }
                 "--port" => {
                     let port = args_iter
                         .next()
@@ -36,17 +33,18 @@ impl Args {
                         .context("invalid port value")?;
                     args.port = Some(port);
                 }
-                "--api" => {
-                    let address = args_iter.next().context("missing address value")?;
-                    args.api = Some(address);
+                "--run" => {
+                    args.run = true;
                 }
                 _ => {}
             }
         }
 
+        args.beta = std::env::var("SHUTTLE_BETA").is_ok();
+
         if args.beta {
-            if args.api.is_none() {
-                return Err(anyhow::anyhow!("--api is required with --beta"));
+            if !args.run {
+                return Err(anyhow::anyhow!("--run is required with --beta"));
             }
         } else if args.port.is_none() {
             return Err(anyhow::anyhow!("--port is required"));
@@ -66,7 +64,7 @@ pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + S
     let args = match Args::parse() {
         Ok(args) => args,
         Err(e) => {
-            eprintln!("Runtime received malformed or incorrect args: {e}");
+            eprintln!("Runtime failed to parse args: {e}");
             let help_str = "[HINT]: Run your Shuttle app with `cargo shuttle run`";
             let wrapper_str = "-".repeat(help_str.len());
             eprintln!("{wrapper_str}\n{help_str}\n{wrapper_str}");

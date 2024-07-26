@@ -5792,6 +5792,7 @@ dependencies = [
  "portpicker",
  "serde",
  "serde_json",
+ "shuttle-api-client",
  "shuttle-codegen",
  "shuttle-common",
  "shuttle-proto",

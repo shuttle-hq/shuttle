@@ -10,7 +10,7 @@ description = "Runtime to start and manage any service that runs on shuttle"
 doctest = false
 
 [dependencies]
-shuttle-api-client = { workspace = true, default-features = false }
+shuttle-api-client = { workspace = true }
 shuttle-codegen = { workspace = true }
 shuttle-common = { workspace = true, features = ["extract_propagation"] }
 shuttle-proto = { workspace = true, features = ["runtime"] }
@@ -19,6 +19,7 @@ shuttle-service = { workspace = true }
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 colored = { workspace = true, optional = true }
+hyper = { workspace = true, features = ["http1", "server", "tcp"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 strfmt = { workspace = true }

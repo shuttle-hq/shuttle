@@ -5789,6 +5789,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "colored",
+ "hyper 0.14.30",
  "portpicker",
  "serde",
  "serde_json",
@@ -7749,3 +7750,71 @@ dependencies = [
  "cc",
  "pkg-config",
 ]
+
+[[patch.unused]]
+name = "shuttle-actix-web"
+version = "0.47.0"
+
+[[patch.unused]]
+name = "shuttle-aws-rds"
+version = "0.47.0"
+
+[[patch.unused]]
+name = "shuttle-axum"
+version = "0.47.0"
+
+[[patch.unused]]
+name = "shuttle-openai"
+version = "0.47.0"
+
+[[patch.unused]]
+name = "shuttle-opendal"
+version = "0.47.0"
+
+[[patch.unused]]
+name = "shuttle-persist"
+version = "0.47.0"
+
+[[patch.unused]]
+name = "shuttle-poem"
+version = "0.47.0"
+
+[[patch.unused]]
+name = "shuttle-qdrant"
+version = "0.47.0"
+
+[[patch.unused]]
+name = "shuttle-rocket"
+version = "0.47.0"
+
+[[patch.unused]]
+name = "shuttle-salvo"
+version = "0.47.0"
+
+[[patch.unused]]
+name = "shuttle-serenity"
+version = "0.47.0"
+
+[[patch.unused]]
+name = "shuttle-shared-db"
+version = "0.47.0"
+
+[[patch.unused]]
+name = "shuttle-thruster"
+version = "0.47.0"
+
+[[patch.unused]]
+name = "shuttle-tide"
+version = "0.47.0"
+
+[[patch.unused]]
+name = "shuttle-tower"
+version = "0.47.0"
+
+[[patch.unused]]
+name = "shuttle-turso"
+version = "0.47.0"
+
+[[patch.unused]]
+name = "shuttle-warp"
+version = "0.47.0"

@@ -8,7 +8,7 @@ description = "A cargo command for the Shuttle platform (https://www.shuttle.rs/
 homepage = "https://www.shuttle.rs"
 
 [dependencies]
-shuttle-api-client = { workspace = true }
+shuttle-api-client = { workspace = true, default-features = true }
 shuttle-common = { workspace = true, features = ["models"] }
 shuttle-proto = { workspace = true, features = ["provisioner", "runtime-client"] }
 shuttle-service = { workspace = true, features = ["builder", "runner"] }

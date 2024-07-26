@@ -48,7 +48,6 @@ pub async fn spawn_runtime(project_path: &str) -> Result<TestRuntime> {
     let (runtime, runtime_client) = runner::start(
         false,
         runtime_port,
-        runtime_address,
         runtime_executable,
         Path::new(project_path),
     )

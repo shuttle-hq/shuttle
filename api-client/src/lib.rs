@@ -223,6 +223,10 @@ impl ShuttleApiClient {
         self.post_json(format!("/projects/{project}/resources"), Some(req))
             .await
     }
+    pub async fn get_secrets_beta(&self, project: &str) -> Result<resource::Response> {
+        self.get_json(format!("/projects/{project}/resources/secrets"))
+            .await
+    }
 
     pub async fn create_project(
         &self,

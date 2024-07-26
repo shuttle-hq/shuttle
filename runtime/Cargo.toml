@@ -10,7 +10,7 @@ description = "Runtime to start and manage any service that runs on shuttle"
 doctest = false
 
 [dependencies]
-shuttle-api-client = { workspace = true }
+shuttle-api-client = { workspace = true, default-features = false }
 shuttle-codegen = { workspace = true }
 shuttle-common = { workspace = true, features = ["extract_propagation"] }
 shuttle-proto = { workspace = true, features = ["runtime"] }
@@ -36,9 +36,10 @@ uuid = { workspace = true }
 
 [features]
 default = ["setup-tracing"]
+api-client-tracing = ["shuttle-api-client/tracing"]
 
 setup-tracing = [
     "tracing-subscriber/default",
     "tracing-subscriber/env-filter",
-    "colored",
+    "dep:colored",
 ]

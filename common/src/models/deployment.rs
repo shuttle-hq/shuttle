@@ -92,10 +92,10 @@ impl State {
     }
 }
 
-pub fn deployments_table_beta(deployments: &[ResponseBeta]) -> String {
+pub fn deployments_table_beta(deployments: &[ResponseBeta], raw: bool) -> String {
     let mut table = Table::new();
     table
-        .load_preset(UTF8_BORDERS_ONLY)
+        .load_preset(if raw { NOTHING } else { UTF8_BORDERS_ONLY })
         .set_content_arrangement(ContentArrangement::Disabled)
         .set_header(vec![
             Cell::new("Deployment ID"),

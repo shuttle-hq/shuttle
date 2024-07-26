@@ -272,10 +272,10 @@ pub fn get_projects_table(projects: &[Response], raw: bool) -> String {
     }
 }
 
-pub fn get_projects_table_beta(projects: &[ResponseBeta]) -> String {
+pub fn get_projects_table_beta(projects: &[ResponseBeta], raw: bool) -> String {
     let mut table = Table::new();
     table
-        .load_preset(UTF8_BORDERS_ONLY)
+        .load_preset(if raw { NOTHING } else { UTF8_BORDERS_ONLY })
         .set_content_arrangement(ContentArrangement::Disabled)
         .set_header(vec![
             Cell::new("Project Id"),

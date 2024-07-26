@@ -15,7 +15,7 @@ use std::process::exit;
 use std::str::FromStr;
 
 use anyhow::{anyhow, bail, Context, Result};
-use args::{ConfirmationArgs, GenerateCommand};
+use args::{ConfirmationArgs, GenerateCommand, TableArgs};
 use clap::{parser::ValueSource, CommandFactory, FromArgMatches};
 use clap_complete::{generate, Shell};
 use clap_mangen::Man;
@@ -130,16 +130,26 @@ impl Shuttle {
             if matches!(
                 args.cmd,
                 Command::Project(ProjectCommand::Stop { .. } | ProjectCommand::Restart { .. })
-                    | Command::Status
             ) {
-                unimplemented!("This command is deprecated on the beta platform");
+                eprintln!("This command is discontinued on the beta platform.");
+                return Ok(CommandOutcome::Ok);
+            }
+            if matches!(args.cmd, Command::Status) {
+                eprintln!("This command is deprecated on the beta platform. Use `deployment status` instead.");
+                return Ok(CommandOutcome::Ok);
+            }
+            if matches!(args.cmd, Command::Stop) {
+                eprintln!("This command is deprecated on the beta platform. Use `deployment stop` instead.");
+                return Ok(CommandOutcome::Ok);
             }
             if matches!(args.cmd, Command::Clean) {
-                unimplemented!("This command is not yet implemented on the beta platform");
+                eprintln!("This command is not yet implemented on the beta platform.");
+                return Ok(CommandOutcome::Ok);
             }
             eprintln!("INFO: Using beta platform API");
         } else if matches!(args.cmd, Command::Deployment(DeploymentCommand::Stop)) {
-            unimplemented!("This command is not supported on the legacy platform");
+            eprintln!("This command is not supported on the legacy platform.");
+            return Ok(CommandOutcome::Ok);
         }
         if let Some(ref url) = args.api_url {
             if url != API_URL_DEFAULT {
@@ -234,8 +244,8 @@ impl Shuttle {
                 }
             }
             Command::Deployment(cmd) => match cmd {
-                DeploymentCommand::List { page, limit, raw } => {
-                    self.deployments_list(page, limit, raw).await
+                DeploymentCommand::List { page, limit, table } => {
+                    self.deployments_list(page, limit, table).await
                 }
                 DeploymentCommand::Status { id } => self.deployment_get(id).await,
                 DeploymentCommand::Stop => self.stop_beta().await,
@@ -243,9 +253,10 @@ impl Shuttle {
             Command::Stop => self.stop().await,
             Command::Clean => self.clean().await,
             Command::Resource(cmd) => match cmd {
-                ResourceCommand::List { raw, show_secrets } => {
-                    self.resources_list(raw, show_secrets).await
-                }
+                ResourceCommand::List {
+                    table,
+                    show_secrets,
+                } => self.resources_list(table, show_secrets).await,
                 ResourceCommand::Delete {
                     resource_type,
                     confirmation: ConfirmationArgs { yes },
@@ -269,7 +280,7 @@ impl Shuttle {
                         self.project_status(follow).await
                     }
                 }
-                ProjectCommand::List { raw, .. } => self.projects_list(raw).await,
+                ProjectCommand::List { table, .. } => self.projects_list(table).await,
                 ProjectCommand::Stop => self.project_stop().await,
                 ProjectCommand::Delete(ConfirmationArgs { yes }) => self.project_delete(yes).await,
             },
@@ -925,7 +936,7 @@ impl Shuttle {
 
     async fn logs_beta(&self, args: LogsArgs) -> Result<CommandOutcome> {
         if args.follow {
-            println!("Streamed logs are not yet supported on beta");
+            eprintln!("Streamed logs are not yet supported on beta.");
             return Ok(CommandOutcome::Ok);
         }
         // TODO: implement logs range
@@ -936,28 +947,31 @@ impl Shuttle {
         } else {
             let id = if args.latest {
                 // Find latest deployment (not always an active one)
-                let deployments = client
-                    .get_deployments_beta(proj_name)
-                    .await
-                    .map_err(|err| {
-                        suggestions::logs::get_logs_failure(
-                            err,
-                            "Fetching the latest deployment failed",
-                        )
-                    })?;
-                let most_recent = deployments.first().context("No deployments found")?;
+                let deployments =
+                    client
+                        .get_deployments_beta(proj_name, 1, 1)
+                        .await
+                        .map_err(|err| {
+                            suggestions::logs::get_logs_failure(
+                                err,
+                                "Fetching the latest deployment failed",
+                            )
+                        })?;
+                let Some(most_recent) = deployments.first() else {
+                    println!("No deployments found");
+                    return Ok(CommandOutcome::Ok);
+                };
                 eprintln!("Getting logs from: {}", most_recent.id);
                 most_recent.id.to_string()
             } else if let Some(id) = args.id {
                 id
             } else {
-                let d = client.get_current_deployment_beta(proj_name).await?;
-                let Some(d) = d else {
-                    println!("No deployment found");
+                let Some(current) = client.get_current_deployment_beta(proj_name).await? else {
+                    println!("No deployments found");
                     return Ok(CommandOutcome::Ok);
                 };
-                eprintln!("Getting logs from: {}", d.id);
-                d.id
+                eprintln!("Getting logs from: {}", current.id);
+                current.id
             };
             client.get_deployment_logs_beta(proj_name, &id).await?.logs
         };
@@ -1064,7 +1078,12 @@ impl Shuttle {
         Ok(CommandOutcome::Ok)
     }
 
-    async fn deployments_list(&self, page: u32, limit: u32, raw: bool) -> Result<CommandOutcome> {
+    async fn deployments_list(
+        &self,
+        page: u32,
+        limit: u32,
+        table_args: TableArgs,
+    ) -> Result<CommandOutcome> {
         let client = self.client.as_ref().unwrap();
         if limit == 0 {
             println!();
@@ -1075,17 +1094,27 @@ impl Shuttle {
         let proj_name = self.ctx.project_name();
 
         let deployments_len = if self.beta {
-            let deployments = client
-                .get_deployments_beta(proj_name)
+            let mut deployments = client
+                .get_deployments_beta(proj_name, page as i32, limit as i32)
                 .await
                 .map_err(suggestions::deployment::get_deployments_list_failure)?;
-            let table = deployments_table_beta(&deployments);
+            let page_hint = if deployments.len() == limit as usize {
+                deployments.pop();
+                true
+            } else {
+                false
+            };
+            let table = deployments_table_beta(&deployments, table_args.raw);
 
             println!(
                 "{}",
                 format!("Deployments in project '{}'", proj_name).bold()
             );
             println!("{table}");
+            if page_hint {
+                println!("View the next page using `--page {}`", page + 1);
+            }
+
             deployments.len()
         } else {
             let mut deployments = client
@@ -1098,9 +1127,10 @@ impl Shuttle {
             } else {
                 false
             };
-            let table = get_deployments_table(&deployments, proj_name, page, raw, page_hint);
-
+            let table =
+                get_deployments_table(&deployments, proj_name, page, table_args.raw, page_hint);
             println!("{table}");
+
             deployments.len()
         };
 
@@ -1154,7 +1184,11 @@ impl Shuttle {
         Ok(CommandOutcome::Ok)
     }
 
-    async fn resources_list(&self, raw: bool, show_secrets: bool) -> Result<CommandOutcome> {
+    async fn resources_list(
+        &self,
+        table_args: TableArgs,
+        show_secrets: bool,
+    ) -> Result<CommandOutcome> {
         let client = self.client.as_ref().unwrap();
         let resources = if self.beta {
             client
@@ -1165,10 +1199,11 @@ impl Shuttle {
         }
         .map_err(suggestions::resources::get_service_resources_failure)?;
 
+        // TODO: Beta table formats
         let table = get_resource_tables(
             &resources,
             self.ctx.project_name(),
-            raw,
+            table_args.raw,
             show_secrets,
             self.beta,
         );
@@ -2382,7 +2417,7 @@ impl Shuttle {
         Ok(CommandOutcome::Ok)
     }
 
-    async fn projects_list(&self, raw: bool) -> Result<CommandOutcome> {
+    async fn projects_list(&self, table_args: TableArgs) -> Result<CommandOutcome> {
         let client = self.client.as_ref().unwrap();
 
         let projects_table = if self.beta {
@@ -2399,6 +2434,7 @@ impl Shuttle {
                         )
                     })?
                     .projects,
+                table_args.raw,
             )
         } else {
             project::get_projects_table(
@@ -2410,7 +2446,7 @@ impl Shuttle {
                         "getting the projects list fails repeatedly",
                     )
                 })?,
-                raw,
+                table_args.raw,
             )
         };
 
@@ -2433,7 +2469,7 @@ impl Shuttle {
                         )
                     })?
                     .projects;
-                project::get_projects_table_beta(&team_projects)
+                project::get_projects_table_beta(&team_projects, table_args.raw)
             } else {
                 let team_projects =
                     client
@@ -2447,7 +2483,7 @@ impl Shuttle {
                                 "getting the team projects list fails repeatedly",
                             )
                         })?;
-                project::get_projects_table(&team_projects, raw)
+                project::get_projects_table(&team_projects, table_args.raw)
             };
 
             println!("{}", format!("{}'s Projects", team.display_name).bold());
@@ -2560,22 +2596,41 @@ impl Shuttle {
         let client = self.client.as_ref().unwrap();
 
         if !no_confirm {
-            println!(
-                "{}",
-                formatdoc!(
-                    r#"
-                    WARNING:
-                        Are you sure you want to delete "{}"?
-                        This will...
-                        - Delete any databases, secrets, and shuttle-persist data in this project.
-                        - Delete any custom domains linked to this project.
-                        - Release the project name from your account.
-                        This action is permanent."#,
-                    self.ctx.project_name()
-                )
-                .bold()
-                .red()
-            );
+            if self.beta {
+                println!(
+                    "{}",
+                    formatdoc!(
+                        r#"
+                        WARNING:
+                            Are you sure you want to delete "{}"?
+                            This will...
+                            - Shut down you service.
+                            - Delete any databases and secrets in this project.
+                            - Delete any custom domains linked to this project.
+                            This action is permanent."#,
+                        self.ctx.project_name()
+                    )
+                    .bold()
+                    .red()
+                );
+            } else {
+                println!(
+                    "{}",
+                    formatdoc!(
+                        r#"
+                        WARNING:
+                            Are you sure you want to delete "{}"?
+                            This will...
+                            - Delete any databases, secrets, and shuttle-persist data in this project.
+                            - Delete any custom domains linked to this project.
+                            - Release the project name from your account.
+                            This action is permanent."#,
+                        self.ctx.project_name()
+                    )
+                    .bold()
+                    .red()
+                );
+            }
             if !Confirm::with_theme(&ColorfulTheme::default())
                 .with_prompt("Are you sure?")
                 .default(false)

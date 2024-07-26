@@ -26,8 +26,10 @@ impl ToJson for reqwest::Response {
         let status_code = self.status();
         let full = self.bytes().await?;
 
+        let str_repr =
+            String::from_utf8(full.to_vec()).unwrap_or_else(|_| format!("[{} bytes]", full.len()));
         trace!(
-            response = %std::str::from_utf8(&full).unwrap_or_default(),
+            response = %str_repr,
             "parsing response to json"
         );
 

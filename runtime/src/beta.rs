@@ -20,15 +20,25 @@ use crate::__internals::{Loader, Runner};
 const HEALTH_CHECK_PORT: u16 = 8001;
 
 pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + Send + 'static) {
-    // TODO: parse all of the below from env vars
-    let project_id = "proj_TODO".to_owned();
-    let project_name = "TODO".to_owned();
-    let env = "production".parse().unwrap();
-    let ip = Ipv4Addr::UNSPECIFIED;
-    let port = 3000;
-    let api_url = "http://0.0.0.0:8000".to_owned(); // runner proxy
+    // Uses primitive parsing instead of clap for reduced dependency weight
+    let shuttle = std::env::var("SHUTTLE").is_ok();
+    let project_id = std::env::var("SHUTTLE_PROJECT_ID").expect("project id env var");
+    let project_name = std::env::var("SHUTTLE_PROJECT_NAME").expect("project name env var");
+    let env = std::env::var("SHUTTLE_ENV")
+        .expect("shuttle environment env var")
+        .parse()
+        .expect("invalid shuttle environment");
+    let ip = std::env::var("SHUTTLE_RUNTIME_IP")
+        .expect("runtime ip env var")
+        .parse()
+        .expect("invalid ip");
+    let port = std::env::var("SHUTTLE_RUNTIME_PORT")
+        .expect("runtime port env var")
+        .parse()
+        .expect("invalid port");
+    let api_url = std::env::var("SHUTTLE_API").expect("api env var");
 
-    let service_addr = SocketAddr::new(ip.into(), port);
+    let service_addr = SocketAddr::new(ip, port);
     let client = ShuttleApiClient::new(api_url, None, None);
 
     let secrets: BTreeMap<String, String> = match client
@@ -44,7 +54,7 @@ pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + S
     };
 
     // if running on Shuttle, start a health check server
-    if std::env::var("SHUTTLE").is_ok() {
+    if shuttle {
         tokio::task::spawn(async move {
             let make_service = make_service_fn(|_conn| async {
                 Ok::<_, Infallible>(service_fn(|_req| async move {
@@ -59,7 +69,7 @@ pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + S
 
             if let Err(e) = server.await {
                 eprintln!("Internal health check error: {}", e);
-                exit(150);
+                exit(200);
             }
         });
     }
@@ -116,19 +126,20 @@ pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + S
 
     // TODO?: call API to say running state is being entered
 
-    // call sidecar to shut down. ignore error, since the endpoint does not send a response
+    // Tell sidecar to shut down.
+    // Ignore error, since the endpoint does not send a response.
     let _ = client.client.get("/__shuttle/shutdown").send().await;
 
     let service = match runner.run(resources).await {
         Ok(s) => s,
         Err(e) => {
-            eprintln!("Runtime Runner phase failed: {e}");
+            eprintln!("Runtime Resource Initialization phase failed: {e}");
             exit(151);
         }
     };
 
     if let Err(e) = service.bind(service_addr).await {
-        eprintln!("Service encountered an error: {e}");
+        eprintln!("Service encountered an error in `bind`: {e}");
         exit(1);
     }
 }

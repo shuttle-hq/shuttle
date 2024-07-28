@@ -131,6 +131,8 @@ pub enum Command {
     Generate(GenerateCommand),
     /// Open an issue on GitHub and provide feedback
     Feedback,
+    /// Upgrade the cargo-shuttle binary
+    Upgrade,
 }
 
 #[derive(Parser)]

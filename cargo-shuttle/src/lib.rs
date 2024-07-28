@@ -284,6 +284,7 @@ impl Shuttle {
                 ProjectCommand::Stop => self.project_stop().await,
                 ProjectCommand::Delete(ConfirmationArgs { yes }) => self.project_delete(yes).await,
             },
+            Command::Upgrade => update_cargo_shuttle().await,
         };
 
         for w in self.version_warnings {
@@ -2963,6 +2964,30 @@ fn create_spinner() -> ProgressBar {
 pub enum CommandOutcome {
     Ok,
     DeploymentFailure,
+}
+
+async fn update_cargo_shuttle() -> Result<CommandOutcome> {
+    #[cfg(target_family = "unix")]
+    let _ = tokio::process::Command::new("bash")
+        .args(["-c", "curl -sSfL https://www.shuttle.rs/install | bash"])
+        .kill_on_drop(true)
+        .spawn()
+        .context("Failed to spawn bash update process")?
+        .wait()
+        .await
+        .context("Failed to wait on bash update process")?;
+
+    #[cfg(target_family = "windows")]
+    let _ = tokio::process::Command::new("powershell")
+        .args(["-Command", "iwr https://www.shuttle.rs/install-win | iex"])
+        .kill_on_drop(true)
+        .spawn()
+        .context("Failed to spawn powershell update process")?
+        .wait()
+        .await
+        .context("Failed to wait on powershell update process")?;
+
+    Ok(CommandOutcome::Ok)
 }
 
 #[cfg(test)]

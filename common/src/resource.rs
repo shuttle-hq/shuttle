@@ -81,12 +81,6 @@ pub struct Response {
     pub data: Value,
 }
 
-// #[derive(Clone, Serialize, Deserialize)]
-// pub struct ResourceResponse {
-//     /// The resource output returned from provisioning
-//     pub resource: Value,
-// }
-
 impl Response {
     pub fn into_bytes(self) -> Vec<u8> {
         self.to_bytes()

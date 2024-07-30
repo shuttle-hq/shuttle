@@ -13,7 +13,7 @@ use hyper::{
 };
 use shuttle_api_client::ShuttleApiClient;
 use shuttle_common::{
-    resource::{ResourceInput, ResourceState},
+    resource::{ResourceInput, ResourceState, Type},
     secrets::Secret,
 };
 use shuttle_service::{ResourceFactory, Service};
@@ -80,7 +80,7 @@ pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + S
     // Sorts secrets by key
     let secrets = BTreeMap::from_iter(secrets.into_iter().map(|(k, v)| (k, Secret::new(v))));
 
-    let factory = ResourceFactory::new(project_name, secrets, env);
+    let factory = ResourceFactory::new(project_name, secrets.clone(), env);
 
     let mut resources = match loader.load(factory).await {
         Ok(r) => r,
@@ -114,6 +114,11 @@ pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + S
             ResourceInput::Custom(_) => None,
         })
     {
+        // Secrets don't need to be requested here since we already got them above.
+        if shuttle_resource.r#type == Type::Secrets {
+            *bytes = serde_json::to_vec(&secrets).expect("to serialize struct");
+            continue;
+        }
         // TODO?: Add prints/tracing to show which resource is being provisioned
         loop {
             match client

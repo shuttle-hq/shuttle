@@ -12,7 +12,10 @@ use hyper::{
     Body, Response, Server,
 };
 use shuttle_api_client::ShuttleApiClient;
-use shuttle_common::{resource::ResourceInput, secrets::Secret};
+use shuttle_common::{
+    resource::{ResourceInput, ResourceState},
+    secrets::Secret,
+};
 use shuttle_service::{ResourceFactory, Service};
 
 use crate::__internals::{Loader, Runner};
@@ -111,17 +114,35 @@ pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + S
             ResourceInput::Custom(_) => None,
         })
     {
-        let o = match client
-            .provision_resource_beta(&project_id, shuttle_resource)
-            .await
-        {
-            Ok(o) => o,
-            Err(e) => {
-                eprintln!("Runtime Provisioning phase failed: {e}");
-                exit(131);
-            }
-        };
-        *bytes = serde_json::to_vec(&o).expect("to serialize struct");
+        // TODO?: Add prints/tracing to show which resource is being provisioned
+        loop {
+            match client
+                .provision_resource_beta(&project_id, shuttle_resource.clone())
+                .await
+            {
+                Ok(o) => match o.state.expect("resource to have a state") {
+                    ResourceState::Provisioning | ResourceState::Authorizing => {
+                        tokio::time::sleep(tokio::time::Duration::from_millis(2000)).await;
+                    }
+                    ResourceState::Ready => {
+                        *bytes = serde_json::to_vec(&o.output).expect("to serialize struct");
+                        break;
+                    }
+                    bad_state => {
+                        eprintln!(
+                            "Runtime Provisioning phase failed: Received '{}' resource with state '{}'.",
+                            shuttle_resource.r#type,
+                            bad_state
+                        );
+                        exit(132);
+                    }
+                },
+                Err(e) => {
+                    eprintln!("Runtime Provisioning phase failed: {e}");
+                    exit(131);
+                }
+            };
+        }
     }
 
     // TODO?: call API to say running state is being entered

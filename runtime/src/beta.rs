@@ -2,7 +2,7 @@ use std::{
     collections::BTreeMap,
     convert::Infallible,
     iter::FromIterator,
-    net::{Ipv4Addr, SocketAddr},
+    net::{IpAddr, Ipv4Addr, SocketAddr},
     process::exit,
 };
 
@@ -16,33 +16,69 @@ use shuttle_common::{
     resource::{ResourceInput, ResourceState, Type},
     secrets::Secret,
 };
-use shuttle_service::{ResourceFactory, Service};
+use shuttle_service::{Environment, ResourceFactory, Service};
 
 use crate::__internals::{Loader, Runner};
 
 const HEALTH_CHECK_PORT: u16 = 8001;
 
+struct BetaEnvArgs {
+    /// Are we running in a Shuttle deployment?
+    shuttle: bool,
+    project_id: String,
+    project_name: String,
+    env: Environment,
+    /// Address to open service on
+    ip: IpAddr,
+    /// Port to open service on
+    port: u16,
+    /// Where to reach the required Shuttle API endpoints (mainly for provisioning)
+    api_url: String,
+    /// Key for the API calls (if relevant)
+    api_key: Option<String>,
+}
+
+impl BetaEnvArgs {
+    /// Uses primitive parsing instead of clap for reduced dependency weight.
+    /// # Panics
+    /// if any required arg is missing or does not parse
+    fn parse() -> Self {
+        Self {
+            shuttle: std::env::var("SHUTTLE").is_ok(),
+            project_id: std::env::var("SHUTTLE_PROJECT_ID").expect("project id env var"),
+            project_name: std::env::var("SHUTTLE_PROJECT_NAME").expect("project name env var"),
+            env: std::env::var("SHUTTLE_ENV")
+                .expect("shuttle environment env var")
+                .parse()
+                .expect("invalid shuttle environment"),
+            ip: std::env::var("SHUTTLE_RUNTIME_IP")
+                .expect("runtime ip env var")
+                .parse()
+                .expect("invalid ip"),
+            port: std::env::var("SHUTTLE_RUNTIME_PORT")
+                .expect("runtime port env var")
+                .parse()
+                .expect("invalid port"),
+            api_url: std::env::var("SHUTTLE_API").expect("api url env var"),
+            api_key: std::env::var("SHUTTLE_API_KEY").ok(),
+        }
+    }
+}
+
 pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + Send + 'static) {
-    // Uses primitive parsing instead of clap for reduced dependency weight
-    let shuttle = std::env::var("SHUTTLE").is_ok();
-    let project_id = std::env::var("SHUTTLE_PROJECT_ID").expect("project id env var");
-    let project_name = std::env::var("SHUTTLE_PROJECT_NAME").expect("project name env var");
-    let env = std::env::var("SHUTTLE_ENV")
-        .expect("shuttle environment env var")
-        .parse()
-        .expect("invalid shuttle environment");
-    let ip = std::env::var("SHUTTLE_RUNTIME_IP")
-        .expect("runtime ip env var")
-        .parse()
-        .expect("invalid ip");
-    let port = std::env::var("SHUTTLE_RUNTIME_PORT")
-        .expect("runtime port env var")
-        .parse()
-        .expect("invalid port");
-    let api_url = std::env::var("SHUTTLE_API").expect("api env var");
+    let BetaEnvArgs {
+        shuttle,
+        project_id,
+        project_name,
+        env,
+        ip,
+        port,
+        api_url,
+        api_key,
+    } = BetaEnvArgs::parse();
 
     let service_addr = SocketAddr::new(ip, port);
-    let client = ShuttleApiClient::new(api_url, None, None);
+    let client = ShuttleApiClient::new(api_url, api_key, None);
 
     let secrets: BTreeMap<String, String> = match client
         .get_secrets_beta(&project_id)

@@ -20,8 +20,6 @@ use shuttle_service::{Environment, ResourceFactory, Service};
 
 use crate::__internals::{Loader, Runner};
 
-const HEALTH_CHECK_PORT: u16 = 8001;
-
 struct BetaEnvArgs {
     /// Are we running in a Shuttle deployment?
     shuttle: bool,
@@ -32,6 +30,8 @@ struct BetaEnvArgs {
     ip: IpAddr,
     /// Port to open service on
     port: u16,
+    /// Port to open health check on
+    healthz_port: Option<u16>,
     /// Where to reach the required Shuttle API endpoints (mainly for provisioning)
     api_url: String,
     /// Key for the API calls (if relevant)
@@ -59,6 +59,9 @@ impl BetaEnvArgs {
                 .expect("runtime port env var")
                 .parse()
                 .expect("invalid port"),
+            healthz_port: std::env::var("SHUTTLE_HEALTHZ_PORT")
+                .map(|s| s.parse().expect("invalid healthz port"))
+                .ok(),
             api_url: std::env::var("SHUTTLE_API").expect("api url env var"),
             api_key: std::env::var("SHUTTLE_API_KEY").ok(),
         }
@@ -73,12 +76,35 @@ pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + S
         env,
         ip,
         port,
+        healthz_port,
         api_url,
         api_key,
     } = BetaEnvArgs::parse();
 
     let service_addr = SocketAddr::new(ip, port);
     let client = ShuttleApiClient::new(api_url, api_key, None);
+
+    // start a health check server if requested
+    if let Some(healthz_port) = healthz_port {
+        tokio::task::spawn(async move {
+            let make_service = make_service_fn(|_conn| async {
+                Ok::<_, Infallible>(service_fn(|_req| async move {
+                    Result::<Response<Body>, hyper::Error>::Ok(Response::new(Body::empty()))
+                }))
+            });
+            let server = Server::bind(&SocketAddr::new(Ipv4Addr::LOCALHOST.into(), healthz_port))
+                .serve(make_service);
+
+            if let Err(e) = server.await {
+                eprintln!("Health check error: {}", e);
+                exit(200);
+            }
+        });
+    }
+
+    //
+    // LOADING / PROVISIONING PHASE
+    //
 
     let secrets: BTreeMap<String, String> = match client
         .get_secrets_beta(&project_id)
@@ -92,32 +118,10 @@ pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + S
         }
     };
 
-    // if running on Shuttle, start a health check server
-    if shuttle {
-        tokio::task::spawn(async move {
-            let make_service = make_service_fn(|_conn| async {
-                Ok::<_, Infallible>(service_fn(|_req| async move {
-                    Result::<Response<Body>, hyper::Error>::Ok(Response::new(Body::empty()))
-                }))
-            });
-            let server = Server::bind(&SocketAddr::new(
-                Ipv4Addr::LOCALHOST.into(),
-                HEALTH_CHECK_PORT,
-            ))
-            .serve(make_service);
-
-            if let Err(e) = server.await {
-                eprintln!("Internal health check error: {}", e);
-                exit(200);
-            }
-        });
-    }
-
-    // Sorts secrets by key
+    // Sort secrets by key
     let secrets = BTreeMap::from_iter(secrets.into_iter().map(|(k, v)| (k, Secret::new(v))));
 
     let factory = ResourceFactory::new(project_name, secrets.clone(), env);
-
     let mut resources = match loader.load(factory).await {
         Ok(r) => r,
         Err(e) => {
@@ -188,9 +192,15 @@ pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + S
 
     // TODO?: call API to say running state is being entered
 
-    // Tell sidecar to shut down.
-    // Ignore error, since the endpoint does not send a response.
-    let _ = client.client.get("/__shuttle/shutdown").send().await;
+    if shuttle {
+        // Tell sidecar to shut down.
+        // Ignore error, since the endpoint does not send a response.
+        let _ = client.client.get("/__shuttle/shutdown").send().await;
+    }
+
+    //
+    // RESOURCE INIT PHASE
+    //
 
     let service = match runner.run(resources).await {
         Ok(s) => s,
@@ -199,6 +209,10 @@ pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + S
             exit(151);
         }
     };
+
+    //
+    // RUNNING PHASE
+    //
 
     if let Err(e) = service.bind(service_addr).await {
         eprintln!("Service encountered an error in `bind`: {e}");

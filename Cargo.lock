@@ -1002,6 +1002,7 @@ dependencies = [
  "globset",
  "headers",
  "home",
+ "hyper 0.14.30",
  "ignore",
  "indicatif",
  "indoc",

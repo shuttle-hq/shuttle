@@ -57,10 +57,9 @@ impl RuntimeManager {
                 .unwrap_or_default()
         );
 
-        let (mut process, runtime_client) =
-            runner::start(false, port, runtime_executable, project_path)
-                .await
-                .context("failed to start shuttle runtime")?;
+        let (mut process, runtime_client) = runner::start(port, runtime_executable, project_path)
+            .await
+            .context("failed to start shuttle runtime")?;
 
         let stdout = process
             .stdout

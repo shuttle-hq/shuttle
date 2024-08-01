@@ -35,6 +35,7 @@ gix = { version = "0.63.0", default-features = false, features = [
 globset = "0.4.13"
 headers = { workspace = true }
 home = { workspace = true }
+hyper = { workspace = true }
 ignore = "0.4.20"
 indicatif = "0.17.3"
 indoc = "2.0.1"

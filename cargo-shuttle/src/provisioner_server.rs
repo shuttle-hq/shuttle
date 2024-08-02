@@ -496,10 +496,16 @@ fn db_type_to_config(db_type: Type, database_name: &str) -> EngineConfig {
 }
 
 pub mod beta {
-    use std::{collections::HashMap, sync::Arc};
+    use std::{
+        collections::HashMap, convert::Infallible, net::SocketAddr, process::exit, sync::Arc,
+    };
 
     use anyhow::{bail, Context, Result};
-    use hyper::{body, Body, Method, Request as HyperRequest, Response};
+    use hyper::{
+        body,
+        service::{make_service_fn, service_fn},
+        Body, Method, Request as HyperRequest, Response, Server,
+    };
     use shuttle_common::{
         resource::{self, ProvisionResourceRequest},
         DatabaseResource, DbInput,
@@ -515,6 +521,29 @@ pub mod beta {
     pub struct ProvApiState {
         pub project_name: String,
         pub secrets: HashMap<String, String>,
+    }
+
+    pub struct ProvisionerServerBeta;
+
+    impl ProvisionerServerBeta {
+        pub fn start(state: Arc<ProvApiState>, api_addr: &SocketAddr) {
+            let make_svc = make_service_fn(move |_conn| {
+                let state = state.clone();
+                async {
+                    Ok::<_, Infallible>(service_fn(move |req| {
+                        let state = state.clone();
+                        handler(state, req)
+                    }))
+                }
+            });
+            let server = Server::bind(api_addr).serve(make_svc);
+            tokio::spawn(async move {
+                if let Err(e) = server.await {
+                    eprintln!("Provisioner server error: {}", e);
+                    exit(1);
+                }
+            });
+        }
     }
 
     pub async fn handler(

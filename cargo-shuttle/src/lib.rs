@@ -36,7 +36,7 @@ use ignore::overrides::OverrideBuilder;
 use ignore::WalkBuilder;
 use indicatif::ProgressBar;
 use indoc::{formatdoc, printdoc};
-use provisioner_server::beta::{handler, ProvApiState};
+use provisioner_server::beta::{handler, ProvApiState, ProvisionerServerBeta};
 use reqwest::header::HeaderMap;
 use shuttle_api_client::ShuttleApiClient;
 use shuttle_common::{
@@ -1848,22 +1848,7 @@ impl Shuttle {
             project_name,
             secrets,
         });
-        let make_svc = make_service_fn(move |_conn| {
-            let state = state.clone();
-            async {
-                Ok::<_, Infallible>(service_fn(move |req| {
-                    let state = state.clone();
-                    handler(state, req)
-                }))
-            }
-        });
-        let server = Server::bind(&api_addr).serve(make_svc);
-        tokio::spawn(async move {
-            if let Err(e) = server.await {
-                eprintln!("Provisioner server error: {}", e);
-                exit(1);
-            }
-        });
+        ProvisionerServerBeta::start(state, &api_addr);
 
         println!(
             "\n    {} {} on http://{}:{}\n",

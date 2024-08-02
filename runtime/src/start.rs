@@ -7,7 +7,7 @@ use crate::{
 
 #[derive(Default)]
 struct Args {
-    /// Enable compatibility with beta platform
+    /// Enable compatibility with beta platform [env: SHUTTLE_BETA]
     beta: bool,
     /// Alpha (required): Port to open gRPC server on
     port: Option<u16>,
@@ -44,7 +44,7 @@ impl Args {
 
         if args.beta {
             if !args.run {
-                return Err(anyhow::anyhow!("--run is required with --beta"));
+                return Err(anyhow::anyhow!("--run is required with SHUTTLE_BETA"));
             }
         } else if args.port.is_none() {
             return Err(anyhow::anyhow!("--port is required"));

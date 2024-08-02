@@ -39,7 +39,7 @@ pub struct LocalProvisioner {
 impl LocalProvisioner {
     pub fn new() -> Result<Self> {
         // This only constructs the client and does not try to connect.
-        // A "no such file" error will happen on the first request to Docker.
+        // If the socket is not found, a "no such file" error will happen on the first request to Docker.
         Ok(Self {
             docker: Docker::connect_with_local_defaults()?,
         })
@@ -492,5 +492,150 @@ fn db_type_to_config(db_type: Type, database_name: &str) -> EngineConfig {
                 "show databases;".to_string(),
             ],
         },
+    }
+}
+
+pub mod beta {
+    use std::{
+        collections::HashMap, convert::Infallible, net::SocketAddr, process::exit, sync::Arc,
+    };
+
+    use anyhow::{bail, Context, Result};
+    use hyper::{
+        body,
+        service::{make_service_fn, service_fn},
+        Body, Method, Request as HyperRequest, Response, Server,
+    };
+    use shuttle_common::{
+        resource::{self, ProvisionResourceRequest},
+        DatabaseResource, DbInput,
+    };
+    use shuttle_proto::provisioner::{provisioner_server::Provisioner, DatabaseRequest};
+    use shuttle_service::ShuttleResourceOutput;
+    use tonic::Request;
+    use tracing::debug;
+
+    use super::LocalProvisioner;
+
+    #[derive(Clone)]
+    pub struct ProvApiState {
+        pub project_name: String,
+        pub secrets: HashMap<String, String>,
+    }
+
+    pub struct ProvisionerServerBeta;
+
+    impl ProvisionerServerBeta {
+        pub fn start(state: Arc<ProvApiState>, api_addr: &SocketAddr) {
+            let make_svc = make_service_fn(move |_conn| {
+                let state = state.clone();
+                async {
+                    Ok::<_, Infallible>(service_fn(move |req| {
+                        let state = state.clone();
+                        handler(state, req)
+                    }))
+                }
+            });
+            let server = Server::bind(api_addr).serve(make_svc);
+            tokio::spawn(async move {
+                if let Err(e) = server.await {
+                    eprintln!("Provisioner server error: {}", e);
+                    exit(1);
+                }
+            });
+        }
+    }
+
+    pub async fn handler(
+        state: Arc<ProvApiState>,
+        req: HyperRequest<Body>,
+    ) -> std::result::Result<Response<Body>, hyper::Error> {
+        let method = req.method().clone();
+        let uri = req.uri().clone();
+        debug!("Received {method} {uri}");
+
+        let body = body::to_bytes(req.into_body()).await?.to_vec();
+        let res = match provision(state, method, uri.to_string().as_str(), body).await {
+            Ok(bytes) => Response::new(Body::from(bytes)),
+            Err(e) => {
+                eprintln!("Encountered error when provisioning: {e}");
+                Response::builder().status(500).body(Body::empty()).unwrap()
+            }
+        };
+
+        Ok(res)
+    }
+
+    async fn provision(
+        state: Arc<ProvApiState>,
+        method: Method,
+        uri: &str,
+        body: Vec<u8>,
+    ) -> Result<Vec<u8>> {
+        Ok(match (method, uri) {
+            (Method::GET, "/projects/proj_LOCAL/resources/secrets") => {
+                serde_json::to_vec(&resource::Response {
+                    config: serde_json::Value::Null,
+                    r#type: resource::Type::Secrets,
+                    data: serde_json::to_value(&state.secrets).unwrap(),
+                })
+                .unwrap()
+            }
+            (Method::POST, "/projects/proj_LOCAL/resources") => {
+                let prov = LocalProvisioner::new().unwrap();
+                let shuttle_resource: ProvisionResourceRequest =
+                    serde_json::from_slice(&body).context("deserializing resource request")?;
+                // TODO: Reject req if version field mismatch
+
+                let response = match shuttle_resource.r#type {
+                    resource::Type::Database(db_type) => {
+                        let config: DbInput = serde_json::from_value(shuttle_resource.config)
+                            .context("deserializing resource config")?;
+                        let res = match config.local_uri {
+                                Some(local_uri) => DatabaseResource::ConnectionString(local_uri),
+                                None => DatabaseResource::Info(
+                                    prov.provision_database(Request::new(DatabaseRequest {
+                                        project_name: state.project_name.clone(),
+                                        db_type: Some(db_type.into()),
+                                        db_name: config.db_name,
+                                    }))
+                                    .await
+                                    .context("Failed to start database container. Make sure that a Docker engine is running.")?
+                                    .into_inner()
+                                    .into(),
+                                ),
+                            };
+                        ShuttleResourceOutput {
+                            output: serde_json::to_value(&res).unwrap(),
+                            custom: serde_json::Value::Null,
+                            state: Some(resource::ResourceState::Ready),
+                        }
+                    }
+                    resource::Type::Container => {
+                        let config = serde_json::from_value(shuttle_resource.config)
+                            .context("deserializing resource config")?;
+                        let res = prov.start_container(config)
+                            .await
+                            .context("Failed to start Docker container. Make sure that a Docker engine is running.")?;
+                        ShuttleResourceOutput {
+                            output: serde_json::to_value(res).unwrap(),
+                            custom: serde_json::Value::Null,
+                            state: Some(resource::ResourceState::Ready),
+                        }
+                    }
+                    resource::Type::Secrets => ShuttleResourceOutput {
+                        output: serde_json::to_value(&state.secrets).unwrap(),
+                        custom: serde_json::Value::Null,
+                        state: Some(resource::ResourceState::Ready),
+                    },
+                    _ => {
+                        bail!("Resource not supported");
+                    }
+                };
+
+                serde_json::to_vec(&response).unwrap()
+            }
+            _ => bail!("Received unsupported resource request"),
+        })
     }
 }

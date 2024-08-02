@@ -13,13 +13,13 @@ use std::net::{Ipv4Addr, SocketAddr};
 use std::path::{Path, PathBuf};
 use std::process::exit;
 use std::str::FromStr;
+use std::sync::Arc;
 
 use anyhow::{anyhow, bail, Context, Result};
-use args::{ConfirmationArgs, GenerateCommand, TableArgs};
+use chrono::Utc;
 use clap::{parser::ValueSource, CommandFactory, FromArgMatches};
 use clap_complete::{generate, Shell};
 use clap_mangen::Man;
-use config::RequestContext;
 use crossterm::style::Stylize;
 use dialoguer::{theme::ColorfulTheme, Confirm, Input, Password, Select};
 use flate2::write::GzEncoder;
@@ -56,7 +56,7 @@ use shuttle_common::{
     resource::{self, ResourceInput, ShuttleResourceOutput},
     semvers_are_compatible,
     templates::TemplatesSchema,
-    ApiKey, DatabaseResource, DbInput, LogItem, VersionInfo,
+    ApiKey, DatabaseResource, DbInput, LogItem, LogItemBeta, VersionInfo,
 };
 use shuttle_proto::{
     provisioner::{provisioner_server::Provisioner, DatabaseRequest},
@@ -72,15 +72,18 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Child;
 use tokio::time::{sleep, Duration};
 use tonic::{Request, Status};
-use tracing::{debug, error, trace, warn};
+use tracing::{debug, error, info, trace, warn};
 use uuid::Uuid;
 use zip::write::FileOptions;
 
 pub use crate::args::{Command, ProjectArgs, RunArgs, ShuttleArgs};
 use crate::args::{
-    DeployArgs, DeploymentCommand, InitArgs, LoginArgs, LogoutArgs, LogsArgs, ProjectCommand,
-    ProjectStartArgs, ResourceCommand, TemplateLocation,
+    ConfirmationArgs, DeployArgs, DeploymentCommand, GenerateCommand, InitArgs, LoginArgs,
+    LogoutArgs, LogsArgs, ProjectCommand, ProjectStartArgs, ResourceCommand, TableArgs,
+    TemplateLocation,
 };
+use crate::config::RequestContext;
+use crate::provisioner_server::beta::{ProvApiState, ProvisionerServerBeta};
 use crate::provisioner_server::LocalProvisioner;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -233,7 +236,13 @@ impl Shuttle {
             Command::Login(login_args) => self.login(login_args, args.offline).await,
             Command::Logout(logout_args) => self.logout(logout_args).await,
             Command::Feedback => self.feedback(),
-            Command::Run(run_args) => self.local_run(run_args).await,
+            Command::Run(run_args) => {
+                if self.beta {
+                    self.local_run_beta(run_args).await
+                } else {
+                    self.local_run(run_args).await
+                }
+            }
             Command::Deploy(deploy_args) => self.deploy(deploy_args).await,
             Command::Status => self.status().await,
             Command::Logs(logs_args) => {
@@ -587,7 +596,7 @@ impl Shuttle {
         };
 
         // 5. Initialize locally
-        init::generate_project(
+        crate::init::generate_project(
             path.clone(),
             project_args
                 .name
@@ -629,7 +638,7 @@ impl Shuttle {
         if should_create_environment {
             // Set the project working directory path to the init path,
             // so `load_project` is ran with the correct project path
-            project_args.working_directory = path.clone();
+            project_args.working_directory.clone_from(&path);
 
             self.load_project(&project_args)?;
             self.project_start(DEFAULT_IDLE_MINUTES).await?;
@@ -1267,12 +1276,7 @@ impl Shuttle {
         Ok(CommandOutcome::Ok)
     }
 
-    async fn spin_local_runtime(
-        beta: bool,
-        run_args: &RunArgs,
-        service: &BuiltService,
-        idx: u16,
-    ) -> Result<Option<(Child, runtime::Client)>> {
+    fn get_secrets(run_args: &RunArgs, service: &BuiltService) -> Result<HashMap<String, String>> {
         let secrets_file = run_args.secret_args.secrets.clone().or_else(|| {
             let crate_dir = service.crate_directory();
             // Prioritise crate-local prod secrets over workspace dev secrets (in the rare case that both exist)
@@ -1300,8 +1304,11 @@ impl Shuttle {
             Default::default()
         };
 
-        trace!(path = ?service.executable_path, "using alpha runtime");
-        if let Err(err) = check_version(&service.executable_path).await {
+        Ok(secrets)
+    }
+
+    async fn check_and_warn_runtime_version(path: &Path) -> Result<()> {
+        if let Err(err) = check_version(path).await {
             warn!("{}", err);
             if let Some(mismatch) = err.downcast_ref::<VersionMismatchError>() {
                 println!("Warning: {}.", mismatch);
@@ -1310,13 +1317,13 @@ impl Shuttle {
                     // should help the user to update cargo-shuttle.
                     printdoc! {"
                         Hint: A newer version of cargo-shuttle is available.
-                                Check out the installation docs for how to update: {SHUTTLE_INSTALL_DOCS_URL}",
+                              Check out the installation docs for how to update: {SHUTTLE_INSTALL_DOCS_URL}",
                     };
                 } else {
                     printdoc! {"
                         Hint: A newer version of shuttle-runtime is available.
-                        Change its version to {} in Cargo.toml to update it, or
-                        run this command: cargo add shuttle-runtime@{}",
+                              Change its version to {} in Cargo.toml to update it,
+                              or run this command: cargo add shuttle-runtime@{}",
                         mismatch.cargo_shuttle,
                         mismatch.cargo_shuttle,
                     };
@@ -1325,23 +1332,32 @@ impl Shuttle {
                 return Err(err.context(
                     format!(
                         "Failed to verify the version of shuttle-runtime in {}. Is cargo targeting the correct executable?",
-                        service.executable_path.display()
+                        path.display()
                     )
                 ));
             }
         }
-        let runtime_executable = service.executable_path.clone();
 
+        Ok(())
+    }
+
+    async fn spin_local_runtime(
+        run_args: &RunArgs,
+        service: &BuiltService,
+        idx: u16,
+    ) -> Result<Option<(Child, runtime::Client)>> {
+        let secrets = Shuttle::get_secrets(run_args, service)?;
+
+        trace!(path = ?service.executable_path, "runtime executable");
+
+        Shuttle::check_and_warn_runtime_version(&service.executable_path).await?;
+
+        let runtime_executable = service.executable_path.clone();
         let port =
             portpicker::pick_unused_port().expect("unable to find available port for gRPC server");
         // Child process and gRPC client for sending requests to it
-        let (mut runtime, mut runtime_client) = runner::start(
-            beta,
-            port,
-            runtime_executable,
-            service.workspace_path.as_path(),
-        )
-        .await?;
+        let (mut runtime, mut runtime_client) =
+            runner::start(port, runtime_executable, service.workspace_path.as_path()).await?;
 
         let service_name = service.service_name()?;
         let deployment_id: Uuid = Default::default();
@@ -1416,9 +1432,7 @@ impl Shuttle {
                 service_name.as_str(),
                 false,
                 false,
-                // Set beta to false to avoid breaking local run with beta changes.
-                // TODO: make local run compatible with --beta.
-                false
+                false,
             )
         );
 
@@ -1625,7 +1639,7 @@ impl Shuttle {
     }
 
     async fn pre_local_run(&self, run_args: &RunArgs) -> Result<Vec<BuiltService>> {
-        trace!("starting a local run for a service: {run_args:?}");
+        trace!("starting a local run with args: {run_args:?}");
 
         let (tx, mut rx) = tokio::sync::mpsc::channel::<String>(256);
         tokio::task::spawn(async move {
@@ -1671,10 +1685,26 @@ impl Shuttle {
             exit(0);
         }
     }
+    fn find_available_port_beta(run_args: &mut RunArgs) {
+        let original_port = run_args.port;
+        for port in (run_args.port..=std::u16::MAX).step_by(10) {
+            if !portpicker::is_free_tcp(port) {
+                continue;
+            }
+            run_args.port = port;
+            break;
+        }
+
+        if run_args.port != original_port {
+            eprintln!(
+                "Port {} is already in use. Using port {}.",
+                original_port, run_args.port,
+            )
+        };
+    }
 
     #[cfg(target_family = "unix")]
     async fn local_run(&self, mut run_args: RunArgs) -> Result<CommandOutcome> {
-        debug!("starting local run");
         let services = self.pre_local_run(&run_args).await?;
 
         let mut sigterm_notif =
@@ -1694,7 +1724,7 @@ impl Shuttle {
             // We must cover the case of starting multiple workspace services and receiving a signal in parallel.
             // This must stop all the existing runtimes and creating new ones.
             signal_received = tokio::select! {
-                res = Shuttle::spin_local_runtime(self.beta, &run_args, service, i as u16) => {
+                res = Shuttle::spin_local_runtime(&run_args, service, i as u16) => {
                     match res {
                         Ok(runtime) => {
                             Shuttle::add_runtime_info(runtime, &mut runtimes).await?;
@@ -1783,6 +1813,167 @@ impl Shuttle {
             "Run `cargo shuttle project start` to create a project environment on Shuttle.\n\
              Run `cargo shuttle deploy` to deploy your Shuttle service."
         );
+
+        Ok(CommandOutcome::Ok)
+    }
+
+    async fn local_run_beta(&self, mut run_args: RunArgs) -> Result<CommandOutcome> {
+        let project_name = self.ctx.project_name().to_owned();
+        let services = self.pre_local_run(&run_args).await?;
+        let service = services
+            .first()
+            .expect("at least one shuttle service")
+            .to_owned();
+
+        trace!(path = ?service.executable_path, "runtime executable");
+
+        let secrets = Shuttle::get_secrets(&run_args, &service)?;
+        Shuttle::find_available_port_beta(&mut run_args);
+        Shuttle::check_and_warn_runtime_version(&service.executable_path).await?;
+
+        let runtime_executable = service.executable_path.clone();
+        let api_port = portpicker::pick_unused_port()
+            .expect("failed to find available port for local provisioner server");
+        let api_addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), api_port);
+        let ip = if run_args.external {
+            Ipv4Addr::UNSPECIFIED
+        } else {
+            Ipv4Addr::LOCALHOST
+        };
+
+        let state = Arc::new(ProvApiState {
+            project_name: project_name.clone(),
+            secrets,
+        });
+        ProvisionerServerBeta::start(state, &api_addr);
+
+        println!(
+            "\n    {} {} on http://{}:{}\n",
+            "Starting".bold().green(),
+            service.package_name,
+            ip,
+            run_args.port,
+        );
+
+        info!(
+            path = %runtime_executable.display(),
+            "Spawning runtime process",
+        );
+        let mut runtime = tokio::process::Command::new(
+            dunce::canonicalize(runtime_executable).context("canonicalize path of executable")?,
+        )
+        .current_dir(&service.workspace_path)
+        .args(["--run"])
+        .envs([
+            ("SHUTTLE_BETA", "true"),
+            ("SHUTTLE_PROJECT_ID", "proj_LOCAL"),
+            ("SHUTTLE_PROJECT_NAME", project_name.as_str()),
+            ("SHUTTLE_ENV", Environment::Local.to_string().as_str()),
+            ("SHUTTLE_RUNTIME_IP", ip.to_string().as_str()),
+            ("SHUTTLE_RUNTIME_PORT", run_args.port.to_string().as_str()),
+            (
+                "SHUTTLE_API",
+                format!("http://127.0.0.1:{}", api_port).as_str(),
+            ),
+        ])
+        .stdout(std::process::Stdio::piped())
+        .kill_on_drop(true)
+        .spawn()
+        .context("spawning runtime process")?;
+
+        let child_stdout = runtime
+            .stdout
+            .take()
+            .context("child process did not have a handle to stdout")?;
+        let mut reader = BufReader::new(child_stdout).lines();
+        let raw = run_args.raw;
+        tokio::spawn(async move {
+            while let Some(line) = reader.next_line().await.unwrap() {
+                if raw {
+                    println!("{}", line);
+                } else {
+                    let log_item = LogItemBeta::new(Utc::now(), "app".to_owned(), line);
+                    println!("{log_item}");
+                }
+            }
+        });
+
+        #[cfg(target_family = "unix")]
+        let exit_result = {
+            let mut sigterm_notif =
+                tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+                    .expect("Can not get the SIGTERM signal receptor");
+            let mut sigint_notif =
+                tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())
+                    .expect("Can not get the SIGINT signal receptor");
+            tokio::select! {
+                exit_result = runtime.wait() => {
+                    Some(exit_result)
+                }
+                _ = sigterm_notif.recv() => {
+                    eprintln!("cargo-shuttle received SIGTERM. Killing the runtime...");
+                    None
+                },
+                _ = sigint_notif.recv() => {
+                    eprintln!("cargo-shuttle received SIGINT. Killing the runtime...");
+                    None
+                }
+            }
+        };
+        #[cfg(target_family = "windows")]
+        let exit_result = {
+            let mut ctrl_break_notif = tokio::signal::windows::ctrl_break()
+                .expect("Can not get the CtrlBreak signal receptor");
+            let mut ctrl_c_notif =
+                tokio::signal::windows::ctrl_c().expect("Can not get the CtrlC signal receptor");
+            let mut ctrl_close_notif = tokio::signal::windows::ctrl_close()
+                .expect("Can not get the CtrlClose signal receptor");
+            let mut ctrl_logoff_notif = tokio::signal::windows::ctrl_logoff()
+                .expect("Can not get the CtrlLogoff signal receptor");
+            let mut ctrl_shutdown_notif = tokio::signal::windows::ctrl_shutdown()
+                .expect("Can not get the CtrlShutdown signal receptor");
+            tokio::select! {
+                exit_result = runtime.wait() => {
+                    Some(exit_result)
+                }
+                _ = ctrl_break_notif.recv() => {
+                    eprintln!("cargo-shuttle received ctrl-break.");
+                    None
+                },
+                _ = ctrl_c_notif.recv() => {
+                    eprintln!("cargo-shuttle received ctrl-c.");
+                    None
+                },
+                _ = ctrl_close_notif.recv() => {
+                    eprintln!("cargo-shuttle received ctrl-close.");
+                    None
+                },
+                _ = ctrl_logoff_notif.recv() => {
+                    eprintln!("cargo-shuttle received ctrl-logoff.");
+                    None
+                },
+                _ = ctrl_shutdown_notif.recv() => {
+                    eprintln!("cargo-shuttle received ctrl-shutdown.");
+                    None
+                }
+            }
+        };
+        match exit_result {
+            Some(Ok(exit_status)) => {
+                bail!(
+                    "Runtime process exited with code {}",
+                    exit_status.code().unwrap_or_default()
+                );
+            }
+            Some(Err(e)) => {
+                bail!("Failed to wait for runtime process to exit: {e}");
+            }
+            None => {
+                runtime.kill().await?;
+            }
+        }
+
+        println!("Run `cargo shuttle deploy` to deploy your Shuttle service.");
 
         Ok(CommandOutcome::Ok)
     }

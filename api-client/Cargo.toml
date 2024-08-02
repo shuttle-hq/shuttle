@@ -13,6 +13,7 @@ shuttle-common = { workspace = true, features = ["models"] }
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 headers = { workspace = true }
+http = { workspace = true }
 percent-encoding = { workspace = true }
 reqwest = { workspace = true, features = ["json"] }
 reqwest-middleware = "0.2.5"

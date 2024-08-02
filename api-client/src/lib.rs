@@ -12,7 +12,7 @@ use shuttle_common::log::{LogsRange, LogsResponseBeta};
 use shuttle_common::models::deployment::{
     DeploymentRequest, DeploymentRequestBeta, UploadArchiveResponseBeta,
 };
-use shuttle_common::models::{deployment, project, service, team, user, ToJson};
+use shuttle_common::models::{deployment, project, service, team, user};
 use shuttle_common::resource::{ProvisionResourceRequest, ShuttleResourceOutput};
 use shuttle_common::{resource, LogItem, VersionInfo};
 use tokio::net::TcpStream;
@@ -26,6 +26,9 @@ mod middleware;
 use crate::middleware::LoggingMiddleware;
 #[cfg(feature = "tracing")]
 use tracing::{debug, error};
+
+mod util;
+use util::ToJson;
 
 #[derive(Clone)]
 pub struct ShuttleApiClient {

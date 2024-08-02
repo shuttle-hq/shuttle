@@ -258,7 +258,9 @@ async fn manage_resources() {
             "should update last_updated"
         );
 
-        service_db.last_updated = response.resources[1].last_updated.clone();
+        service_db
+            .last_updated
+            .clone_from(&response.resources[1].last_updated);
 
         let expected = ResourcesResponse {
             success: true,

@@ -589,7 +589,7 @@ pub mod beta {
                             .await
                             .context("Failed to start Docker container. Make sure that a Docker engine is running.")?;
                         ShuttleResourceOutput {
-                            output: serde_json::to_value(&res).unwrap(),
+                            output: serde_json::to_value(res).unwrap(),
                             custom: serde_json::Value::Null,
                             state: Some(resource::ResourceState::Ready),
                         }

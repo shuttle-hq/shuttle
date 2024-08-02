@@ -732,7 +732,7 @@ pub async fn refresh_with_retry(
     let mut proj = Box::new(project);
 
     loop {
-        let refreshed = proj.refresh(ctx).await;
+        let refreshed = proj.clone().refresh(ctx).await;
         match refreshed.as_ref() {
             Ok(Project::Errored(err)) => match &err.ctx {
                 Some(err_ctx) => {
@@ -740,7 +740,7 @@ pub async fn refresh_with_retry(
                         return refreshed;
                     } else {
                         num_attempt += 1;
-                        proj = err_ctx.clone();
+                        proj.clone_from(err_ctx);
                         tokio::time::sleep(Duration::from_millis(100_u64 * 2_u64.pow(num_attempt)))
                             .await
                     }

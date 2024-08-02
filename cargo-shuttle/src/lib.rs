@@ -641,7 +641,7 @@ impl Shuttle {
         if should_create_environment {
             // Set the project working directory path to the init path,
             // so `load_project` is ran with the correct project path
-            project_args.working_directory = path.clone();
+            project_args.working_directory.clone_from(&path);
 
             self.load_project(&project_args)?;
             self.project_start(DEFAULT_IDLE_MINUTES).await?;
@@ -1881,7 +1881,7 @@ impl Shuttle {
             dunce::canonicalize(runtime_executable).context("canonicalize path of executable")?,
         )
         .current_dir(&service.workspace_path)
-        .args(&["--run"])
+        .args(["--run"])
         .envs([
             ("SHUTTLE_BETA", "true"),
             ("SHUTTLE_PROJECT_ID", "proj_LOCAL"),

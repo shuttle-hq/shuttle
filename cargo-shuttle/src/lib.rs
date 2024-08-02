@@ -5,7 +5,6 @@ mod provisioner_server;
 mod suggestions;
 
 use std::collections::{BTreeMap, HashMap};
-use std::convert::Infallible;
 use std::ffi::OsString;
 use std::fmt::Write as FmtWrite;
 use std::fs::{read_to_string, File};
@@ -17,12 +16,10 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use anyhow::{anyhow, bail, Context, Result};
-use args::{ConfirmationArgs, GenerateCommand, TableArgs};
 use chrono::Utc;
 use clap::{parser::ValueSource, CommandFactory, FromArgMatches};
 use clap_complete::{generate, Shell};
 use clap_mangen::Man;
-use config::RequestContext;
 use crossterm::style::Stylize;
 use dialoguer::{theme::ColorfulTheme, Confirm, Input, Password, Select};
 use flate2::write::GzEncoder;
@@ -30,13 +27,10 @@ use flate2::Compression;
 use futures::{StreamExt, TryFutureExt};
 use git2::{Repository, StatusOptions};
 use globset::{Glob, GlobSetBuilder};
-use hyper::service::{make_service_fn, service_fn};
-use hyper::Server;
 use ignore::overrides::OverrideBuilder;
 use ignore::WalkBuilder;
 use indicatif::ProgressBar;
 use indoc::{formatdoc, printdoc};
-use provisioner_server::beta::{handler, ProvApiState, ProvisionerServerBeta};
 use reqwest::header::HeaderMap;
 use shuttle_api_client::ShuttleApiClient;
 use shuttle_common::{
@@ -84,9 +78,12 @@ use zip::write::FileOptions;
 
 pub use crate::args::{Command, ProjectArgs, RunArgs, ShuttleArgs};
 use crate::args::{
-    DeployArgs, DeploymentCommand, InitArgs, LoginArgs, LogoutArgs, LogsArgs, ProjectCommand,
-    ProjectStartArgs, ResourceCommand, TemplateLocation,
+    ConfirmationArgs, DeployArgs, DeploymentCommand, GenerateCommand, InitArgs, LoginArgs,
+    LogoutArgs, LogsArgs, ProjectCommand, ProjectStartArgs, ResourceCommand, TableArgs,
+    TemplateLocation,
 };
+use crate::config::RequestContext;
+use crate::provisioner_server::beta::{ProvApiState, ProvisionerServerBeta};
 use crate::provisioner_server::LocalProvisioner;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -599,7 +596,7 @@ impl Shuttle {
         };
 
         // 5. Initialize locally
-        init::generate_project(
+        crate::init::generate_project(
             path.clone(),
             project_args
                 .name
@@ -1845,7 +1842,7 @@ impl Shuttle {
         };
 
         let state = Arc::new(ProvApiState {
-            project_name,
+            project_name: project_name.clone(),
             secrets,
         });
         ProvisionerServerBeta::start(state, &api_addr);
@@ -1870,7 +1867,7 @@ impl Shuttle {
         .envs([
             ("SHUTTLE_BETA", "true"),
             ("SHUTTLE_PROJECT_ID", "proj_LOCAL"),
-            ("SHUTTLE_PROJECT_NAME", "TODO"),
+            ("SHUTTLE_PROJECT_NAME", project_name.as_str()),
             ("SHUTTLE_ENV", Environment::Local.to_string().as_str()),
             ("SHUTTLE_RUNTIME_IP", ip.to_string().as_str()),
             ("SHUTTLE_RUNTIME_PORT", run_args.port.to_string().as_str()),

@@ -1,5 +1,4 @@
 use std::{
-    net::SocketAddr,
     path::{Path, PathBuf},
     process::Stdio,
 };
@@ -12,17 +11,13 @@ use tracing::info;
 pub async fn start(
     beta: bool,
     port: u16,
-    // only used on beta. must match port.
-    address: SocketAddr,
     runtime_executable: PathBuf,
     project_path: &Path,
 ) -> anyhow::Result<(process::Child, runtime::Client)> {
     let mut args = vec![];
     if beta {
-        let addr_str = address.to_string();
         args.push("--beta".to_owned());
-        args.push("--address".to_owned());
-        args.push(addr_str);
+        args.push("--run".to_owned());
     } else {
         let port_str = port.to_string();
         args.push("--port".to_owned());

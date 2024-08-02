@@ -19,9 +19,14 @@ reqwest-middleware = "0.2.5"
 rmp-serde = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
-task-local-extensions = "0.1.4"
 tokio = { workspace = true, features = ["macros", "signal", "rt-multi-thread"] }
 tokio-tungstenite = { workspace = true }
-tracing = { workspace = true, features = ["default"] }
 url = { workspace = true }
 uuid = { workspace = true, features = ["v4"] }
+
+task-local-extensions = { version = "0.1.4", optional = true }
+tracing = { workspace = true, features = ["default"], optional = true }
+
+[features]
+default = ["tracing"]
+tracing = ["dep:tracing", "dep:task-local-extensions"]

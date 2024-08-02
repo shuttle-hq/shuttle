@@ -13,7 +13,6 @@ pub mod headers;
 pub mod metrics;
 mod otlp_tracing_bridge;
 pub mod project_name;
-pub mod resource;
 pub mod trace;
 
 #[cfg(any(test, feature = "test-utils"))]

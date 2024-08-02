@@ -1338,7 +1338,6 @@ impl Shuttle {
         let (mut runtime, mut runtime_client) = runner::start(
             beta,
             port,
-            SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port),
             runtime_executable,
             service.workspace_path.as_path(),
         )

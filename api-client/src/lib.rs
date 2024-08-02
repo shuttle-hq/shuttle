@@ -1,5 +1,3 @@
-mod middleware;
-
 use std::time::Duration;
 
 use anyhow::{Context, Result};
@@ -9,19 +7,25 @@ use reqwest::header::HeaderMap;
 use reqwest::Response;
 use reqwest_middleware::{ClientWithMiddleware, RequestBuilder};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use shuttle_common::log::{LogsRange, LogsResponseBeta};
 use shuttle_common::models::deployment::{
     DeploymentRequest, DeploymentRequestBeta, UploadArchiveResponseBeta,
 };
 use shuttle_common::models::{deployment, project, service, team, user, ToJson};
+use shuttle_common::resource::{ProvisionResourceRequest, ShuttleResourceOutput};
 use shuttle_common::{resource, LogItem, VersionInfo};
 use tokio::net::TcpStream;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
-use tracing::{debug, error};
 use uuid::Uuid;
 
+#[cfg(feature = "tracing")]
+mod middleware;
+#[cfg(feature = "tracing")]
 use crate::middleware::LoggingMiddleware;
+#[cfg(feature = "tracing")]
+use tracing::{debug, error};
 
 #[derive(Clone)]
 pub struct ShuttleApiClient {
@@ -37,9 +41,12 @@ impl ShuttleApiClient {
             builder = builder.default_headers(h);
         }
         let client = builder.timeout(Duration::from_secs(60)).build().unwrap();
-        let client = reqwest_middleware::ClientBuilder::new(client)
-            .with(LoggingMiddleware)
-            .build();
+
+        let builder = reqwest_middleware::ClientBuilder::new(client);
+        #[cfg(feature = "tracing")]
+        let builder = builder.with(LoggingMiddleware);
+        let client = builder.build();
+
         Self {
             client,
             api_url,
@@ -206,6 +213,18 @@ impl ShuttleApiClient {
         let r#type = utf8_percent_encode(&r#type, percent_encoding::NON_ALPHANUMERIC).to_owned();
 
         self.delete_json(format!("/projects/{project}/resources/{}", r#type))
+            .await
+    }
+    pub async fn provision_resource_beta(
+        &self,
+        project: &str,
+        req: ProvisionResourceRequest,
+    ) -> Result<ShuttleResourceOutput<Value>> {
+        self.post_json(format!("/projects/{project}/resources"), Some(req))
+            .await
+    }
+    pub async fn get_secrets_beta(&self, project: &str) -> Result<resource::Response> {
+        self.get_json(format!("/projects/{project}/resources/secrets"))
             .await
     }
 
@@ -411,6 +430,7 @@ impl ShuttleApiClient {
         }
 
         let (stream, _) = connect_async(request).await.with_context(|| {
+            #[cfg(feature = "tracing")]
             error!("failed to connect to websocket");
             "could not connect to websocket"
         })?;
@@ -446,6 +466,7 @@ impl ShuttleApiClient {
 
         if let Some(body) = body {
             let body = serde_json::to_string(&body)?;
+            #[cfg(feature = "tracing")]
             debug!("Outgoing body: {}", body);
             builder = builder.body(body);
             builder = builder.header("Content-Type", "application/json");
@@ -477,6 +498,7 @@ impl ShuttleApiClient {
 
         if let Some(body) = body {
             let body = serde_json::to_string(&body)?;
+            #[cfg(feature = "tracing")]
             debug!("Outgoing body: {}", body);
             builder = builder.body(body);
             builder = builder.header("Content-Type", "application/json");

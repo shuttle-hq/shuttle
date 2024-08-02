@@ -16,6 +16,8 @@ pub use async_trait::async_trait;
 pub use tokio;
 
 mod alpha;
+mod beta;
+mod start;
 
 const NAME: &str = env!("CARGO_PKG_NAME");
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -23,11 +25,16 @@ fn version() -> String {
     format!("{} {}", crate::NAME, crate::VERSION)
 }
 
+pub use plugins::{Metadata, Secrets};
+/// Built-in plugins
+mod plugins;
+
 // Not part of public API
 #[doc(hidden)]
 pub mod __internals {
     // Internals used by the codegen
-    pub use crate::alpha::{start, Alpha};
+    pub use crate::alpha::Alpha;
+    pub use crate::start::start;
 
     // Dependencies required by the codegen
     pub use anyhow::Context;
@@ -37,83 +44,43 @@ pub mod __internals {
     pub use strfmt::strfmt;
     #[cfg(feature = "setup-tracing")]
     pub use tracing_subscriber;
-}
 
-pub use plugins::*;
-/// Built-in plugins
-mod plugins {
-    use crate::async_trait;
-    use shuttle_service::{
-        resource::{ProvisionResourceRequest, ShuttleResourceOutput, Type},
-        DeploymentMetadata, Error, ResourceFactory, ResourceInputBuilder, SecretStore,
-    };
-
-    /// ## Shuttle Metadata
-    ///
-    /// Plugin for getting various metadata at runtime.
-    ///
-    /// ### Usage
-    ///
-    /// ```rust,ignore
-    /// #[shuttle_runtime::main]
-    /// async fn main(
-    ///     #[shuttle_runtime::Metadata] metadata: DeploymentMetadata,
-    /// ) -> __ { ... }
-    #[derive(Default)]
-    pub struct Metadata;
+    use super::*;
+    use std::future::Future;
+    #[async_trait]
+    pub trait Loader {
+        async fn load(self, factory: ResourceFactory) -> Result<Vec<Vec<u8>>, Error>;
+    }
 
     #[async_trait]
-    impl ResourceInputBuilder for Metadata {
-        type Input = DeploymentMetadata;
-        type Output = DeploymentMetadata;
-
-        async fn build(self, factory: &ResourceFactory) -> Result<Self::Input, Error> {
-            Ok(factory.get_metadata())
+    impl<F, O> Loader for F
+    where
+        F: FnOnce(ResourceFactory) -> O + Send,
+        O: Future<Output = Result<Vec<Vec<u8>>, Error>> + Send,
+    {
+        async fn load(self, factory: ResourceFactory) -> Result<Vec<Vec<u8>>, Error> {
+            (self)(factory).await
         }
     }
 
-    /// ## Shuttle Secrets
-    ///
-    /// Plugin for getting secrets in your [Shuttle](https://www.shuttle.rs) service.
-    ///
-    /// ### Usage
-    ///
-    /// Add a `Secrets.toml` file to the root of your crate with the secrets you'd like to store.
-    /// Make sure to add `Secrets*.toml` to `.gitignore` to omit your secrets from version control.
-    ///
-    /// Next, add `#[shuttle_runtime::Secrets] secrets: SecretStore` as a parameter to your `shuttle_service::main` function.
-    /// `SecretStore::get` can now be called to retrieve your API keys and other secrets at runtime.
-    ///
-    /// ### Example
-    ///
-    /// ```rust,ignore
-    /// #[shuttle_runtime::main]
-    /// async fn main(
-    ///     #[shuttle_runtime::Secrets] secrets: SecretStore
-    /// ) -> ShuttleAxum {
-    ///     // get secret defined in `Secrets.toml` file.
-    ///     let secret = secrets.get("MY_API_KEY").unwrap();
-    ///
-    ///     let router = Router::new()
-    ///         .route("/", || async move { format!("My secret is: {}", secret) });
-    ///
-    ///     Ok(router.into())
-    /// }
-    /// ```
-    #[derive(Default)]
-    pub struct Secrets;
+    #[async_trait]
+    pub trait Runner {
+        type Service: Service;
+
+        async fn run(self, resources: Vec<Vec<u8>>) -> Result<Self::Service, Error>;
+    }
 
     #[async_trait]
-    impl ResourceInputBuilder for Secrets {
-        type Input = ProvisionResourceRequest;
-        type Output = ShuttleResourceOutput<SecretStore>;
+    impl<F, O, S> Runner for F
+    where
+        F: FnOnce(Vec<Vec<u8>>) -> O + Send,
+        O: Future<Output = Result<S, Error>> + Send,
+        S: Service,
+    {
+        type Service = S;
 
-        async fn build(self, _factory: &ResourceFactory) -> Result<Self::Input, Error> {
-            Ok(ProvisionResourceRequest::new(
-                Type::Secrets,
-                serde_json::Value::Null,
-                serde_json::Value::Null,
-            ))
+        async fn run(self, resources: Vec<Vec<u8>>) -> Result<Self::Service, Error> {
+            (self)(resources).await
         }
     }
 }

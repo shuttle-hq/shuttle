@@ -537,7 +537,7 @@ pub mod beta {
         Ok(res)
     }
 
-    pub async fn provision(
+    async fn provision(
         state: Arc<ProvApiState>,
         method: Method,
         uri: &str,
@@ -576,10 +576,10 @@ pub mod beta {
                                     .into(),
                                 ),
                             };
-                        resource::Response {
-                            r#type: shuttle_resource.r#type,
-                            config: serde_json::Value::Null,
-                            data: serde_json::to_value(&res).unwrap(),
+                        ShuttleResourceOutput {
+                            output: serde_json::to_value(&res).unwrap(),
+                            custom: serde_json::Value::Null,
+                            state: Some(resource::ResourceState::Ready),
                         }
                     }
                     resource::Type::Container => {
@@ -588,28 +588,23 @@ pub mod beta {
                         let res = prov.start_container(config)
                             .await
                             .context("Failed to start Docker container. Make sure that a Docker engine is running.")?;
-                        resource::Response {
-                            r#type: shuttle_resource.r#type,
-                            config: serde_json::Value::Null,
-                            data: serde_json::to_value(&res).unwrap(),
+                        ShuttleResourceOutput {
+                            output: serde_json::to_value(&res).unwrap(),
+                            custom: serde_json::Value::Null,
+                            state: Some(resource::ResourceState::Ready),
                         }
                     }
-                    resource::Type::Secrets => resource::Response {
-                        r#type: shuttle_resource.r#type,
-                        config: serde_json::Value::Null,
-                        data: serde_json::to_value(&state.secrets).unwrap(),
+                    resource::Type::Secrets => ShuttleResourceOutput {
+                        output: serde_json::to_value(&state.secrets).unwrap(),
+                        custom: serde_json::Value::Null,
+                        state: Some(resource::ResourceState::Ready),
                     },
                     _ => {
                         bail!("Resource not supported");
                     }
                 };
 
-                serde_json::to_vec(&ShuttleResourceOutput {
-                    output: response,
-                    custom: serde_json::Value::Null,
-                    state: Some(resource::ResourceState::Ready),
-                })
-                .unwrap()
+                serde_json::to_vec(&response).unwrap()
             }
             _ => bail!("Received unsupported resource request"),
         })

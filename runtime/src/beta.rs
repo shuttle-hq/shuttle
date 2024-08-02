@@ -16,7 +16,7 @@ use shuttle_common::{
     resource::{ResourceInput, ResourceState, Type},
     secrets::Secret,
 };
-use shuttle_service::{Environment, ResourceFactory, Service};
+use shuttle_service::{Environment, ResourceFactory, Service, ShuttleResourceOutput};
 
 use crate::__internals::{Loader, Runner};
 
@@ -157,7 +157,12 @@ pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + S
     {
         // Secrets don't need to be requested here since we already got them above.
         if shuttle_resource.r#type == Type::Secrets {
-            *bytes = serde_json::to_vec(&secrets).expect("to serialize struct");
+            *bytes = serde_json::to_vec(&ShuttleResourceOutput {
+                output: serde_json::to_value(&secrets).unwrap(),
+                custom: serde_json::Value::Null,
+                state: Some(ResourceState::Ready),
+            })
+            .expect("to serialize struct");
             continue;
         }
         println!("Provisioning {}", shuttle_resource.r#type);
@@ -166,12 +171,12 @@ pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + S
                 .provision_resource_beta(&project_id, shuttle_resource.clone())
                 .await
             {
-                Ok(o) => match o.state.expect("resource to have a state") {
+                Ok(output) => match output.state.clone().expect("resource to have a state") {
                     ResourceState::Provisioning | ResourceState::Authorizing => {
                         tokio::time::sleep(tokio::time::Duration::from_millis(2000)).await;
                     }
                     ResourceState::Ready => {
-                        *bytes = serde_json::to_vec(&o.output).expect("to serialize struct");
+                        *bytes = serde_json::to_vec(&output).expect("to serialize struct");
                         break;
                     }
                     bad_state => {

@@ -1917,7 +1917,7 @@ impl Shuttle {
         });
 
         #[cfg(target_family = "unix")]
-        {
+        let exit_result = {
             let mut sigterm_notif =
                 tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
                     .expect("Can not get the SIGTERM signal receptor");
@@ -1925,16 +1925,21 @@ impl Shuttle {
                 tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())
                     .expect("Can not get the SIGINT signal receptor");
             tokio::select! {
+                exit_result = runtime.wait() => {
+                    Some(exit_result)
+                }
                 _ = sigterm_notif.recv() => {
-                    eprintln!("cargo-shuttle received SIGTERM. Killing all the runtimes...");
+                    eprintln!("cargo-shuttle received SIGTERM. Killing the runtime...");
+                    None
                 },
                 _ = sigint_notif.recv() => {
-                    eprintln!("cargo-shuttle received SIGINT. Killing all the runtimes...");
+                    eprintln!("cargo-shuttle received SIGINT. Killing the runtime...");
+                    None
                 }
-            };
-        }
+            }
+        };
         #[cfg(target_family = "windows")]
-        {
+        let exit_result = {
             let mut ctrl_break_notif = tokio::signal::windows::ctrl_break()
                 .expect("Can not get the CtrlBreak signal receptor");
             let mut ctrl_c_notif =
@@ -1945,28 +1950,48 @@ impl Shuttle {
                 .expect("Can not get the CtrlLogoff signal receptor");
             let mut ctrl_shutdown_notif = tokio::signal::windows::ctrl_shutdown()
                 .expect("Can not get the CtrlShutdown signal receptor");
-
             tokio::select! {
+                exit_result = runtime.wait() => {
+                    Some(exit_result)
+                }
                 _ = ctrl_break_notif.recv() => {
                     eprintln!("cargo-shuttle received ctrl-break.");
+                    None
                 },
                 _ = ctrl_c_notif.recv() => {
                     eprintln!("cargo-shuttle received ctrl-c.");
+                    None
                 },
                 _ = ctrl_close_notif.recv() => {
                     eprintln!("cargo-shuttle received ctrl-close.");
+                    None
                 },
                 _ = ctrl_logoff_notif.recv() => {
                     eprintln!("cargo-shuttle received ctrl-logoff.");
+                    None
                 },
                 _ = ctrl_shutdown_notif.recv() => {
                     eprintln!("cargo-shuttle received ctrl-shutdown.");
+                    None
                 }
             }
+        };
+        match exit_result {
+            Some(Ok(exit_status)) => {
+                bail!(
+                    "Runtime process exited with code {}",
+                    exit_status.code().unwrap_or_default()
+                );
+            }
+            Some(Err(e)) => {
+                bail!("Failed to wait for runtime process to exit: {e}");
+            }
+            None => {
+                runtime.kill().await?;
+            }
         }
-        runtime.kill().await?;
 
-        // println!("Run `cargo shuttle deploy` to deploy your Shuttle service.");
+        println!("Run `cargo shuttle deploy` to deploy your Shuttle service.");
 
         Ok(CommandOutcome::Ok)
     }

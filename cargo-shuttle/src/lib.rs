@@ -14,6 +14,7 @@ use std::net::{Ipv4Addr, SocketAddr};
 use std::path::{Path, PathBuf};
 use std::process::exit;
 use std::str::FromStr;
+use std::sync::Arc;
 
 use anyhow::{anyhow, bail, Context, Result};
 use args::{ConfirmationArgs, GenerateCommand, TableArgs};
@@ -30,14 +31,14 @@ use futures::{StreamExt, TryFutureExt};
 use git2::{Repository, StatusOptions};
 use globset::{Glob, GlobSetBuilder};
 use hyper::service::{make_service_fn, service_fn};
-use hyper::{body, Body, Method, Request as HyperRequest, Response, Server};
+use hyper::Server;
 use ignore::overrides::OverrideBuilder;
 use ignore::WalkBuilder;
 use indicatif::ProgressBar;
 use indoc::{formatdoc, printdoc};
+use provisioner_server::beta::{handler, ProvApiState};
 use reqwest::header::HeaderMap;
 use shuttle_api_client::ShuttleApiClient;
-use shuttle_common::resource::ProvisionResourceRequest;
 use shuttle_common::{
     constants::{
         headers::X_CARGO_SHUTTLE_VERSION, API_URL_DEFAULT, DEFAULT_IDLE_MINUTES, EXAMPLES_REPO,
@@ -1820,6 +1821,7 @@ impl Shuttle {
     }
 
     async fn local_run_beta(&self, mut run_args: RunArgs) -> Result<CommandOutcome> {
+        let project_name = self.ctx.project_name().to_owned();
         let services = self.pre_local_run(&run_args).await?;
         let service = services
             .first()
@@ -1842,76 +1844,23 @@ impl Shuttle {
             Ipv4Addr::LOCALHOST
         };
 
-        let make_svc = make_service_fn(|_conn| async { Ok::<_, Infallible>(service_fn(handler)) });
-
-        async fn handler(
-            req: HyperRequest<Body>,
-        ) -> std::result::Result<Response<Body>, hyper::Error> {
-            let method = req.method().clone();
-            let uri = req.uri().clone();
-            debug!("Received {method} {uri}");
-
-            let body = body::to_bytes(req.into_body()).await?.to_vec();
-            let res = match (method, uri.to_string().as_str()) {
-                (Method::GET, "/projects/proj_LOCAL/resources/secrets") => resource::Response {
-                    config: serde_json::Value::Null,
-                    r#type: resource::Type::Secrets,
-                    data: serde_json::to_value(HashMap::<String, String>::new()).unwrap(),
-                },
-                (Method::POST, "/projects/proj_LOCAL/resources") => {
-                    let prov = LocalProvisioner::new().unwrap();
-                    let shuttle_resource: ProvisionResourceRequest =
-                        serde_json::from_slice(&body).unwrap();
-                    // TODO: Reject req if version field mismatch
-
-                    match shuttle_resource.r#type {
-                        resource::Type::Database(db_type) => {
-                            let config: DbInput = serde_json::from_value(shuttle_resource.config)
-                                .context("deserializing resource config")?;
-                            let res = match config.local_uri {
-                                Some(local_uri) => DatabaseResource::ConnectionString(local_uri),
-                                None => DatabaseResource::Info(
-                                    prov.provision_database(Request::new(DatabaseRequest {
-                                        project_name: project_name.to_string(),
-                                        db_type: Some(db_type.into()),
-                                        db_name: config.db_name,
-                                    }))
-                                    .await
-                                    .context("Failed to start database container. Make sure that a Docker engine is running.")?
-                                    .into_inner()
-                                    .into(),
-                                ),
-                            };
-                            resource::Response {
-                                r#type: shuttle_resource.r#type,
-                                config: serde_json::Value::Null,
-                                data: serde_json::to_value(&res).unwrap(),
-                            }
-                        }
-                        resource::Type::Container => {
-                            let config = serde_json::from_value(shuttle_resource.config)
-                                .context("deserializing resource config")?;
-                            let res = prov.start_container(config).await.context("Failed to start Docker container. Make sure that a Docker engine is running.")?;
-                        }
-                        resource::Type::Secrets => {
-                            panic!("bruh?");
-                        }
-                        _ => {
-                            unimplemented!("resource not supported");
-                        }
-                    }
-                }
-                _ => todo!(),
-            };
-
-            let res = Response::new(Body::from(serde_json::to_vec(&res).unwrap()));
-
-            Ok(res)
-        }
+        let state = Arc::new(ProvApiState {
+            project_name,
+            secrets,
+        });
+        let make_svc = make_service_fn(move |_conn| {
+            let state = state.clone();
+            async {
+                Ok::<_, Infallible>(service_fn(move |req| {
+                    let state = state.clone();
+                    handler(state, req)
+                }))
+            }
+        });
         let server = Server::bind(&api_addr).serve(make_svc);
         tokio::spawn(async move {
             if let Err(e) = server.await {
-                eprintln!("Server error: {}", e);
+                eprintln!("Provisioner server error: {}", e);
                 exit(1);
             }
         });

@@ -105,6 +105,7 @@ pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + S
     //
     // LOADING / PROVISIONING PHASE
     //
+    println!("Loading resources...");
 
     let secrets: BTreeMap<String, String> = match client
         .get_secrets_beta(&project_id)
@@ -159,7 +160,7 @@ pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + S
             *bytes = serde_json::to_vec(&secrets).expect("to serialize struct");
             continue;
         }
-        // TODO?: Add prints/tracing to show which resource is being provisioned
+        println!("Provisioning {}", shuttle_resource.r#type);
         loop {
             match client
                 .provision_resource_beta(&project_id, shuttle_resource.clone())
@@ -213,6 +214,7 @@ pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + S
     //
     // RUNNING PHASE
     //
+    println!("Starting service!");
 
     if let Err(e) = service.bind(service_addr).await {
         eprintln!("Service encountered an error in `bind`: {e}");

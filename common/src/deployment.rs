@@ -87,7 +87,7 @@ pub const DEPLOYER_END_MSG_BUILD_ERR: &str = "Service build encountered an error
 pub const DEPLOYER_END_MSG_CRASHED: &str = "Service encountered an error and crashed";
 pub const DEPLOYER_END_MSG_STOPPED: &str = "Service was stopped by the user"; // don't include this in end messages so that logs are not stopped too early
 pub const DEPLOYER_END_MSG_COMPLETED: &str = "Service finished running all on its own";
-pub const DEPLOYER_RUNTIME_START_RESPONSE: &str = "Runtime started successully";
+pub const DEPLOYER_RUNTIME_START_RESPONSE: &str = "Runtime started successfully";
 pub const DEPLOYER_RUNTIME_START_FAILED: &str = "Runtime did not start successfully";
 
 pub const DEPLOYER_END_MESSAGES_BAD: &[&str] = &[

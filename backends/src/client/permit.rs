@@ -389,7 +389,7 @@ impl PermissionsDal for Client {
     #[instrument(skip_all, fields(
         shuttle.user.id = user_id,
         shuttle.project.id = project_id,
-        shuttle.permit.client = true
+        shuttle.permit.client = true,
     ))]
     async fn create_project(&self, user_id: &str, project_id: &str) -> Result<()> {
         if let Err(e) = create_resource_instance(
@@ -477,7 +477,8 @@ impl PermissionsDal for Client {
     #[instrument(skip_all, fields(
         shuttle.user.id = user_id,
         shuttle.project.id = project_id,
-        shuttle.permit.client = true
+        shuttle.team.action = action,
+        shuttle.permit.client = true,
     ))]
     async fn allowed(&self, user_id: &str, project_id: &str, action: &str) -> Result<bool> {
         // NOTE: This API function was modified in upstream to use AuthorizationQuery
@@ -505,7 +506,11 @@ impl PermissionsDal for Client {
         Ok(res.allow.unwrap_or_default())
     }
 
-    #[instrument(skip_all, fields(shuttle.user.id = user_id, shuttle.permit.client = true))]
+    #[instrument(skip_all, fields(
+        shuttle.user.id = user_id,
+        shuttle.team.id = %team.id,
+        shuttle.permit.client = true,
+    ))]
     async fn create_team(&self, user_id: &str, team: &Team) -> Result<()> {
         if !self.allowed_team(user_id, &team.id, "create").await? {
             return Err(Error::ResponseError(ResponseContent {
@@ -557,7 +562,7 @@ impl PermissionsDal for Client {
     #[instrument(skip_all, fields(
         shuttle.user.id = user_id,
         shuttle.team.id = team_id,
-        shuttle.permit.client = true
+        shuttle.permit.client = true,
     ))]
     async fn delete_team(&self, user_id: &str, team_id: &str) -> Result<()> {
         if !self.allowed_team(user_id, team_id, "manage").await? {
@@ -590,7 +595,7 @@ impl PermissionsDal for Client {
     #[instrument(skip_all, fields(
         shuttle.user.id = user_id,
         shuttle.team.id = team_id,
-        shuttle.permit.client = true
+        shuttle.permit.client = true,
     ))]
     async fn get_team_projects(&self, user_id: &str, team_id: &str) -> Result<Vec<String>> {
         if !self.allowed_team(user_id, team_id, "view").await? {
@@ -628,7 +633,7 @@ impl PermissionsDal for Client {
     #[instrument(skip_all, fields(
         shuttle.user.id = user_id,
         shuttle.team.id = team_id,
-        shuttle.permit.client = true
+        shuttle.permit.client = true,
     ))]
     async fn get_team(&self, user_id: &str, team_id: &str) -> Result<team::Response> {
         let mut perms = get_user_permissions_user_permissions_post(
@@ -718,7 +723,7 @@ impl PermissionsDal for Client {
     #[instrument(skip_all, fields(
         shuttle.user.id = user_id,
         shuttle.project.id = project_id,
-        shuttle.permit.client = true
+        shuttle.permit.client = true,
     ))]
     async fn transfer_project_to_user(
         &self,
@@ -739,7 +744,7 @@ impl PermissionsDal for Client {
         shuttle.user.id = user_id,
         shuttle.team.id = team_id,
         shuttle.project.id = project_id,
-        shuttle.permit.client = true
+        shuttle.permit.client = true,
     ))]
     async fn transfer_project_to_team(
         &self,
@@ -772,7 +777,7 @@ impl PermissionsDal for Client {
         shuttle.user.id = user_id,
         shuttle.team.id = team_id,
         shuttle.project.id = project_id,
-        shuttle.permit.client = true
+        shuttle.permit.client = true,
     ))]
     async fn transfer_project_from_team(
         &self,
@@ -804,7 +809,7 @@ impl PermissionsDal for Client {
     #[instrument(skip_all, fields(
         shuttle.user.id = user_id,
         shuttle.team.id = team_id,
-        shuttle.permit.client = true
+        shuttle.permit.client = true,
     ))]
     async fn add_team_member(&self, admin_user: &str, team_id: &str, user_id: &str) -> Result<()> {
         if !self.allowed_team(admin_user, team_id, "manage").await? {
@@ -837,7 +842,7 @@ impl PermissionsDal for Client {
     #[instrument(skip_all, fields(
         shuttle.user.id = user_id,
         shuttle.team.id = team_id,
-        shuttle.permit.client = true
+        shuttle.permit.client = true,
     ))]
     async fn remove_team_member(
         &self,
@@ -870,7 +875,7 @@ impl PermissionsDal for Client {
     #[instrument(skip_all, fields(
         shuttle.user.id = user_id,
         shuttle.team.id = team_id,
-        shuttle.permit.client = true
+        shuttle.permit.client = true,
     ))]
     async fn get_team_members(
         &self,
@@ -915,7 +920,7 @@ impl PermissionsDal for Client {
     #[instrument(skip_all, fields(
         shuttle.user.id = user_id,
         shuttle.project.id = project_id,
-        shuttle.permit.client = true
+        shuttle.permit.client = true,
     ))]
     async fn get_project_owner(&self, user_id: &str, project_id: &str) -> Result<Owner> {
         if !self.allowed(user_id, project_id, "view").await? {

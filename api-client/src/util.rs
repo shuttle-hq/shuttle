@@ -14,27 +14,26 @@ pub trait ToJson {
 impl ToJson for reqwest::Response {
     async fn to_json<T: DeserializeOwned>(self) -> Result<T> {
         let status_code = self.status();
-        let full = self.bytes().await?;
+        let bytes = self.bytes().await?;
+        let string = String::from_utf8(bytes.to_vec())
+            .unwrap_or_else(|_| format!("[{} bytes]", bytes.len()));
 
         #[cfg(feature = "tracing")]
-        tracing::trace!(
-            response = %String::from_utf8(full.to_vec()).unwrap_or_else(|_| format!("[{} bytes]", full.len())),
-            "parsing response to json"
-        );
+        tracing::trace!(response = string, "Parsing response to JSON");
 
         if matches!(
             status_code,
             StatusCode::OK | StatusCode::SWITCHING_PROTOCOLS
         ) {
-            serde_json::from_slice(&full).context("failed to parse a successful response")
+            serde_json::from_str(&string).context("failed to parse a successful response")
         } else {
             #[cfg(feature = "tracing")]
-            tracing::trace!("parsing response to common error");
+            tracing::trace!("Parsing response to common error");
 
-            let res: ApiError = match serde_json::from_slice(&full) {
+            let res: ApiError = match serde_json::from_str(&string) {
                 Ok(res) => res,
                 _ => ApiError {
-                    message: "Failed to parse response from the server.".to_string(),
+                    message: format!("Failed to parse response from the server:\n{}", string),
                     status_code: status_code.as_u16(),
                 },
             };

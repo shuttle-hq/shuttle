@@ -150,7 +150,10 @@ impl Shuttle {
                 return Ok(CommandOutcome::Ok);
             }
             eprintln!("INFO: Using beta platform API");
-        } else if matches!(args.cmd, Command::Deployment(DeploymentCommand::Stop)) {
+        } else if matches!(
+            args.cmd,
+            Command::Deployment(DeploymentCommand::Stop) | Command::Account
+        ) {
             eprintln!("This command is not supported on the legacy platform.");
             return Ok(CommandOutcome::Ok);
         }
@@ -194,6 +197,7 @@ impl Shuttle {
                 | Command::Deploy(..)
                 | Command::Status
                 | Command::Logs { .. }
+                | Command::Account
                 | Command::Login(..)
                 | Command::Logout(..)
                 | Command::Deployment(..)
@@ -233,6 +237,7 @@ impl Shuttle {
                 GenerateCommand::Manpage => self.generate_manpage(),
                 GenerateCommand::Shell { shell, output } => self.complete(shell, output),
             },
+            Command::Account => self.account().await,
             Command::Login(login_args) => self.login(login_args, args.offline).await,
             Command::Logout(logout_args) => self.logout(logout_args).await,
             Command::Feedback => self.feedback(),
@@ -736,6 +741,24 @@ impl Shuttle {
         Ok(CommandOutcome::Ok)
     }
 
+    async fn account(&self) -> Result<CommandOutcome> {
+        let client = self.client.as_ref().unwrap();
+        let user = client.get_current_user_beta().await?;
+        println!("{}", "Account info:".bold());
+        println!("  User Id: {}", user.id);
+        println!("  Username: {}", user.name);
+        println!("  Account tier: {}", user.account_tier);
+        println!("  Subscriptions:");
+        for sub in user.subscriptions {
+            println!(
+                "    - {}: Type: {}, Quantity: {}, Created: {}, Updated: {}",
+                sub.id, sub.r#type, sub.quantity, sub.created_at, sub.updated_at,
+            );
+        }
+
+        Ok(CommandOutcome::Ok)
+    }
+
     /// Log in with the given API key or after prompting the user for one.
     async fn login(&mut self, login_args: LoginArgs, offline: bool) -> Result<CommandOutcome> {
         let api_key_str = match login_args.api_key {
@@ -768,7 +791,7 @@ impl Shuttle {
                     eprintln!("INFO: Skipping API key verification");
                 } else {
                     let u = client
-                        .get_current_user()
+                        .get_current_user_beta()
                         .await
                         .context("failed to check API key validity")?;
                     println!("Logged in as {} ({})", u.name.bold(), u.id.bold());

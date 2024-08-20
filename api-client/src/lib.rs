@@ -8,7 +8,7 @@ use reqwest::Response;
 use reqwest_middleware::{ClientWithMiddleware, RequestBuilder};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use shuttle_common::certificate::AddCertificateRequest;
+use shuttle_common::certificate::{AddCertificateRequest, CertificateResponse};
 use shuttle_common::log::{LogsRange, LogsResponseBeta};
 use shuttle_common::models::deployment::{
     DeploymentRequest, DeploymentRequestBeta, UploadArchiveResponseBeta,
@@ -137,11 +137,7 @@ impl ShuttleApiClient {
         deployment_req: DeploymentRequestBeta,
     ) -> Result<deployment::ResponseBeta> {
         let path = format!("/projects/{project}/deployments");
-        self.post(path, Some(deployment_req))
-            .await
-            .context("failed to start deployment")?
-            .to_json()
-            .await
+        self.post_json(path, Some(deployment_req)).await
     }
 
     pub async fn upload_archive_beta(
@@ -232,14 +228,16 @@ impl ShuttleApiClient {
             .await
     }
 
-    pub async fn add_certificate_beta(&self, project: &str, domain: String) -> Result<()> {
-        self.post(
+    pub async fn add_certificate_beta(
+        &self,
+        project: &str,
+        domain: String,
+    ) -> Result<CertificateResponse> {
+        self.post_json(
             format!("/projects/{project}/certificates"),
             Some(AddCertificateRequest { domain }),
         )
-        .await?;
-
-        Ok(())
+        .await
     }
 
     pub async fn create_project(

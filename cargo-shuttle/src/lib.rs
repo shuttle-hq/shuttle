@@ -173,6 +173,7 @@ impl Shuttle {
             Command::Deploy(..)
                 | Command::Deployment(..)
                 | Command::Resource(..)
+                | Command::Certificate(..)
                 | Command::Project(
                     // ProjectCommand::List does not need to know which project we are in
                     ProjectCommand::Start { .. }
@@ -202,6 +203,7 @@ impl Shuttle {
                 | Command::Logout(..)
                 | Command::Deployment(..)
                 | Command::Resource(..)
+                | Command::Certificate(..)
                 | Command::Stop
                 | Command::Clean
                 | Command::Project(..)

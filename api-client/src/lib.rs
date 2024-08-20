@@ -8,6 +8,7 @@ use reqwest::Response;
 use reqwest_middleware::{ClientWithMiddleware, RequestBuilder};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use shuttle_common::certificate::AddCertificateRequest;
 use shuttle_common::log::{LogsRange, LogsResponseBeta};
 use shuttle_common::models::deployment::{
     DeploymentRequest, DeploymentRequestBeta, UploadArchiveResponseBeta,
@@ -229,6 +230,16 @@ impl ShuttleApiClient {
     pub async fn get_secrets_beta(&self, project: &str) -> Result<resource::Response> {
         self.get_json(format!("/projects/{project}/resources/secrets"))
             .await
+    }
+
+    pub async fn add_certificate_beta(&self, project: &str, domain: String) -> Result<()> {
+        self.post(
+            format!("/projects/{project}/certificates"),
+            Some(AddCertificateRequest { domain }),
+        )
+        .await?;
+
+        Ok(())
     }
 
     pub async fn create_project(

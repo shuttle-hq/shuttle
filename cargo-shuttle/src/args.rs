@@ -99,7 +99,7 @@ impl ProjectArgs {
 /// for more information.
 #[derive(Parser)]
 pub enum Command {
-    /// Create a new Shuttle project
+    /// Generate a Shuttle project from a template
     Init(InitArgs),
     /// Run a Shuttle service locally
     Run(RunArgs),
@@ -110,16 +110,19 @@ pub enum Command {
     Deployment(DeploymentCommand),
     /// View the status of a Shuttle service
     Status,
-    /// Stop this Shuttle service
+    /// Stop a Shuttle service
     Stop,
-    /// View the logs of a deployment in this Shuttle service
+    /// View logs of a Shuttle service
     Logs(LogsArgs),
-    /// List or manage projects on Shuttle
+    /// Manage projects on Shuttle
     #[command(subcommand)]
     Project(ProjectCommand),
-    /// Manage resources of a Shuttle project
+    /// Manage resources
     #[command(subcommand)]
     Resource(ResourceCommand),
+    /// BETA: Manage SSL certificates for custom domains
+    #[command(subcommand)]
+    Certificate(CertificateCommand),
     /// Remove cargo build artifacts in the Shuttle environment
     Clean,
     /// BETA: Show info about your Shuttle account
@@ -158,7 +161,7 @@ pub struct TableArgs {
 
 #[derive(Parser)]
 pub enum DeploymentCommand {
-    /// List all the deployments for a service
+    /// List the deployments for a service
     List {
         #[arg(long, default_value = "1")]
         /// Which page to display
@@ -182,7 +185,7 @@ pub enum DeploymentCommand {
 
 #[derive(Parser)]
 pub enum ResourceCommand {
-    /// List all the resources for a project
+    /// List the resources for a project
     List {
         #[command(flatten)]
         table: TableArgs,
@@ -199,6 +202,20 @@ pub enum ResourceCommand {
         resource_type: resource::Type,
         #[command(flatten)]
         confirmation: ConfirmationArgs,
+    },
+}
+
+#[derive(Parser)]
+pub enum CertificateCommand {
+    /// Add an SSL certificate for a custom domain
+    Add {
+        /// Domain name
+        domain: String,
+    },
+    /// List the certificates for a project
+    List {
+        #[command(flatten)]
+        table: TableArgs,
     },
 }
 

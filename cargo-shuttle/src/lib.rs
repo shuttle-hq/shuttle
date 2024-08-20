@@ -76,12 +76,12 @@ use tracing::{debug, error, info, trace, warn};
 use uuid::Uuid;
 use zip::write::FileOptions;
 
-pub use crate::args::{Command, ProjectArgs, RunArgs, ShuttleArgs};
 use crate::args::{
-    ConfirmationArgs, DeployArgs, DeploymentCommand, GenerateCommand, InitArgs, LoginArgs,
-    LogoutArgs, LogsArgs, ProjectCommand, ProjectStartArgs, ResourceCommand, TableArgs,
+    CertificateCommand, ConfirmationArgs, DeployArgs, DeploymentCommand, GenerateCommand, InitArgs,
+    LoginArgs, LogoutArgs, LogsArgs, ProjectCommand, ProjectStartArgs, ResourceCommand, TableArgs,
     TemplateLocation,
 };
+pub use crate::args::{Command, ProjectArgs, RunArgs, ShuttleArgs};
 use crate::config::RequestContext;
 use crate::provisioner_server::beta::{ProvApiState, ProvisionerServerBeta};
 use crate::provisioner_server::LocalProvisioner;
@@ -275,6 +275,10 @@ impl Shuttle {
                     resource_type,
                     confirmation: ConfirmationArgs { yes },
                 } => self.resource_delete(&resource_type, yes).await,
+            },
+            Command::Certificate(cmd) => match cmd {
+                CertificateCommand::Add { domain } => self.add_certificate(domain).await,
+                CertificateCommand::List { .. } => todo!(),
             },
             Command::Project(cmd) => match cmd {
                 ProjectCommand::Start(ProjectStartArgs { idle_minutes }) => {
@@ -1295,6 +1299,17 @@ impl Shuttle {
             }
             .yellow(),
         );
+
+        Ok(CommandOutcome::Ok)
+    }
+
+    async fn add_certificate(&self, domain: String) -> Result<CommandOutcome> {
+        let client = self.client.as_ref().unwrap();
+        client
+            .add_certificate_beta(self.ctx.project_name(), domain.clone())
+            .await?;
+
+        println!("Added certificate for {domain}");
 
         Ok(CommandOutcome::Ok)
     }

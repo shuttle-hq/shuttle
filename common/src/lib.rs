@@ -1,3 +1,5 @@
+#[cfg(feature = "service")]
+pub mod certificate;
 #[cfg(feature = "claims")]
 pub mod claims;
 pub mod constants;

@@ -122,6 +122,8 @@ pub enum Command {
     Resource(ResourceCommand),
     /// Remove cargo build artifacts in the Shuttle environment
     Clean,
+    /// BETA: Show info about your Shuttle account
+    Account,
     /// Login to the Shuttle platform
     Login(LoginArgs),
     /// Log out of the Shuttle platform

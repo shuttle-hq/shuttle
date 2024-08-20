@@ -103,7 +103,7 @@ impl ShuttleApiClient {
             .context("parsing name check response")
     }
 
-    pub async fn get_current_user(&self) -> Result<user::Response> {
+    pub async fn get_current_user_beta(&self) -> Result<user::Response> {
         self.get_json("/users/me".to_owned()).await
     }
 

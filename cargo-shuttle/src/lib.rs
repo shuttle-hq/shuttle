@@ -130,19 +130,19 @@ impl Shuttle {
     ) -> Result<CommandOutcome> {
         self.beta = args.beta;
         if self.beta {
-            if matches!(
-                args.cmd,
-                Command::Project(ProjectCommand::Stop { .. } | ProjectCommand::Restart { .. })
-            ) {
-                eprintln!("This command is discontinued on the beta platform.");
+            if matches!(args.cmd, Command::Project(ProjectCommand::Restart { .. })) {
+                eprintln!("This command is discontinued on the beta platform. Deploy to start a new deployment.");
                 return Ok(CommandOutcome::Ok);
             }
             if matches!(args.cmd, Command::Status) {
-                eprintln!("This command is deprecated on the beta platform. Use `deployment status` instead.");
+                eprintln!("This command is discontinued on the beta platform. Use `deployment status` instead.");
                 return Ok(CommandOutcome::Ok);
             }
-            if matches!(args.cmd, Command::Stop) {
-                eprintln!("This command is deprecated on the beta platform. Use `deployment stop` instead.");
+            if matches!(
+                args.cmd,
+                Command::Stop | Command::Project(ProjectCommand::Stop { .. })
+            ) {
+                eprintln!("This command is discontinued on the beta platform. Use `deployment stop` instead.");
                 return Ok(CommandOutcome::Ok);
             }
             if matches!(args.cmd, Command::Clean) {
@@ -154,7 +154,7 @@ impl Shuttle {
             args.cmd,
             Command::Deployment(DeploymentCommand::Stop) | Command::Account
         ) {
-            eprintln!("This command is not supported on the legacy platform.");
+            eprintln!("This command is not supported on the legacy platform. Set --beta or SHUTTLE_BETA=true.");
             return Ok(CommandOutcome::Ok);
         }
         if let Some(ref url) = args.api_url {

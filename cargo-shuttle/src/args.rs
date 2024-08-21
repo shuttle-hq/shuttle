@@ -106,7 +106,7 @@ pub enum Command {
     /// Deploy a Shuttle service
     Deploy(DeployArgs),
     /// Manage deployments of a Shuttle service
-    #[command(subcommand)]
+    #[command(subcommand, visible_alias = "depl")]
     Deployment(DeploymentCommand),
     /// View the status of a Shuttle service
     Status,
@@ -115,17 +115,18 @@ pub enum Command {
     /// View logs of a Shuttle service
     Logs(LogsArgs),
     /// Manage projects on Shuttle
-    #[command(subcommand)]
+    #[command(subcommand, visible_alias = "proj")]
     Project(ProjectCommand),
     /// Manage resources
-    #[command(subcommand)]
+    #[command(subcommand, visible_alias = "res")]
     Resource(ResourceCommand),
     /// BETA: Manage SSL certificates for custom domains
-    #[command(subcommand)]
+    #[command(subcommand, visible_alias = "cert", hide = true)]
     Certificate(CertificateCommand),
     /// Remove cargo build artifacts in the Shuttle environment
     Clean,
     /// BETA: Show info about your Shuttle account
+    #[command(visible_alias = "acc", hide = true)]
     Account,
     /// Login to the Shuttle platform
     Login(LoginArgs),
@@ -162,6 +163,7 @@ pub struct TableArgs {
 #[derive(Parser)]
 pub enum DeploymentCommand {
     /// List the deployments for a service
+    #[command(visible_alias = "ls")]
     List {
         #[arg(long, default_value = "1")]
         /// Which page to display
@@ -180,12 +182,14 @@ pub enum DeploymentCommand {
         id: Option<String>,
     },
     /// BETA: Stop running deployment(s)
+    #[command(hide = true)]
     Stop,
 }
 
 #[derive(Parser)]
 pub enum ResourceCommand {
     /// List the resources for a project
+    #[command(visible_alias = "ls")]
     List {
         #[command(flatten)]
         table: TableArgs,
@@ -195,6 +199,7 @@ pub enum ResourceCommand {
         show_secrets: bool,
     },
     /// Delete a resource
+    #[command(visible_alias = "rm")]
     Delete {
         /// Type of the resource to delete.
         /// Use the string in the 'Type' column as displayed in the `resource list` command.
@@ -213,6 +218,7 @@ pub enum CertificateCommand {
         domain: String,
     },
     /// List the certificates for a project
+    #[command(visible_alias = "ls")]
     List {
         #[command(flatten)]
         table: TableArgs,
@@ -235,6 +241,7 @@ pub enum ProjectCommand {
     /// Destroy and create an environment for this project on Shuttle
     Restart(ProjectStartArgs),
     /// List all projects you have access to
+    #[command(visible_alias = "ls")]
     List {
         // deprecated args, kept around to not break
         #[arg(long, hide = true)]
@@ -246,6 +253,7 @@ pub enum ProjectCommand {
         table: TableArgs,
     },
     /// Delete a project and all linked data
+    #[command(visible_alias = "rm")]
     Delete(ConfirmationArgs),
 }
 
@@ -277,6 +285,7 @@ pub struct LogoutArgs {
     #[arg(long)]
     pub reset_api_key: bool,
 }
+
 #[derive(Parser, Default)]
 pub struct DeployArgs {
     /// BETA: Deploy this Docker image instead of building one

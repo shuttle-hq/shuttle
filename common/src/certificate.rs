@@ -6,4 +6,13 @@ pub struct AddCertificateRequest {
 }
 
 #[derive(Deserialize, Serialize, Debug)]
-pub struct CertificateResponse {}
+pub struct DeleteCertificateRequest {
+    pub domain: String,
+}
+
+#[derive(Deserialize, Serialize, Debug)]
+pub struct CertificateResponse {
+    pub subject: String,
+    pub serial_hex: String,
+    pub not_after: String,
+}

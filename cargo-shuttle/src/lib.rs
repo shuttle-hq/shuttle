@@ -280,7 +280,11 @@ impl Shuttle {
             },
             Command::Certificate(cmd) => match cmd {
                 CertificateCommand::Add { domain } => self.add_certificate(domain).await,
-                CertificateCommand::List { .. } => todo!(),
+                CertificateCommand::List { table } => self.list_certificates(table).await,
+                CertificateCommand::Delete {
+                    domain,
+                    confirmation: ConfirmationArgs { yes },
+                } => self.delete_certificate(domain, yes).await,
             },
             Command::Project(cmd) => match cmd {
                 ProjectCommand::Start(ProjectStartArgs { idle_minutes }) => {
@@ -1305,13 +1309,59 @@ impl Shuttle {
         Ok(CommandOutcome::Ok)
     }
 
+    async fn list_certificates(&self, _table_args: TableArgs) -> Result<CommandOutcome> {
+        let client = self.client.as_ref().unwrap();
+        let certs = client
+            .list_certificates_beta(self.ctx.project_name())
+            .await?;
+
+        // TODO: make table
+        println!("{:?}", certs);
+
+        Ok(CommandOutcome::Ok)
+    }
     async fn add_certificate(&self, domain: String) -> Result<CommandOutcome> {
         let client = self.client.as_ref().unwrap();
-        client
+        let cert = client
             .add_certificate_beta(self.ctx.project_name(), domain.clone())
             .await?;
 
         println!("Added certificate for {domain}");
+        // TODO: Make nicer
+        println!("{:?}", cert);
+
+        Ok(CommandOutcome::Ok)
+    }
+    async fn delete_certificate(&self, domain: String, no_confirm: bool) -> Result<CommandOutcome> {
+        let client = self.client.as_ref().unwrap();
+
+        if !no_confirm {
+            println!(
+                "{}",
+                formatdoc!(
+                    "
+                WARNING:
+                    Delete the certificate for {}?",
+                    domain
+                )
+                .bold()
+                .red()
+            );
+            if !Confirm::with_theme(&ColorfulTheme::default())
+                .with_prompt("Are you sure?")
+                .default(false)
+                .interact()
+                .unwrap()
+            {
+                return Ok(CommandOutcome::Ok);
+            }
+        }
+
+        client
+            .delete_certificate_beta(self.ctx.project_name(), domain.clone())
+            .await?;
+
+        println!("Deleted certificate for {domain}");
 
         Ok(CommandOutcome::Ok)
     }

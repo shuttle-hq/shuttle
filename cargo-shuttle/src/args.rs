@@ -223,6 +223,14 @@ pub enum CertificateCommand {
         #[command(flatten)]
         table: TableArgs,
     },
+    /// Delete an SSL certificate
+    #[command(visible_alias = "rm")]
+    Delete {
+        /// Domain name
+        domain: String,
+        #[command(flatten)]
+        confirmation: ConfirmationArgs,
+    },
 }
 
 #[derive(Parser)]

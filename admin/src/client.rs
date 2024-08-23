@@ -76,9 +76,10 @@ impl Client {
 
     pub async fn change_project_owner(&self, project_name: &str, new_user_id: &str) -> Result<()> {
         self.inner
-            .get(format!(
-                "/admin/projects/change-owner/{project_name}/{new_user_id}"
-            ))
+            .get(
+                format!("/admin/projects/change-owner/{project_name}/{new_user_id}"),
+                Option::<()>::None,
+            )
             .await?;
 
         Ok(())
@@ -98,7 +99,9 @@ impl Client {
                 .put(format!("/users/{user_id}/beta"), Option::<()>::None)
                 .await?;
         } else {
-            self.inner.delete(format!("/users/{user_id}/beta")).await?;
+            self.inner
+                .delete(format!("/users/{user_id}/beta"), Option::<()>::None)
+                .await?;
         }
 
         Ok(())

@@ -66,7 +66,7 @@ _install_arch_linux() {
       _install_unsupported
     else
       echo "Installing with pacman"
-      sudo pacman -S cargo-shuttle
+      sudo pacman -S --noconfirm cargo-shuttle
     fi
   else
     echo "Pacman not found"

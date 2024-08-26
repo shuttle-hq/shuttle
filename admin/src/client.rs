@@ -94,14 +94,19 @@ impl Client {
     }
 
     pub async fn set_beta_access(&self, user_id: &str, access: bool) -> Result<()> {
-        if access {
+        let resp = if access {
             self.inner
                 .put(format!("/users/{user_id}/beta"), Option::<()>::None)
-                .await?;
+                .await?
         } else {
             self.inner
                 .delete(format!("/users/{user_id}/beta"), Option::<()>::None)
-                .await?;
+                .await?
+        };
+
+        if !resp.status().is_success() {
+            dbg!(resp);
+            panic!("request failed");
         }
 
         Ok(())

@@ -33,6 +33,7 @@ use indicatif::ProgressBar;
 use indoc::{formatdoc, printdoc};
 use reqwest::header::HeaderMap;
 use shuttle_api_client::ShuttleApiClient;
+use shuttle_common::models::resource::get_certificates_table_beta;
 use shuttle_common::{
     constants::{
         headers::X_CARGO_SHUTTLE_VERSION, API_URL_DEFAULT, DEFAULT_IDLE_MINUTES, EXAMPLES_REPO,
@@ -76,12 +77,12 @@ use tracing::{debug, error, info, trace, warn};
 use uuid::Uuid;
 use zip::write::FileOptions;
 
-pub use crate::args::{Command, ProjectArgs, RunArgs, ShuttleArgs};
 use crate::args::{
-    ConfirmationArgs, DeployArgs, DeploymentCommand, GenerateCommand, InitArgs, LoginArgs,
-    LogoutArgs, LogsArgs, ProjectCommand, ProjectStartArgs, ResourceCommand, TableArgs,
+    CertificateCommand, ConfirmationArgs, DeployArgs, DeploymentCommand, GenerateCommand, InitArgs,
+    LoginArgs, LogoutArgs, LogsArgs, ProjectCommand, ProjectStartArgs, ResourceCommand, TableArgs,
     TemplateLocation,
 };
+pub use crate::args::{Command, ProjectArgs, RunArgs, ShuttleArgs};
 use crate::config::RequestContext;
 use crate::provisioner_server::beta::{ProvApiState, ProvisionerServerBeta};
 use crate::provisioner_server::LocalProvisioner;
@@ -130,19 +131,19 @@ impl Shuttle {
     ) -> Result<CommandOutcome> {
         self.beta = args.beta;
         if self.beta {
-            if matches!(
-                args.cmd,
-                Command::Project(ProjectCommand::Stop { .. } | ProjectCommand::Restart { .. })
-            ) {
-                eprintln!("This command is discontinued on the beta platform.");
+            if matches!(args.cmd, Command::Project(ProjectCommand::Restart { .. })) {
+                eprintln!("This command is discontinued on the beta platform. Deploy to start a new deployment.");
                 return Ok(CommandOutcome::Ok);
             }
             if matches!(args.cmd, Command::Status) {
-                eprintln!("This command is deprecated on the beta platform. Use `deployment status` instead.");
+                eprintln!("This command is discontinued on the beta platform. Use `deployment status` instead.");
                 return Ok(CommandOutcome::Ok);
             }
-            if matches!(args.cmd, Command::Stop) {
-                eprintln!("This command is deprecated on the beta platform. Use `deployment stop` instead.");
+            if matches!(
+                args.cmd,
+                Command::Stop | Command::Project(ProjectCommand::Stop { .. })
+            ) {
+                eprintln!("This command is discontinued on the beta platform. Use `deployment stop` instead.");
                 return Ok(CommandOutcome::Ok);
             }
             if matches!(args.cmd, Command::Clean) {
@@ -154,7 +155,7 @@ impl Shuttle {
             args.cmd,
             Command::Deployment(DeploymentCommand::Stop) | Command::Account
         ) {
-            eprintln!("This command is not supported on the legacy platform.");
+            eprintln!("This command is not supported on the legacy platform. Set --beta or SHUTTLE_BETA=true.");
             return Ok(CommandOutcome::Ok);
         }
         if let Some(ref url) = args.api_url {
@@ -173,6 +174,7 @@ impl Shuttle {
             Command::Deploy(..)
                 | Command::Deployment(..)
                 | Command::Resource(..)
+                | Command::Certificate(..)
                 | Command::Project(
                     // ProjectCommand::List does not need to know which project we are in
                     ProjectCommand::Start { .. }
@@ -202,6 +204,7 @@ impl Shuttle {
                 | Command::Logout(..)
                 | Command::Deployment(..)
                 | Command::Resource(..)
+                | Command::Certificate(..)
                 | Command::Stop
                 | Command::Clean
                 | Command::Project(..)
@@ -275,6 +278,14 @@ impl Shuttle {
                     resource_type,
                     confirmation: ConfirmationArgs { yes },
                 } => self.resource_delete(&resource_type, yes).await,
+            },
+            Command::Certificate(cmd) => match cmd {
+                CertificateCommand::Add { domain } => self.add_certificate(domain).await,
+                CertificateCommand::List { table } => self.list_certificates(table).await,
+                CertificateCommand::Delete {
+                    domain,
+                    confirmation: ConfirmationArgs { yes },
+                } => self.delete_certificate(domain, yes).await,
             },
             Command::Project(cmd) => match cmd {
                 ProjectCommand::Start(ProjectStartArgs { idle_minutes }) => {
@@ -1299,6 +1310,61 @@ impl Shuttle {
         Ok(CommandOutcome::Ok)
     }
 
+    async fn list_certificates(&self, table_args: TableArgs) -> Result<CommandOutcome> {
+        let client = self.client.as_ref().unwrap();
+        let certs = client
+            .list_certificates_beta(self.ctx.project_name())
+            .await?;
+
+        let table = get_certificates_table_beta(certs.as_ref(), table_args.raw);
+        println!("{}", table);
+
+        Ok(CommandOutcome::Ok)
+    }
+    async fn add_certificate(&self, domain: String) -> Result<CommandOutcome> {
+        let client = self.client.as_ref().unwrap();
+        let cert = client
+            .add_certificate_beta(self.ctx.project_name(), domain.clone())
+            .await?;
+
+        println!("Added certificate for {}", cert.subject);
+
+        Ok(CommandOutcome::Ok)
+    }
+    async fn delete_certificate(&self, domain: String, no_confirm: bool) -> Result<CommandOutcome> {
+        let client = self.client.as_ref().unwrap();
+
+        if !no_confirm {
+            println!(
+                "{}",
+                formatdoc!(
+                    "
+                WARNING:
+                    Delete the certificate for {}?",
+                    domain
+                )
+                .bold()
+                .red()
+            );
+            if !Confirm::with_theme(&ColorfulTheme::default())
+                .with_prompt("Are you sure?")
+                .default(false)
+                .interact()
+                .unwrap()
+            {
+                return Ok(CommandOutcome::Ok);
+            }
+        }
+
+        client
+            .delete_certificate_beta(self.ctx.project_name(), domain.clone())
+            .await?;
+
+        println!("Deleted certificate for {domain}");
+
+        Ok(CommandOutcome::Ok)
+    }
+
     fn get_secrets(run_args: &RunArgs, service: &BuiltService) -> Result<HashMap<String, String>> {
         let secrets_file = run_args.secret_args.secrets.clone().or_else(|| {
             let crate_dir = service.crate_directory();
@@ -1685,7 +1751,7 @@ impl Shuttle {
 
     fn find_available_port(run_args: &mut RunArgs, services_len: usize) {
         let default_port = run_args.port;
-        'outer: for port in (run_args.port..=std::u16::MAX).step_by(services_len.max(10)) {
+        'outer: for port in (run_args.port..=u16::MAX).step_by(services_len.max(10)) {
             for inner_port in port..(port + services_len as u16) {
                 if !portpicker::is_free_tcp(inner_port) {
                     continue 'outer;
@@ -1710,7 +1776,7 @@ impl Shuttle {
     }
     fn find_available_port_beta(run_args: &mut RunArgs) {
         let original_port = run_args.port;
-        for port in (run_args.port..=std::u16::MAX).step_by(10) {
+        for port in (run_args.port..=u16::MAX).step_by(10) {
             if !portpicker::is_free_tcp(port) {
                 continue;
             }

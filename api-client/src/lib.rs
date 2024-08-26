@@ -8,6 +8,9 @@ use reqwest::Response;
 use reqwest_middleware::{ClientWithMiddleware, RequestBuilder};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use shuttle_common::certificate::{
+    AddCertificateRequest, CertificateResponse, DeleteCertificateRequest,
+};
 use shuttle_common::log::{LogsRange, LogsResponseBeta};
 use shuttle_common::models::deployment::{
     DeploymentRequest, DeploymentRequestBeta, UploadArchiveResponseBeta,
@@ -136,11 +139,7 @@ impl ShuttleApiClient {
         deployment_req: DeploymentRequestBeta,
     ) -> Result<deployment::ResponseBeta> {
         let path = format!("/projects/{project}/deployments");
-        self.post(path, Some(deployment_req))
-            .await
-            .context("failed to start deployment")?
-            .to_json()
-            .await
+        self.post_json(path, Some(deployment_req)).await
     }
 
     pub async fn upload_archive_beta(
@@ -229,6 +228,29 @@ impl ShuttleApiClient {
     pub async fn get_secrets_beta(&self, project: &str) -> Result<resource::Response> {
         self.get_json(format!("/projects/{project}/resources/secrets"))
             .await
+    }
+
+    pub async fn list_certificates_beta(&self, project: &str) -> Result<Vec<CertificateResponse>> {
+        self.get_json(format!("/projects/{project}/certificates"))
+            .await
+    }
+    pub async fn add_certificate_beta(
+        &self,
+        project: &str,
+        domain: String,
+    ) -> Result<CertificateResponse> {
+        self.post_json(
+            format!("/projects/{project}/certificates"),
+            Some(AddCertificateRequest { domain }),
+        )
+        .await
+    }
+    pub async fn delete_certificate_beta(&self, project: &str, domain: String) -> Result<()> {
+        self.delete_json_with_body(
+            format!("/projects/{project}/certificates"),
+            DeleteCertificateRequest { domain },
+        )
+        .await
     }
 
     pub async fn create_project(
@@ -441,11 +463,23 @@ impl ShuttleApiClient {
         Ok(stream)
     }
 
-    pub async fn get(&self, path: impl AsRef<str>) -> Result<Response> {
+    pub async fn get<T: Serialize>(
+        &self,
+        path: impl AsRef<str>,
+        body: Option<T>,
+    ) -> Result<Response> {
         let url = format!("{}{}", self.api_url, path.as_ref());
 
         let mut builder = self.client.get(url);
         builder = self.set_auth_bearer(builder);
+
+        if let Some(body) = body {
+            let body = serde_json::to_string(&body)?;
+            #[cfg(feature = "tracing")]
+            debug!("Outgoing body: {}", body);
+            builder = builder.body(body);
+            builder = builder.header("Content-Type", "application/json");
+        }
 
         builder.send().await.context("failed to make get request")
     }
@@ -454,7 +488,18 @@ impl ShuttleApiClient {
     where
         R: for<'de> Deserialize<'de>,
     {
-        self.get(path).await?.to_json().await
+        self.get(path, Option::<()>::None).await?.to_json().await
+    }
+
+    pub async fn get_json_with_body<R, T: Serialize>(
+        &self,
+        path: impl AsRef<str>,
+        body: T,
+    ) -> Result<R>
+    where
+        R: for<'de> Deserialize<'de>,
+    {
+        self.get(path, Some(body)).await?.to_json().await
     }
 
     pub async fn post<T: Serialize>(
@@ -521,11 +566,23 @@ impl ShuttleApiClient {
         self.put(path, body).await?.to_json().await
     }
 
-    pub async fn delete(&self, path: impl AsRef<str>) -> Result<Response> {
+    pub async fn delete<T: Serialize>(
+        &self,
+        path: impl AsRef<str>,
+        body: Option<T>,
+    ) -> Result<Response> {
         let url = format!("{}{}", self.api_url, path.as_ref());
 
         let mut builder = self.client.delete(url);
         builder = self.set_auth_bearer(builder);
+
+        if let Some(body) = body {
+            let body = serde_json::to_string(&body)?;
+            #[cfg(feature = "tracing")]
+            debug!("Outgoing body: {}", body);
+            builder = builder.body(body);
+            builder = builder.header("Content-Type", "application/json");
+        }
 
         builder
             .send()
@@ -537,6 +594,17 @@ impl ShuttleApiClient {
     where
         R: for<'de> Deserialize<'de>,
     {
-        self.delete(path).await?.to_json().await
+        self.delete(path, Option::<()>::None).await?.to_json().await
+    }
+
+    pub async fn delete_json_with_body<R, T: Serialize>(
+        &self,
+        path: impl AsRef<str>,
+        body: T,
+    ) -> Result<R>
+    where
+        R: for<'de> Deserialize<'de>,
+    {
+        self.delete(path, Some(body)).await?.to_json().await
     }
 }

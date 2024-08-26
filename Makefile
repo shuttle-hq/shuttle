@@ -135,9 +135,13 @@ DOCKER_COMPOSE_ENV=\
 	DOCKER_SOCK=$(DOCKER_SOCK)\
 	SHUTTLE_ENV=$(SHUTTLE_ENV)\
 	SHUTTLE_SERVICE_VERSION=$(SHUTTLE_SERVICE_VERSION)\
-	PERMIT_API_KEY=$(PERMIT_API_KEY)
+	PERMIT_API_KEY=$(PERMIT_API_KEY)\
+	PERMIT_DEV_API_KEY=$(PERMIT_DEV_API_KEY)
 
-.PHONY: clean deep-clean images the-shuttle-images shuttle-% postgres otel deploy test docker-compose.rendered.yml up down
+.PHONY: envfile clean deep-clean images the-shuttle-images shuttle-% postgres otel deploy test docker-compose.rendered.yml up down
+
+envfile:
+	echo $(DOCKER_COMPOSE_ENV) > dockerenv
 
 clean:
 	rm .shuttle-*

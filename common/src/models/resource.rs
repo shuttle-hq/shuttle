@@ -8,6 +8,7 @@ use comfy_table::{
 use crossterm::style::Stylize;
 
 use crate::{
+    certificate::CertificateResponse,
     resource::{Response, Type},
     secrets::SecretStore,
     DatabaseInfoBeta, DatabaseResource,
@@ -185,6 +186,40 @@ fn get_databases_table_beta(
     };
 
     format!("These databases are linked to {service_name}\n{table}\n{show_secret_hint}")
+}
+
+pub fn get_certificates_table_beta(certs: &[CertificateResponse], raw: bool) -> String {
+    let mut table = Table::new();
+
+    if raw {
+        table
+            .load_preset(NOTHING)
+            .set_content_arrangement(ContentArrangement::Disabled)
+            .set_header(vec![
+                Cell::new("Serial").set_alignment(CellAlignment::Left),
+                Cell::new("Subject").set_alignment(CellAlignment::Left),
+                Cell::new("Expires").set_alignment(CellAlignment::Left),
+            ]);
+    } else {
+        table
+            .load_preset(UTF8_BORDERS_ONLY)
+            .set_content_arrangement(ContentArrangement::Disabled)
+            .set_header(vec![
+                Cell::new("Serial"),
+                Cell::new("Subject"),
+                Cell::new("Expires"),
+            ]);
+    }
+
+    for cert in certs {
+        table.add_row(vec![
+            cert.serial_hex.clone(),
+            cert.subject.clone(),
+            cert.not_after.clone(),
+        ]);
+    }
+
+    table.to_string()
 }
 
 fn get_secrets_table(secrets: &[&Response], service_name: &str, raw: bool) -> String {

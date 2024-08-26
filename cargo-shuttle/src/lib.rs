@@ -33,6 +33,7 @@ use indicatif::ProgressBar;
 use indoc::{formatdoc, printdoc};
 use reqwest::header::HeaderMap;
 use shuttle_api_client::ShuttleApiClient;
+use shuttle_common::models::resource::get_certificates_table_beta;
 use shuttle_common::{
     constants::{
         headers::X_CARGO_SHUTTLE_VERSION, API_URL_DEFAULT, DEFAULT_IDLE_MINUTES, EXAMPLES_REPO,
@@ -1309,14 +1310,14 @@ impl Shuttle {
         Ok(CommandOutcome::Ok)
     }
 
-    async fn list_certificates(&self, _table_args: TableArgs) -> Result<CommandOutcome> {
+    async fn list_certificates(&self, table_args: TableArgs) -> Result<CommandOutcome> {
         let client = self.client.as_ref().unwrap();
         let certs = client
             .list_certificates_beta(self.ctx.project_name())
             .await?;
 
-        // TODO: make table
-        println!("{:?}", certs);
+        let table = get_certificates_table_beta(certs.as_ref(), table_args.raw);
+        println!("{}", table);
 
         Ok(CommandOutcome::Ok)
     }
@@ -1326,9 +1327,7 @@ impl Shuttle {
             .add_certificate_beta(self.ctx.project_name(), domain.clone())
             .await?;
 
-        println!("Added certificate for {domain}");
-        // TODO: Make nicer
-        println!("{:?}", cert);
+        println!("Added certificate for {}", cert.subject);
 
         Ok(CommandOutcome::Ok)
     }

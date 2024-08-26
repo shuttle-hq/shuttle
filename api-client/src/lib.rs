@@ -8,7 +8,9 @@ use reqwest::Response;
 use reqwest_middleware::{ClientWithMiddleware, RequestBuilder};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use shuttle_common::certificate::{AddCertificateRequest, CertificateResponse};
+use shuttle_common::certificate::{
+    AddCertificateRequest, CertificateResponse, DeleteCertificateRequest,
+};
 use shuttle_common::log::{LogsRange, LogsResponseBeta};
 use shuttle_common::models::deployment::{
     DeploymentRequest, DeploymentRequestBeta, UploadArchiveResponseBeta,
@@ -246,7 +248,7 @@ impl ShuttleApiClient {
     pub async fn delete_certificate_beta(&self, project: &str, domain: String) -> Result<()> {
         self.delete_json_with_body(
             format!("/projects/{project}/certificates"),
-            AddCertificateRequest { domain },
+            DeleteCertificateRequest { domain },
         )
         .await
     }

@@ -1752,7 +1752,7 @@ impl Shuttle {
 
     fn find_available_port(run_args: &mut RunArgs, services_len: usize) {
         let default_port = run_args.port;
-        'outer: for port in (run_args.port..=std::u16::MAX).step_by(services_len.max(10)) {
+        'outer: for port in (run_args.port..=u16::MAX).step_by(services_len.max(10)) {
             for inner_port in port..(port + services_len as u16) {
                 if !portpicker::is_free_tcp(inner_port) {
                     continue 'outer;
@@ -1777,7 +1777,7 @@ impl Shuttle {
     }
     fn find_available_port_beta(run_args: &mut RunArgs) {
         let original_port = run_args.port;
-        for port in (run_args.port..=std::u16::MAX).step_by(10) {
+        for port in (run_args.port..=u16::MAX).step_by(10) {
             if !portpicker::is_free_tcp(port) {
                 continue;
             }

@@ -201,7 +201,7 @@ fn copy_dirs(src: &Path, dest: &Path, git_policy: GitDir) -> Result<()> {
                 );
             } else {
                 // Copy this file.
-                fs::copy(&entry.path(), &entry_dest)?;
+                fs::copy(entry.path(), &entry_dest)?;
             }
         } else if entry_type.is_symlink() {
             println!("Warning: symlink '{entry_name}' is ignored");

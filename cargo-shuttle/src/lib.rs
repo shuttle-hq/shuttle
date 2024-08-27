@@ -7,7 +7,7 @@ mod suggestions;
 use std::collections::{BTreeMap, HashMap};
 use std::ffi::OsString;
 use std::fmt::Write as FmtWrite;
-use std::fs::{read_to_string, File};
+use std::fs::{read_to_string, File, OpenOptions};
 use std::io::{stdout, Read, Write};
 use std::net::{Ipv4Addr, SocketAddr};
 use std::path::{Path, PathBuf};
@@ -31,6 +31,7 @@ use ignore::overrides::OverrideBuilder;
 use ignore::WalkBuilder;
 use indicatif::ProgressBar;
 use indoc::{formatdoc, printdoc};
+use regex::Regex;
 use reqwest::header::HeaderMap;
 use shuttle_api_client::ShuttleApiClient;
 use shuttle_common::models::resource::get_certificates_table_beta;
@@ -1467,9 +1468,9 @@ impl Shuttle {
                 );
 
                 if raw {
-                    println!("{}", log_item.get_raw_line())
+                    println!("{}", log_item.get_raw_line());
                 } else {
-                    println!("{log_item}")
+                    println!("{log_item}");
                 }
             }
         });
@@ -1731,9 +1732,18 @@ impl Shuttle {
         trace!("starting a local run with args: {run_args:?}");
 
         let (tx, mut rx) = tokio::sync::mpsc::channel::<String>(256);
+        let re = Regex::new(r#"error\[(?<error_code>E[0-9]{4})]"#)?;
         tokio::task::spawn(async move {
             while let Some(line) = rx.recv().await {
                 println!("{line}");
+
+                if let Some(captured) = re.captures(&line) {
+                    let mut file_opts = OpenOptions::new();
+                    file_opts.write(true).append(true).create(true);
+                    let mut file = file_opts.open("foo.txt").unwrap();
+                    let text_to_append = format!("{}\n", captured["error_code"].to_owned());
+                    file.write(&text_to_append.into_bytes()).unwrap();
+                }
             }
         });
 

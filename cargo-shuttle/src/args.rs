@@ -137,6 +137,14 @@ pub enum Command {
     Generate(GenerateCommand),
     /// Open an issue on GitHub and provide feedback
     Feedback,
+    /// `cargo shuttle explain` POC
+    Explain(ExplainArgs),
+}
+
+#[derive(Parser, Default)]
+pub struct ExplainArgs {
+    #[arg(short, long, default_value_t = false)]
+    pub workspace: bool,
 }
 
 #[derive(Parser)]

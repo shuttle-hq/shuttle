@@ -1,8 +1,10 @@
-use std::fs::File;
+use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
+use std::process::Command;
 
 use anyhow::{anyhow, Context, Result};
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use shuttle_common::constants::API_URL_BETA;
 use shuttle_common::{constants::API_URL_DEFAULT, ApiKey};
@@ -91,6 +93,125 @@ impl ConfigManager for GlobalConfigManager {
 
     fn file(&self) -> PathBuf {
         PathBuf::from("config.toml")
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ErrorLog {
+    raw: String,
+    datetime: DateTime<Utc>,
+    error_code: Option<String>,
+    error_message: String,
+    file_source: String,
+    file_line: u16,
+    file_col: u16,
+}
+
+impl ErrorLog {
+    pub fn try_new(input: Vec<String>) -> Self {
+        let timestamp = input[0].parse::<i64>().unwrap();
+        Self {
+            raw: input.join("||"),
+            datetime: DateTime::from_timestamp(timestamp, 0).unwrap(),
+            error_code: if *input.get(2).unwrap() != "none" {
+                Some(input[2].clone())
+            } else {
+                None
+            },
+            error_message: input[3].clone(),
+            file_source: input[4].clone(),
+            file_line: input[5].parse().unwrap(),
+            file_col: input[6].parse().unwrap(),
+        }
+    }
+
+    pub fn rustc_error(&self) -> Option<String> {
+        if let Some(error_code) = self.error_code.clone() {
+            let error_code = format!("E{}", error_code);
+            let rust_explain = Command::new("rustc")
+                .args(["--explain", &error_code])
+                .output()
+                .unwrap();
+
+            Some(String::from_utf8(rust_explain.stdout).unwrap())
+        } else {
+            None
+        }
+    }
+}
+
+pub struct ErrorLogManager;
+
+impl ConfigManager for ErrorLogManager {
+    fn directory(&self) -> PathBuf {
+        let shuttle_config_dir = dirs::config_dir()
+                .ok_or_else(|| {
+                    anyhow!(
+                        "Could not find a configuration directory. Your operating system may not be supported."
+                    )
+                })
+                .unwrap();
+        shuttle_config_dir.join("shuttle")
+    }
+
+    fn file(&self) -> PathBuf {
+        PathBuf::from("logs.txt")
+    }
+}
+
+impl ErrorLogManager {
+    pub fn write(&self, to_add: String) {
+        let logfile = self.directory().join(self.file());
+
+        let mut file = OpenOptions::new();
+        file.write(true).append(true).create(true);
+
+        let mut file_handle = file.open(logfile).unwrap();
+
+        file_handle.write_all(to_add.as_bytes()).unwrap();
+    }
+
+    pub fn write_generic_error(&self, to_add: String) {
+        let time = Utc::now().timestamp();
+        let logfile = self.directory().join(self.file());
+
+        let mut file = OpenOptions::new();
+        file.write(true).append(true).create(true);
+
+        let mut file_handle = file.open(logfile).unwrap();
+
+        let message = format!("{time}||error||none||{to_add}||none||none||none\n");
+
+        file_handle.write_all(message.as_bytes()).unwrap();
+    }
+
+    pub fn fetch(&self) -> Vec<ErrorLog> {
+        let logfile = self.directory().join(self.file());
+
+        let mut buf = String::new();
+        File::open(logfile)
+            .unwrap()
+            .read_to_string(&mut buf)
+            .unwrap();
+
+        let mut logs_by_latest = buf.lines().rev();
+        let thing = logs_by_latest.next().unwrap().to_string();
+        let thing: Vec<String> = thing.split("||").map(ToString::to_string).collect();
+        let thing_as_str = ErrorLog::try_new(thing);
+        let mut thing_vec: Vec<ErrorLog> = vec![thing_as_str.clone()];
+
+        let timestamp = thing_as_str.datetime.timestamp();
+
+        for log in logs_by_latest {
+            let thing: Vec<String> = log.split("||").map(ToString::to_string).collect();
+            if thing[0].parse::<i64>().unwrap() != timestamp {
+                break;
+            }
+
+            thing_vec.push(ErrorLog::try_new(thing));
+        }
+
+        thing_vec
     }
 }
 

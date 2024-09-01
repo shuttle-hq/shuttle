@@ -7,7 +7,7 @@ mod suggestions;
 use std::collections::{BTreeMap, HashMap};
 use std::ffi::OsString;
 use std::fmt::Write as FmtWrite;
-use std::fs::{read_to_string, File, OpenOptions};
+use std::fs::{read_to_string, File};
 use std::io::{stdout, Read, Write};
 use std::net::{Ipv4Addr, SocketAddr};
 use std::path::{Path, PathBuf};
@@ -20,6 +20,7 @@ use chrono::Utc;
 use clap::{parser::ValueSource, CommandFactory, FromArgMatches};
 use clap_complete::{generate, Shell};
 use clap_mangen::Man;
+use config::ErrorLogManager;
 use crossterm::style::Stylize;
 use dialoguer::{theme::ColorfulTheme, Confirm, Input, Password, Select};
 use flate2::write::GzEncoder;
@@ -245,6 +246,14 @@ impl Shuttle {
             Command::Login(login_args) => self.login(login_args, args.offline).await,
             Command::Logout(logout_args) => self.logout(logout_args).await,
             Command::Feedback => self.feedback(),
+            Command::Explain(args) => {
+                if args.workspace {
+                    println!("The workspace option is enabled!");
+                    todo!("Include file contents from listed file with error");
+                } else {
+                    self.explain()
+                }
+            }
             Command::Run(run_args) => {
                 if self.beta {
                     self.local_run_beta(run_args).await
@@ -1063,10 +1072,14 @@ impl Shuttle {
                 // Active deployment
                 deployment.id.to_string()
             } else {
-                bail!(
+                let error = format!(
                     "Could not find a running deployment for '{proj_name}'. \
                     Try with '--latest', or pass a deployment ID manually"
                 );
+                let error_logs = ErrorLogManager;
+
+                error_logs.write_generic_error(error.to_owned());
+                bail!(error);
             }
         };
 
@@ -1216,7 +1229,11 @@ impl Shuttle {
                 .get_deployment_details(
                     self.ctx.project_name(),
                     &Uuid::from_str(&deployment_id).map_err(|err| {
-                        anyhow!("Provided deployment id is not a valid UUID: {err}")
+                        let err_as_str =
+                            format!("Provided deployment id is not a valid UUID: {err}");
+                        let e = ErrorLogManager;
+                        e.write_generic_error(err_as_str);
+                        anyhow!(err)
                     })?,
                 )
                 .await
@@ -1504,6 +1521,8 @@ impl Shuttle {
 
         if !response.success {
             error!(error = response.message, "failed to load your service");
+            let e = ErrorLogManager;
+            e.write_generic_error(format!("failed to load your service: {}", response.message));
             return Ok(None);
         }
 
@@ -1597,14 +1616,17 @@ impl Shuttle {
                     if shuttle_resource.version == RESOURCE_SCHEMA_VERSION {
                         Ok((bytes, shuttle_resource))
                     } else {
-                        Err(anyhow!("
+                    let err = format!("
                             Shuttle resource request for {} with incompatible version found. Expected {}, found {}. \
                             Make sure that this deployer and the Shuttle resource are up to date.
                             ",
                             shuttle_resource.r#type,
                             RESOURCE_SCHEMA_VERSION,
                             shuttle_resource.version
-                        ))
+                    );
+                        let logs = ErrorLogManager;
+                        logs.write_generic_error(err.to_owned());
+                        Err(anyhow!(err))
                     }
                 }).collect::<anyhow::Result<Vec<_>>>()?.into_iter()
         {
@@ -1663,7 +1685,16 @@ impl Shuttle {
                 resource::Type::Container => {
                     let config = serde_json::from_value(shuttle_resource.config)
                         .context("deserializing resource config")?;
-                    let res = prov.start_container(config).await.context("Failed to start Docker container. Make sure that a Docker engine is running.")?;
+                    let err = "Failed to start Docker container. Make sure that a Docker engine is running.";
+                    let logs = ErrorLogManager;
+                    let res = match prov.start_container(config).await {
+                        Ok(res) => res,
+                        Err(_) => {
+                            logs.write_generic_error(err.to_owned());
+                            return Err(anyhow!(err))
+                        }
+                    };
+
                     *bytes = serde_json::to_vec(&ShuttleResourceOutput {
                         output: res,
                         custom: shuttle_resource.custom,
@@ -1732,17 +1763,55 @@ impl Shuttle {
         trace!("starting a local run with args: {run_args:?}");
 
         let (tx, mut rx) = tokio::sync::mpsc::channel::<String>(256);
-        let re = Regex::new(r#"error\[(?<error_code>E[0-9]{4})]"#)?;
+        let re1_error_code =
+            Regex::new(r"^error\[E(?<error_code>\d{4})\]: (?<error_message>[\W\w\`]+)")?;
+        let re1_no_error_code = Regex::new(r"^error: (?<error_message>[\W\w\`]+)")?;
+        let re1_warning = Regex::new(r"^warning: (?<error_message>[\W\w\`]+)")?;
+        let re_remove_ansi = Regex::new(r"\x1B\[[0-9;]*[mGKHF]")?;
+
+        let re2 =
+            Regex::new(r"--> (?<file_src>[\W\w]+.rs):(?<file_loc>\d{1,5}):(?<file_col>\d{1,5})")?;
+
+        let error_logs = ErrorLogManager;
+
         tokio::task::spawn(async move {
             while let Some(line) = rx.recv().await {
                 println!("{line}");
+                let new_line = re_remove_ansi.replace_all(&line, "");
+                let time = Utc::now().timestamp();
 
-                if let Some(captured) = re.captures(&line) {
-                    let mut file_opts = OpenOptions::new();
-                    file_opts.write(true).append(true).create(true);
-                    let mut file = file_opts.open("foo.txt").unwrap();
-                    let text_to_append = format!("{}\n", captured["error_code"].to_owned());
-                    file.write(&text_to_append.into_bytes()).unwrap();
+                if let Some(cap) = re1_error_code.captures(&new_line) {
+                    let to_add = format!(
+                        "{time}||error||{}||{}",
+                        &cap["error_code"], &cap["error_message"]
+                    );
+
+                    error_logs.write(to_add);
+                }
+
+                if let Some(cap) = re1_no_error_code.captures(&new_line) {
+                    if !cap["error_message"].contains("could not compile") {
+                        let to_add = format!("{time}||error||none||{}", &cap["error_message"]);
+
+                        error_logs.write(to_add);
+                    }
+                }
+
+                if let Some(cap) = re1_warning.captures(&new_line) {
+                    if !cap["error_message"].contains("generated") {
+                        let to_add = format!("{time}||warning||none||{}", &cap["error_message"]);
+
+                        error_logs.write(to_add);
+                    }
+                }
+
+                if let Some(cap) = re2.captures(&new_line) {
+                    let to_add = format!(
+                        "||{}||{}||{}\n",
+                        &cap["file_src"], &cap["file_loc"], &cap["file_col"]
+                    );
+
+                    error_logs.write(to_add);
                 }
             }
         });
@@ -3075,6 +3144,14 @@ impl Shuttle {
 
         Ok(bytes)
     }
+
+    fn explain(&self) -> Result<CommandOutcome> {
+        let error_logs = ErrorLogManager;
+        let latest_error = error_logs.fetch();
+        println!("{latest_error:?}");
+
+        Ok(CommandOutcome::Ok)
+    }
 }
 
 // /// Can be used during testing
@@ -3123,6 +3200,11 @@ fn is_dirty(repo: &Repository) -> Result<()> {
         writeln!(error).expect("to append error");
         writeln!(error, "To proceed despite this and include the uncommitted changes, pass the `--allow-dirty` or `--ad` flag").expect("to append error");
 
+        let error_logs = ErrorLogManager;
+
+        let time = Utc::now().timestamp();
+        let to_add = format!("{time}||error||none||{error}||none||none||none\n");
+        error_logs.write(to_add);
         bail!(error);
     }
 

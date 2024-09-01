@@ -102,9 +102,9 @@ pub struct ErrorLog {
     datetime: DateTime<Utc>,
     error_code: Option<String>,
     error_message: String,
-    file_source: String,
-    file_line: u16,
-    file_col: u16,
+    file_source: Option<String>,
+    file_line: Option<u16>,
+    file_col: Option<u16>,
 }
 
 impl ErrorLog {
@@ -113,15 +113,27 @@ impl ErrorLog {
         Self {
             raw: input.join("||"),
             datetime: DateTime::from_timestamp(timestamp, 0).unwrap(),
-            error_code: if *input.get(2).unwrap() != "none" {
+            error_code: if &*input[2] != "none" {
                 Some(input[2].clone())
             } else {
                 None
             },
             error_message: input[3].clone(),
-            file_source: input[4].clone(),
-            file_line: input[5].parse().unwrap(),
-            file_col: input[6].parse().unwrap(),
+            file_source: if &*input[4] != "none" {
+                Some(input[4].clone())
+            } else {
+                None
+            },
+            file_line: if input[5].parse::<i64>().is_ok() {
+                Some(input[5].parse().unwrap())
+            } else {
+                None
+            },
+            file_col: if input[6].parse::<i64>().is_ok() {
+                Some(input[6].parse().unwrap())
+            } else {
+                None
+            },
         }
     }
 

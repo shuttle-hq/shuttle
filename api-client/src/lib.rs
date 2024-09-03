@@ -237,18 +237,18 @@ impl ShuttleApiClient {
     pub async fn add_certificate_beta(
         &self,
         project: &str,
-        domain: String,
+        subject: String,
     ) -> Result<CertificateResponse> {
         self.post_json(
             format!("/projects/{project}/certificates"),
-            Some(AddCertificateRequest { domain }),
+            Some(AddCertificateRequest { subject }),
         )
         .await
     }
-    pub async fn delete_certificate_beta(&self, project: &str, domain: String) -> Result<()> {
+    pub async fn delete_certificate_beta(&self, project: &str, subject: String) -> Result<()> {
         self.delete_json_with_body(
             format!("/projects/{project}/certificates"),
-            DeleteCertificateRequest { domain },
+            DeleteCertificateRequest { subject },
         )
         .await
     }

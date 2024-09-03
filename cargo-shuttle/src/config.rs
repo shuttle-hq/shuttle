@@ -8,7 +8,9 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use shuttle_common::constants::API_URL_BETA;
 use shuttle_common::{constants::API_URL_DEFAULT, ApiKey};
+use tokio::fs::read_to_string;
 use tracing::trace;
+use zip::write::FileOptions;
 
 use crate::args::ProjectArgs;
 

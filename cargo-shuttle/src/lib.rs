@@ -16,6 +16,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use anyhow::{anyhow, bail, Context, Result};
+use args::ExplainArgs;
 use chrono::Utc;
 use clap::{parser::ValueSource, CommandFactory, FromArgMatches};
 use clap_complete::{generate, Shell};
@@ -246,14 +247,7 @@ impl Shuttle {
             Command::Login(login_args) => self.login(login_args, args.offline).await,
             Command::Logout(logout_args) => self.logout(logout_args).await,
             Command::Feedback => self.feedback(),
-            Command::Explain(args) => {
-                if args.workspace {
-                    println!("The workspace option is enabled!");
-                    todo!("Include file contents from listed file with error");
-                } else {
-                    self.explain()
-                }
-            }
+            Command::Explain(args) => self.explain(args).await,
             Command::Run(run_args) => {
                 if self.beta {
                     self.local_run_beta(run_args).await
@@ -3145,10 +3139,22 @@ impl Shuttle {
         Ok(bytes)
     }
 
-    fn explain(&self) -> Result<CommandOutcome> {
+    async fn explain(&self, _args: ExplainArgs) -> Result<CommandOutcome> {
         let error_logs = ErrorLogManager;
         let latest_error = error_logs.fetch();
-        println!("{latest_error:?}");
+
+        let url =
+            "https://94rdm7c9oj.execute-api.eu-west-2.amazonaws.com/default/cargo-shuttle-explain";
+
+        let ctx = reqwest::Client::new();
+        let res = ctx.post(url).json(&latest_error).send().await.unwrap();
+
+        if res.status() != 200 {
+            let error = res.text().await.unwrap();
+            return Err(anyhow!("Request was not successful: {error}"));
+        }
+
+        println!("{}", res.text().await.unwrap());
 
         Ok(CommandOutcome::Ok)
     }

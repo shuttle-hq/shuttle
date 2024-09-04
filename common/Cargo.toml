@@ -6,7 +6,7 @@ license.workspace = true
 repository.workspace = true
 description = "Common library for the shuttle platform (https://www.shuttle.rs/)"
 # Base MSRV for the Shuttle crates. If some other crate has a higher MSRV, set it in that crate.
-rust-version = "1.77"
+rust-version = "1.78"
 
 [dependencies]
 anyhow = { workspace = true }

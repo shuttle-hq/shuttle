@@ -272,7 +272,6 @@ services:
       - SHUTTLE_ENV=${SHUTTLE_ENV}
       - DD_API_KEY=${DD_API_KEY}
       - DD_ENV=${DD_ENV}
-      - HONEYCOMB_API_KEY=${HONEYCOMB_API_KEY}
     deploy:
       placement:
         constraints:

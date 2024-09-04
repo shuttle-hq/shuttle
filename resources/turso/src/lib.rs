@@ -188,7 +188,7 @@ mod test {
 
         let mut turso = Turso::default();
         let addr = "libsql://my-turso-addr.turso.io".to_string();
-        turso.addr = addr.clone();
+        turso.addr.clone_from(&addr);
         turso.token = "token".to_string();
         let output = turso.build(&factory).await.unwrap();
 

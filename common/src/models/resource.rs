@@ -196,7 +196,7 @@ pub fn get_certificates_table_beta(certs: &[CertificateResponse], raw: bool) -> 
             .load_preset(NOTHING)
             .set_content_arrangement(ContentArrangement::Disabled)
             .set_header(vec![
-                Cell::new("Serial").set_alignment(CellAlignment::Left),
+                Cell::new("ID").set_alignment(CellAlignment::Left),
                 Cell::new("Subject").set_alignment(CellAlignment::Left),
                 Cell::new("Expires").set_alignment(CellAlignment::Left),
             ]);
@@ -205,7 +205,7 @@ pub fn get_certificates_table_beta(certs: &[CertificateResponse], raw: bool) -> 
             .load_preset(UTF8_BORDERS_ONLY)
             .set_content_arrangement(ContentArrangement::Disabled)
             .set_header(vec![
-                Cell::new("Serial"),
+                Cell::new("ID"),
                 Cell::new("Subject"),
                 Cell::new("Expires"),
             ]);
@@ -213,7 +213,7 @@ pub fn get_certificates_table_beta(certs: &[CertificateResponse], raw: bool) -> 
 
     for cert in certs {
         table.add_row(vec![
-            cert.serial_hex.clone(),
+            cert.id.clone(),
             cert.subject.clone(),
             cert.not_after.clone(),
         ]);

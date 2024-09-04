@@ -331,9 +331,6 @@ jobs:
       mongodb-password:
         description: "Shuttle shared mongodb password"
         type: env_var_name
-      honeycomb-api-key:
-        description: "Shuttle honeycomb api key for observability based on environment"
-        type: env_var_name
       deploys-api-key:
         description: "Shuttle api key used by the gateway to authorise starting idle deployments"
         type: env_var_name
@@ -382,7 +379,6 @@ jobs:
             MONGO_INITDB_ROOT_PASSWORD=${<< parameters.mongodb-password >>} \
             DD_API_KEY=$DD_API_KEY \
             DD_ENV=<< parameters.shuttle-env >> \
-            HONEYCOMB_API_KEY=${<< parameters.honeycomb-api-key >>} \
             DEPLOYS_API_KEY=${<< parameters.deploys-api-key >>} \
             LOGGER_POSTGRES_URI=${<< parameters.logger-postgres-uri >>} \
             STRIPE_SECRET_KEY=${<< parameters.stripe-secret-key >>} \
@@ -658,7 +654,6 @@ workflows:
           name: Deploy images to unstable
           postgres-password: DEV_POSTGRES_PASSWORD
           mongodb-password: DEV_MONGO_INITDB_ROOT_PASSWORD
-          honeycomb-api-key: DEV_HONEYCOMB_API_KEY
           deploys-api-key: DEV_DEPLOYS_API_KEY
           logger-postgres-uri: DEV_LOGGER_POSTGRES_URI
           stripe-secret-key: DEV_STRIPE_SECRET_KEY
@@ -729,7 +724,6 @@ workflows:
           name: deploy-images-to-production
           postgres-password: PROD_POSTGRES_PASSWORD
           mongodb-password: PROD_MONGO_INITDB_ROOT_PASSWORD
-          honeycomb-api-key: PROD_HONEYCOMB_API_KEY
           deploys-api-key: PROD_DEPLOYS_API_KEY
           logger-postgres-uri: PROD_LOGGER_POSTGRES_URI
           stripe-secret-key: PROD_STRIPE_SECRET_KEY

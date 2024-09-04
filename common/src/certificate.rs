@@ -2,16 +2,19 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize, Serialize, Debug)]
 pub struct AddCertificateRequest {
-    pub domain: String,
+    #[serde(alias = "domain")]
+    pub subject: String,
 }
 
 #[derive(Deserialize, Serialize, Debug)]
 pub struct DeleteCertificateRequest {
-    pub domain: String,
+    #[serde(alias = "domain")]
+    pub subject: String,
 }
 
 #[derive(Deserialize, Serialize, Debug)]
 pub struct CertificateResponse {
+    pub id: String,
     pub subject: String,
     pub serial_hex: String,
     pub not_after: String,

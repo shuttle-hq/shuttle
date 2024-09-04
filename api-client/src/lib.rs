@@ -237,18 +237,18 @@ impl ShuttleApiClient {
     pub async fn add_certificate_beta(
         &self,
         project: &str,
-        domain: String,
+        subject: String,
     ) -> Result<CertificateResponse> {
         self.post_json(
             format!("/projects/{project}/certificates"),
-            Some(AddCertificateRequest { domain }),
+            Some(AddCertificateRequest { subject }),
         )
         .await
     }
-    pub async fn delete_certificate_beta(&self, project: &str, domain: String) -> Result<()> {
+    pub async fn delete_certificate_beta(&self, project: &str, subject: String) -> Result<()> {
         self.delete_json_with_body(
             format!("/projects/{project}/certificates"),
-            DeleteCertificateRequest { domain },
+            DeleteCertificateRequest { subject },
         )
         .await
     }
@@ -265,7 +265,6 @@ impl ShuttleApiClient {
     pub async fn create_project_beta(&self, name: &str) -> Result<project::ResponseBeta> {
         self.post_json(format!("/projects/{name}"), None::<()>)
             .await
-            .context("failed to make create project request")
     }
 
     pub async fn clean_project(&self, project: &str) -> Result<String> {
@@ -338,9 +337,7 @@ impl ShuttleApiClient {
         let mut path = format!("/projects/{project}/deployments/{deployment_id}/logs");
         Self::add_range_query(range, &mut path);
 
-        self.get_json(path)
-            .await
-            .context("Failed parsing logs. Is your cargo-shuttle outdated?")
+        self.get_json(path).await
     }
     pub async fn get_deployment_logs_beta(
         &self,
@@ -349,12 +346,12 @@ impl ShuttleApiClient {
     ) -> Result<LogsResponseBeta> {
         let path = format!("/projects/{project}/deployments/{deployment_id}/logs");
 
-        self.get_json(path).await.context("Failed parsing logs.")
+        self.get_json(path).await
     }
     pub async fn get_project_logs_beta(&self, project: &str) -> Result<LogsResponseBeta> {
         let path = format!("/projects/{project}/logs");
 
-        self.get_json(path).await.context("Failed parsing logs.")
+        self.get_json(path).await
     }
 
     pub async fn get_logs_ws(
@@ -481,7 +478,7 @@ impl ShuttleApiClient {
             builder = builder.header("Content-Type", "application/json");
         }
 
-        builder.send().await.context("failed to make get request")
+        Ok(builder.send().await?)
     }
 
     pub async fn get_json<R>(&self, path: impl AsRef<str>) -> Result<R>
@@ -584,10 +581,7 @@ impl ShuttleApiClient {
             builder = builder.header("Content-Type", "application/json");
         }
 
-        builder
-            .send()
-            .await
-            .context("failed to make delete request")
+        Ok(builder.send().await?)
     }
 
     pub async fn delete_json<R>(&self, path: impl AsRef<str>) -> Result<R>

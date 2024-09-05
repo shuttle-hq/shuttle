@@ -990,16 +990,7 @@ impl Shuttle {
         } else {
             let id = if args.latest {
                 // Find latest deployment (not always an active one)
-                let deployments =
-                    client
-                        .get_deployments_beta(proj_name, 1, 1)
-                        .await
-                        .map_err(|err| {
-                            suggestions::logs::get_logs_failure(
-                                err,
-                                "Fetching the latest deployment failed",
-                            )
-                        })?;
+                let deployments = client.get_deployments_beta(proj_name, 1, 1).await?;
                 let Some(most_recent) = deployments.first() else {
                     println!("No deployments found");
                     return Ok(CommandOutcome::Ok);
@@ -1139,8 +1130,7 @@ impl Shuttle {
         let deployments_len = if self.beta {
             let mut deployments = client
                 .get_deployments_beta(proj_name, page as i32, limit as i32)
-                .await
-                .map_err(suggestions::deployment::get_deployments_list_failure)?;
+                .await?;
             let page_hint = if deployments.len() == limit as usize {
                 deployments.pop();
                 true
@@ -1206,8 +1196,7 @@ impl Shuttle {
                     };
                     Ok(d)
                 }
-            }
-            .map_err(suggestions::deployment::get_deployment_status_failure)?;
+            }?;
             println!("{}", deployment.to_string_colored());
         } else {
             let deployment_id = deployment_id.expect("deployment id required on alpha platform");
@@ -1236,11 +1225,13 @@ impl Shuttle {
         let resources = if self.beta {
             client
                 .get_service_resources_beta(self.ctx.project_name())
-                .await
+                .await?
         } else {
-            client.get_service_resources(self.ctx.project_name()).await
-        }
-        .map_err(suggestions::resources::get_service_resources_failure)?;
+            client
+                .get_service_resources(self.ctx.project_name())
+                .await
+                .map_err(suggestions::resources::get_service_resources_failure)?
+        };
 
         // TODO: Beta table formats
         let table = get_resource_tables(
@@ -2241,8 +2232,7 @@ impl Shuttle {
                         project_name,
                         DeploymentRequestBeta::Image(deployment_req_image_beta),
                     )
-                    .await
-                    .map_err(suggestions::deploy::deploy_request_failure)?;
+                    .await?;
 
                 println!("{}", deployment.to_string_colored());
                 return Ok(CommandOutcome::Ok);
@@ -2362,8 +2352,7 @@ impl Shuttle {
                     project_name,
                     DeploymentRequestBeta::BuildArchive(deployment_req_buildarch_beta),
                 )
-                .await
-                .map_err(suggestions::deploy::deploy_request_failure)?;
+                .await?;
 
             if args.no_follow {
                 println!("{}", deployment.to_string_colored());
@@ -2671,14 +2660,7 @@ impl Shuttle {
     async fn project_start_beta(&self) -> Result<CommandOutcome> {
         let client = self.client.as_ref().unwrap();
         let name = self.ctx.project_name();
-        let project = client.create_project_beta(name).await.map_err(|err| {
-            suggestions::project::project_request_failure(
-                err,
-                "Project creation failed",
-                true,
-                "the project creation fails repeatedly",
-            )
-        })?;
+        let project = client.create_project_beta(name).await?;
 
         println!("Created project '{}' with id {}", project.name, project.id);
 
@@ -2701,18 +2683,7 @@ impl Shuttle {
 
         let projects_table = if self.beta {
             project::get_projects_table_beta(
-                &client
-                    .get_projects_list_beta()
-                    .await
-                    .map_err(|err| {
-                        suggestions::project::project_request_failure(
-                            err,
-                            "Getting projects list failed",
-                            false,
-                            "getting the projects list fails repeatedly",
-                        )
-                    })?
-                    .projects,
+                &client.get_projects_list_beta().await?.projects,
                 table_args.raw,
             )
         } else {
@@ -2736,32 +2707,10 @@ impl Shuttle {
 
         for team in teams {
             let team_projects_table = if self.beta {
-                let team_projects = client
-                    .get_team_projects_list_beta(&team.id)
-                    .await
-                    .map_err(|err| {
-                        suggestions::project::project_request_failure(
-                            err,
-                            "Getting teams projects list failed",
-                            false,
-                            "getting the team projects list fails repeatedly",
-                        )
-                    })?
-                    .projects;
+                let team_projects = client.get_team_projects_list_beta(&team.id).await?.projects;
                 project::get_projects_table_beta(&team_projects, table_args.raw)
             } else {
-                let team_projects =
-                    client
-                        .get_team_projects_list(&team.id)
-                        .await
-                        .map_err(|err| {
-                            suggestions::project::project_request_failure(
-                                err,
-                                "Getting teams projects list failed",
-                                false,
-                                "getting the team projects list fails repeatedly",
-                            )
-                        })?;
+                let team_projects = client.get_team_projects_list(&team.id).await?;
                 project::get_projects_table(&team_projects, table_args.raw)
             };
 
@@ -2921,18 +2870,20 @@ impl Shuttle {
         }
 
         if self.beta {
-            client.delete_project_beta(self.ctx.project_name()).await
+            client.delete_project_beta(self.ctx.project_name()).await?
         } else {
-            client.delete_project(self.ctx.project_name()).await
-        }
-        .map_err(|err| {
-            suggestions::project::project_request_failure(
-                err,
-                "Project delete failed",
-                true,
-                "deleting the project or getting project status fails repeatedly",
-            )
-        })?;
+            client
+                .delete_project(self.ctx.project_name())
+                .await
+                .map_err(|err| {
+                    suggestions::project::project_request_failure(
+                        err,
+                        "Project delete failed",
+                        true,
+                        "deleting the project or getting project status fails repeatedly",
+                    )
+                })?
+        };
 
         println!("Deleted project");
 

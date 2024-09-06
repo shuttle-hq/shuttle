@@ -607,7 +607,7 @@ pub mod beta {
                             };
                         ResourceResponseBeta {
                             r#type: shuttle_resource.r#type,
-                            output: serde_json::to_value(&res).unwrap(),
+                            output: serde_json::to_value(res).unwrap(),
                             config: shuttle_resource.config,
                             state: resource::ResourceState::Ready,
                         }
@@ -620,7 +620,7 @@ pub mod beta {
                             .context("Failed to start Docker container. Make sure that a Docker engine is running.")?;
                         ResourceResponseBeta {
                             r#type: shuttle_resource.r#type,
-                            output: serde_json::to_value(&res).unwrap(),
+                            output: serde_json::to_value(res).unwrap(),
                             config: shuttle_resource.config,
                             state: resource::ResourceState::Ready,
                         }

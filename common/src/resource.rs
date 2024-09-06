@@ -32,6 +32,16 @@ impl ProvisionResourceRequest {
     }
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[typeshare::typeshare]
+pub struct ProvisionResourceRequestBeta {
+    /// The type of this resource
+    pub r#type: ResourceTypeBeta,
+    /// The config used when creating this resource.
+    /// Use `Self::r#type` to know how to parse this data.
+    pub config: Value,
+}
+
 /// Helper for deserializing
 #[derive(Deserialize)]
 #[serde(untagged)] // Try deserializing as a Shuttle resource, fall back to a custom value
@@ -44,7 +54,9 @@ pub enum ResourceInput {
 #[derive(
     Debug, Clone, PartialEq, Eq, strum::Display, strum::EnumString, Serialize, Deserialize,
 )]
+#[serde(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
+#[typeshare::typeshare]
 pub enum ResourceState {
     Authorizing,
     Provisioning,
@@ -63,9 +75,17 @@ pub struct ShuttleResourceOutput<T> {
 
     /// Arbitrary extra data in this resource
     pub custom: Value,
+}
 
-    /// The state of the resource.
-    pub state: Option<ResourceState>,
+#[derive(Serialize, Deserialize)]
+#[typeshare::typeshare]
+pub struct ResourceResponseBeta {
+    pub r#type: ResourceTypeBeta,
+    pub state: ResourceState,
+    /// The config used when creating this resource. Use the `r#type` to know how to parse this data.
+    pub config: Value,
+    /// The output type for this resource, if state is Ready. Use the `r#type` to know how to parse this data.
+    pub output: Value,
 }
 
 /// Common type to hold all the information we need for a generic resource
@@ -101,6 +121,17 @@ pub enum Type {
     Database(database::Type),
     Secrets,
     Persist,
+    /// Local provisioner only
+    Container,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, Eq, PartialEq)]
+#[serde(rename_all = "lowercase")]
+#[typeshare::typeshare]
+pub enum ResourceTypeBeta {
+    DatabaseSharedPostgres,
+    /// (Will probably be removed)
+    Secrets,
     /// Local provisioner only
     Container,
 }

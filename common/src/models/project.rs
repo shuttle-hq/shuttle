@@ -12,7 +12,7 @@ use crossterm::style::Stylize;
 use serde::{Deserialize, Serialize};
 use strum::EnumString;
 
-use crate::deployment::EcsState;
+use crate::deployment::DeploymentStateBeta;
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 pub struct Response {
@@ -26,19 +26,18 @@ pub struct Response {
     pub is_admin: bool,
 }
 
+#[typeshare::typeshare]
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
-pub struct ResponseBeta {
+pub struct ProjectResponseBeta {
     pub id: String,
     pub name: String,
-    /// Some() if an ECS service exists (something has been deployed).
-    pub deployment_state: Option<EcsState>,
-    #[serde(flatten)]
-    pub owner: Owner,
-    /// Whether the calling user is an admin in this project
-    pub is_admin: bool,
+    /// State of the current deployment if one exists (something has been deployed).
+    pub deployment_state: Option<DeploymentStateBeta>,
+    /// User id of the project owner
+    pub owner: String,
 }
 
-impl ResponseBeta {
+impl ProjectResponseBeta {
     pub fn to_string_colored(&self) -> String {
         // TODO: make this look nicer
         let mut s = String::new();
@@ -53,19 +52,16 @@ impl ResponseBeta {
                 .unwrap_or_else(|| "N/A".dark_grey().to_string())
         )
         .unwrap();
-        let owner = match self.owner {
-            Owner::User(ref s) => s,
-            Owner::Team(ref s) => s,
-        };
-        writeln!(&mut s, "Owner: {}", owner.as_str().bold()).unwrap();
+        writeln!(&mut s, "Owner: {}", self.owner).unwrap();
 
         s
     }
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
-pub struct ResponseListBeta {
-    pub projects: Vec<ResponseBeta>,
+#[typeshare::typeshare]
+pub struct ProjectListResponseBeta {
+    pub projects: Vec<ProjectResponseBeta>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, EnumString)]
@@ -272,7 +268,7 @@ pub fn get_projects_table(projects: &[Response], raw: bool) -> String {
     }
 }
 
-pub fn get_projects_table_beta(projects: &[ResponseBeta], raw: bool) -> String {
+pub fn get_projects_table_beta(projects: &[ProjectResponseBeta], raw: bool) -> String {
     let mut table = Table::new();
     table
         .load_preset(if raw { NOTHING } else { UTF8_BORDERS_ONLY })

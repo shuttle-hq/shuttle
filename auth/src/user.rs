@@ -462,7 +462,7 @@ where
     }
 }
 
-impl From<User> for models::user::Response {
+impl From<User> for models::user::UserResponse {
     fn from(user: User) -> Self {
         Self {
             name: user.name.to_string(),

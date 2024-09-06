@@ -106,7 +106,7 @@ impl ShuttleApiClient {
             .context("parsing name check response")
     }
 
-    pub async fn get_current_user_beta(&self) -> Result<user::Response> {
+    pub async fn get_current_user_beta(&self) -> Result<user::UserResponse> {
         self.get_json("/users/me".to_owned()).await
     }
 
@@ -137,7 +137,7 @@ impl ShuttleApiClient {
         &self,
         project: &str,
         deployment_req: DeploymentRequestBeta,
-    ) -> Result<deployment::ResponseBeta> {
+    ) -> Result<deployment::DeploymentResponseBeta> {
         let path = format!("/projects/{project}/deployments");
         self.post_json(path, Some(deployment_req)).await
     }
@@ -262,7 +262,7 @@ impl ShuttleApiClient {
             .await
             .context("failed to make create project request")
     }
-    pub async fn create_project_beta(&self, name: &str) -> Result<project::ResponseBeta> {
+    pub async fn create_project_beta(&self, name: &str) -> Result<project::ProjectResponseBeta> {
         self.post_json(format!("/projects/{name}"), None::<()>)
             .await
     }
@@ -278,14 +278,14 @@ impl ShuttleApiClient {
     pub async fn get_project(&self, project: &str) -> Result<project::Response> {
         self.get_json(format!("/projects/{project}")).await
     }
-    pub async fn get_project_beta(&self, project: &str) -> Result<project::ResponseBeta> {
+    pub async fn get_project_beta(&self, project: &str) -> Result<project::ProjectResponseBeta> {
         self.get_json(format!("/projects/{project}")).await
     }
 
     pub async fn get_projects_list(&self) -> Result<Vec<project::Response>> {
         self.get_json("/projects".to_owned()).await
     }
-    pub async fn get_projects_list_beta(&self) -> Result<project::ResponseListBeta> {
+    pub async fn get_projects_list_beta(&self) -> Result<project::ProjectListResponseBeta> {
         self.get_json("/projects".to_owned()).await
     }
 
@@ -324,7 +324,7 @@ impl ShuttleApiClient {
     pub async fn get_team_projects_list_beta(
         &self,
         team_id: &str,
-    ) -> Result<project::ResponseListBeta> {
+    ) -> Result<project::ProjectListResponseBeta> {
         self.get_json(format!("/teams/{team_id}/projects")).await
     }
 
@@ -399,7 +399,7 @@ impl ShuttleApiClient {
         project: &str,
         page: i32,
         per_page: i32,
-    ) -> Result<Vec<deployment::ResponseBeta>> {
+    ) -> Result<Vec<deployment::DeploymentResponseBeta>> {
         let path = format!(
             "/projects/{project}/deployments?page={}&per_page={}",
             page.saturating_sub(1).max(0),
@@ -411,7 +411,7 @@ impl ShuttleApiClient {
     pub async fn get_current_deployment_beta(
         &self,
         project: &str,
-    ) -> Result<Option<deployment::ResponseBeta>> {
+    ) -> Result<Option<deployment::DeploymentResponseBeta>> {
         let path = format!("/projects/{project}/deployments/current");
 
         self.get_json(path).await
@@ -421,7 +421,7 @@ impl ShuttleApiClient {
         &self,
         project: &str,
         deployment_id: &str,
-    ) -> Result<deployment::ResponseBeta> {
+    ) -> Result<deployment::DeploymentResponseBeta> {
         let path = format!("/projects/{project}/deployments/{deployment_id}");
 
         self.get_json(path).await

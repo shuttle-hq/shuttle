@@ -101,7 +101,7 @@ impl TestApp {
         self.send_request(request).await
     }
 
-    pub async fn get_user_typed(&self, user_id: &str) -> user::Response {
+    pub async fn get_user_typed(&self, user_id: &str) -> user::UserResponse {
         let response = self.get_user(user_id).await;
         let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
 

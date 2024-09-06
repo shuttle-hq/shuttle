@@ -32,6 +32,22 @@ impl ProvisionResourceRequest {
     }
 }
 
+impl From<ProvisionResourceRequest> for ProvisionResourceRequestBeta {
+    fn from(value: ProvisionResourceRequest) -> Self {
+        Self {
+            r#type: match value.r#type {
+                Type::Database(database::Type::Shared(database::SharedEngine::Postgres)) => {
+                    ResourceTypeBeta::DatabaseSharedPostgres
+                }
+                Type::Secrets => ResourceTypeBeta::Secrets,
+                Type::Container => ResourceTypeBeta::Container,
+                r => panic!("Resource not supported: {r}"),
+            },
+            config: value.config,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[typeshare::typeshare]
 pub struct ProvisionResourceRequestBeta {

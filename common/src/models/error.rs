@@ -24,7 +24,7 @@ pub struct ApiError {
 impl ApiError {
     pub fn internal(message: &str) -> Self {
         Self {
-            message: format!("{message}. Please create a ticket to get this fixed."),
+            message: format!("{message}"),
             status_code: StatusCode::INTERNAL_SERVER_ERROR.as_u16(),
         }
     }

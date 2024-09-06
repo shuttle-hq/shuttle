@@ -26,15 +26,15 @@ pub struct Response {
     pub is_admin: bool,
 }
 
-#[typeshare::typeshare]
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+#[typeshare::typeshare]
 pub struct ProjectResponseBeta {
     pub id: String,
     pub name: String,
     /// State of the current deployment if one exists (something has been deployed).
     pub deployment_state: Option<DeploymentStateBeta>,
-    /// User id of the project owner
-    pub owner: String,
+    /// Project owner
+    pub user_id: String,
 }
 
 impl ProjectResponseBeta {
@@ -52,7 +52,7 @@ impl ProjectResponseBeta {
                 .unwrap_or_else(|| "N/A".dark_grey().to_string())
         )
         .unwrap();
-        writeln!(&mut s, "Owner: {}", self.owner).unwrap();
+        writeln!(&mut s, "Owner: {}", self.user_id).unwrap();
 
         s
     }

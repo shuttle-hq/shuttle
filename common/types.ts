@@ -102,8 +102,8 @@ export interface ProjectResponseBeta {
 	name: string;
 	/** State of the current deployment if one exists (something has been deployed). */
 	deployment_state?: DeploymentStateBeta;
-	/** User id of the project owner */
-	owner: string;
+	/** Project owner */
+	user_id: string;
 }
 
 export interface ProjectListResponseBeta {

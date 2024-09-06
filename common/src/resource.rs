@@ -50,6 +50,14 @@ pub enum ResourceInput {
     Custom(Value),
 }
 
+/// Helper for deserializing
+#[derive(Deserialize)]
+#[serde(untagged)] // Try deserializing as a Shuttle resource, fall back to a custom value
+pub enum ResourceInputBeta {
+    Shuttle(ProvisionResourceRequestBeta),
+    Custom(Value),
+}
+
 /// The resource state represents the stage of the provisioning process the resource is in.
 #[derive(
     Debug, Clone, PartialEq, Eq, strum::Display, strum::EnumString, Serialize, Deserialize,
@@ -77,7 +85,7 @@ pub struct ShuttleResourceOutput<T> {
     pub custom: Value,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[typeshare::typeshare]
 pub struct ResourceResponseBeta {
     pub r#type: ResourceTypeBeta,

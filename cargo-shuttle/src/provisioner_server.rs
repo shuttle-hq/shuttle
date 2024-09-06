@@ -507,11 +507,11 @@ pub mod beta {
         Body, Method, Request as HyperRequest, Response, Server,
     };
     use shuttle_common::{
-        resource::{self, ProvisionResourceRequest},
+        database,
+        resource::{self, ProvisionResourceRequestBeta, ResourceResponseBeta, ResourceTypeBeta},
         DatabaseResource, DbInput,
     };
     use shuttle_proto::provisioner::{provisioner_server::Provisioner, DatabaseRequest};
-    use shuttle_service::ShuttleResourceOutput;
     use tonic::Request;
     use tracing::debug;
 
@@ -583,20 +583,20 @@ pub mod beta {
             }
             (Method::POST, "/projects/proj_LOCAL/resources") => {
                 let prov = LocalProvisioner::new().unwrap();
-                let shuttle_resource: ProvisionResourceRequest =
+                let shuttle_resource: ProvisionResourceRequestBeta =
                     serde_json::from_slice(&body).context("deserializing resource request")?;
-                // TODO: Reject req if version field mismatch
 
                 let response = match shuttle_resource.r#type {
-                    resource::Type::Database(db_type) => {
-                        let config: DbInput = serde_json::from_value(shuttle_resource.config)
-                            .context("deserializing resource config")?;
+                    ResourceTypeBeta::DatabaseSharedPostgres => {
+                        let config: DbInput =
+                            serde_json::from_value(shuttle_resource.config.clone())
+                                .context("deserializing resource config")?;
                         let res = match config.local_uri {
                                 Some(local_uri) => DatabaseResource::ConnectionString(local_uri),
                                 None => DatabaseResource::Info(
                                     prov.provision_database(Request::new(DatabaseRequest {
                                         project_name: state.project_name.clone(),
-                                        db_type: Some(db_type.into()),
+                                        db_type: Some(database::Type::Shared(database::SharedEngine::Postgres).into()),
                                         db_name: config.db_name,
                                     }))
                                     .await
@@ -605,32 +605,32 @@ pub mod beta {
                                     .into(),
                                 ),
                             };
-                        ShuttleResourceOutput {
+                        ResourceResponseBeta {
+                            r#type: shuttle_resource.r#type,
                             output: serde_json::to_value(&res).unwrap(),
-                            custom: serde_json::Value::Null,
-                            state: Some(resource::ResourceState::Ready),
+                            config: shuttle_resource.config,
+                            state: resource::ResourceState::Ready,
                         }
                     }
-                    resource::Type::Container => {
-                        let config = serde_json::from_value(shuttle_resource.config)
+                    ResourceTypeBeta::Container => {
+                        let config = serde_json::from_value(shuttle_resource.config.clone())
                             .context("deserializing resource config")?;
                         let res = prov.start_container(config)
                             .await
                             .context("Failed to start Docker container. Make sure that a Docker engine is running.")?;
-                        ShuttleResourceOutput {
-                            output: serde_json::to_value(res).unwrap(),
-                            custom: serde_json::Value::Null,
-                            state: Some(resource::ResourceState::Ready),
+                        ResourceResponseBeta {
+                            r#type: shuttle_resource.r#type,
+                            output: serde_json::to_value(&res).unwrap(),
+                            config: shuttle_resource.config,
+                            state: resource::ResourceState::Ready,
                         }
                     }
-                    resource::Type::Secrets => ShuttleResourceOutput {
+                    ResourceTypeBeta::Secrets => ResourceResponseBeta {
+                        r#type: shuttle_resource.r#type,
                         output: serde_json::to_value(&state.secrets).unwrap(),
-                        custom: serde_json::Value::Null,
-                        state: Some(resource::ResourceState::Ready),
+                        config: shuttle_resource.config,
+                        state: resource::ResourceState::Ready,
                     },
-                    _ => {
-                        bail!("Resource not supported");
-                    }
                 };
 
                 serde_json::to_vec(&response).unwrap()

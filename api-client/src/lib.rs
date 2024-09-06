@@ -7,7 +7,6 @@ use reqwest::header::HeaderMap;
 use reqwest::Response;
 use reqwest_middleware::{ClientWithMiddleware, RequestBuilder};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use shuttle_common::certificate::{
     AddCertificateRequest, CertificateResponse, DeleteCertificateRequest,
 };
@@ -16,7 +15,7 @@ use shuttle_common::models::deployment::{
     DeploymentRequest, DeploymentRequestBeta, UploadArchiveResponseBeta,
 };
 use shuttle_common::models::{deployment, project, service, team, user};
-use shuttle_common::resource::{ProvisionResourceRequest, ShuttleResourceOutput};
+use shuttle_common::resource::{ProvisionResourceRequestBeta, ResourceResponseBeta};
 use shuttle_common::{resource, LogItem, VersionInfo};
 use tokio::net::TcpStream;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
@@ -220,8 +219,8 @@ impl ShuttleApiClient {
     pub async fn provision_resource_beta(
         &self,
         project: &str,
-        req: ProvisionResourceRequest,
-    ) -> Result<ShuttleResourceOutput<Value>> {
+        req: ProvisionResourceRequestBeta,
+    ) -> Result<ResourceResponseBeta> {
         self.post_json(format!("/projects/{project}/resources"), Some(req))
             .await
     }

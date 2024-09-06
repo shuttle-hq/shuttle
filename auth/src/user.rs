@@ -522,7 +522,7 @@ where
 }
 
 pub struct Admin {
-    pub user: User,
+    pub _user: User,
 }
 
 #[async_trait]
@@ -536,7 +536,7 @@ where
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
         let user = User::from_request_parts(parts, state).await?;
         if user.is_admin() {
-            return Ok(Self { user });
+            return Ok(Self { _user: user });
         }
 
         match parts.headers.typed_try_get::<XShuttleAdminSecret>() {
@@ -549,7 +549,7 @@ where
                     .await
                     .map_err(|_| Error::Unauthorized)?;
                 if admin_user.is_admin() {
-                    Ok(Self { user: admin_user })
+                    Ok(Self { _user: admin_user })
                 } else {
                     Err(Error::Unauthorized)
                 }

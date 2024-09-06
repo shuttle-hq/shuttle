@@ -287,7 +287,7 @@ impl GatewayService {
     /// Initialize `GatewayService` and its required dependencies.
     ///
     /// * `args` - The [`Args`] with which the service was
-    /// started. Will be passed as [`Context`] to workers and state.
+    ///   started. Will be passed as [`Context`] to workers and state.
     pub async fn init(
         args: ServiceArgs,
         db: SqlitePool,
@@ -756,7 +756,7 @@ impl GatewayService {
 
         let mut transaction = self.db.begin().await?;
         query("INSERT INTO projects (project_id, project_name, account_name, user_id, initial_key, project_state) VALUES (?1, ?2, ?3, ?4, ?5, ?6)")
-            .bind(&project_id.to_string())
+            .bind(project_id.to_string())
             .bind(&project_name)
             .bind("")
             .bind(user_id)

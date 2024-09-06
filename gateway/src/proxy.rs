@@ -130,7 +130,7 @@ async fn proxy(
         };
 
     // Record current project for tracing purposes
-    span.record("shuttle.project.name", &project_name.to_string());
+    span.record("shuttle.project.name", project_name.to_string());
 
     req.headers_mut()
         .typed_insert(XShuttleProject(project_name.to_string()));

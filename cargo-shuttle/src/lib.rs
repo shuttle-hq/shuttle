@@ -1949,7 +1949,6 @@ impl Shuttle {
             dunce::canonicalize(runtime_executable).context("canonicalize path of executable")?,
         )
         .current_dir(&service.workspace_path)
-        .args(["--run"])
         .envs([
             ("SHUTTLE_BETA", "true"),
             ("SHUTTLE_PROJECT_ID", "proj_LOCAL"),

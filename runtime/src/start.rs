@@ -11,8 +11,6 @@ struct Args {
     beta: bool,
     /// Alpha (required): Port to open gRPC server on
     port: Option<u16>,
-    /// Beta (required): Run the app (allows erroring when `cargo run` is used)
-    run: bool,
 }
 
 impl Args {
@@ -33,9 +31,6 @@ impl Args {
                         .context("invalid port value")?;
                     args.port = Some(port);
                 }
-                "--run" => {
-                    args.run = true;
-                }
                 _ => {}
             }
         }
@@ -43,8 +38,8 @@ impl Args {
         args.beta = std::env::var("SHUTTLE_BETA").is_ok();
 
         if args.beta {
-            if !args.run {
-                return Err(anyhow::anyhow!("--run is required with SHUTTLE_BETA"));
+            if !std::env::var("SHUTTLE_ENV").is_ok() {
+                return Err(anyhow::anyhow!("SHUTTLE_ENV is required to be set on beta"));
             }
         } else if args.port.is_none() {
             return Err(anyhow::anyhow!("--port is required"));

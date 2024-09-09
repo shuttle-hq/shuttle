@@ -508,7 +508,10 @@ pub mod beta {
     };
     use shuttle_common::{
         database,
-        resource::{self, ProvisionResourceRequestBeta, ResourceResponseBeta, ResourceTypeBeta},
+        resource::{
+            self, ProvisionResourceRequestBeta, ResourceResponseBeta, ResourceState,
+            ResourceTypeBeta,
+        },
         DatabaseResource, DbInput,
     };
     use shuttle_proto::provisioner::{provisioner_server::Provisioner, DatabaseRequest};
@@ -574,10 +577,11 @@ pub mod beta {
     ) -> Result<Vec<u8>> {
         Ok(match (method, uri) {
             (Method::GET, "/projects/proj_LOCAL/resources/secrets") => {
-                serde_json::to_vec(&resource::Response {
+                serde_json::to_vec(&ResourceResponseBeta {
+                    r#type: ResourceTypeBeta::Secrets,
+                    state: ResourceState::Ready,
                     config: serde_json::Value::Null,
-                    r#type: resource::Type::Secrets,
-                    data: serde_json::to_value(&state.secrets).unwrap(),
+                    output: serde_json::to_value(&state.secrets).unwrap(),
                 })
                 .unwrap()
             }
@@ -607,9 +611,9 @@ pub mod beta {
                             };
                         ResourceResponseBeta {
                             r#type: shuttle_resource.r#type,
-                            output: serde_json::to_value(res).unwrap(),
-                            config: shuttle_resource.config,
                             state: resource::ResourceState::Ready,
+                            config: shuttle_resource.config,
+                            output: serde_json::to_value(res).unwrap(),
                         }
                     }
                     ResourceTypeBeta::Container => {
@@ -620,16 +624,16 @@ pub mod beta {
                             .context("Failed to start Docker container. Make sure that a Docker engine is running.")?;
                         ResourceResponseBeta {
                             r#type: shuttle_resource.r#type,
-                            output: serde_json::to_value(res).unwrap(),
-                            config: shuttle_resource.config,
                             state: resource::ResourceState::Ready,
+                            config: shuttle_resource.config,
+                            output: serde_json::to_value(res).unwrap(),
                         }
                     }
                     ResourceTypeBeta::Secrets => ResourceResponseBeta {
                         r#type: shuttle_resource.r#type,
-                        output: serde_json::to_value(&state.secrets).unwrap(),
-                        config: shuttle_resource.config,
                         state: resource::ResourceState::Ready,
+                        config: shuttle_resource.config,
+                        output: serde_json::to_value(&state.secrets).unwrap(),
                     },
                 };
 

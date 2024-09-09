@@ -48,13 +48,20 @@ impl ResourceInputBuilder for Postgres {
 }
 
 #[derive(Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct OutputWrapper(ShuttleResourceOutput<DatabaseResource>);
+#[serde(untagged)]
+pub enum OutputWrapper {
+    Alpha(ShuttleResourceOutput<DatabaseResource>),
+    Beta(DatabaseResource),
+}
 
 #[async_trait]
 impl IntoResource<String> for OutputWrapper {
     async fn into_resource(self) -> Result<String, Error> {
-        Ok(match self.0.output {
+        let output = match self {
+            Self::Alpha(o) => o.output,
+            Self::Beta(o) => o,
+        };
+        Ok(match output {
             DatabaseResource::ConnectionString(s) => s.clone(),
             DatabaseResource::Info(info) => info.connection_string_shuttle(),
         })

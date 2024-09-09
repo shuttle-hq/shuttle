@@ -93,6 +93,14 @@ if ! git diff --exit-code Cargo.lock; then
 fi
 '''
 
+[tasks.check-types]
+script = '''
+if ! git diff --exit-code common/types.ts; then
+    echo "Please commit an up to date common/types.ts: cargo make types"
+    exit 1
+fi
+'''
+
 [tasks.proto]
 # To generate: cargo make proto
 # To validate: cargo make proto validate

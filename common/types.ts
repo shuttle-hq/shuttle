@@ -111,7 +111,7 @@ export interface ProjectListResponseBeta {
 }
 
 export enum ResourceTypeBeta {
-	DatabaseSharedPostgres = "databasesharedpostgres",
+	SharedPostgres = "sharedpostgres",
 	/** (Will probably be removed) */
 	Secrets = "secrets",
 	/** Local provisioner only */

@@ -37,7 +37,7 @@ impl From<ProvisionResourceRequest> for ProvisionResourceRequestBeta {
         Self {
             r#type: match value.r#type {
                 Type::Database(database::Type::Shared(database::SharedEngine::Postgres)) => {
-                    ResourceTypeBeta::DatabaseSharedPostgres
+                    ResourceTypeBeta::SharedPostgres
                 }
                 Type::Secrets => ResourceTypeBeta::Secrets,
                 Type::Container => ResourceTypeBeta::Container,
@@ -149,11 +149,12 @@ pub enum Type {
     Container,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Serialize, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, strum::Display, Deserialize, Serialize, Eq, PartialEq)]
 #[serde(rename_all = "lowercase")]
+#[strum(serialize_all = "lowercase")]
 #[typeshare::typeshare]
 pub enum ResourceTypeBeta {
-    DatabaseSharedPostgres,
+    SharedPostgres,
     /// (Will probably be removed)
     Secrets,
     /// Local provisioner only

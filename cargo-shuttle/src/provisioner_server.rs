@@ -591,7 +591,7 @@ pub mod beta {
                     serde_json::from_slice(&body).context("deserializing resource request")?;
 
                 let response = match shuttle_resource.r#type {
-                    ResourceTypeBeta::DatabaseSharedPostgres => {
+                    ResourceTypeBeta::SharedPostgres => {
                         let config: DbInput =
                             serde_json::from_value(shuttle_resource.config.clone())
                                 .context("deserializing resource config")?;

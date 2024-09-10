@@ -177,6 +177,19 @@ pub enum ResourceTypeBeta {
     Container,
 }
 
+impl TryFrom<ResourceTypeBeta> for database::AwsRdsEngine {
+    type Error = String;
+
+    fn try_from(value: ResourceTypeBeta) -> Result<Self, Self::Error> {
+        Ok(match value {
+            ResourceTypeBeta::DatabaseAwsRdsPostgres => Self::Postgres,
+            ResourceTypeBeta::DatabaseAwsRdsMysql => Self::MySql,
+            ResourceTypeBeta::DatabaseAwsRdsMariaDB => Self::MariaDB,
+            other => return Err(format!("Invalid conversion of DB type: {other}")),
+        })
+    }
+}
+
 #[derive(Debug, Error)]
 pub enum InvalidResourceType {
     #[error("'{0}' is an unknown database type")]

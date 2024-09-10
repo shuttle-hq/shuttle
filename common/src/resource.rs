@@ -37,7 +37,7 @@ impl From<ProvisionResourceRequest> for ProvisionResourceRequestBeta {
         Self {
             r#type: match value.r#type {
                 Type::Database(database::Type::Shared(database::SharedEngine::Postgres)) => {
-                    ResourceTypeBeta::SharedPostgres
+                    ResourceTypeBeta::DatabaseSharedPostgres
                 }
                 Type::Secrets => ResourceTypeBeta::Secrets,
                 Type::Container => ResourceTypeBeta::Container,
@@ -149,15 +149,19 @@ pub enum Type {
     Container,
 }
 
-#[derive(Clone, Copy, Debug, strum::Display, Deserialize, Serialize, Eq, PartialEq)]
+#[derive(
+    Clone, Copy, Debug, strum::EnumString, strum::Display, Deserialize, Serialize, Eq, PartialEq,
+)]
 #[serde(rename_all = "lowercase")]
-#[strum(serialize_all = "lowercase")]
 #[typeshare::typeshare]
 pub enum ResourceTypeBeta {
-    SharedPostgres,
+    #[strum(to_string = "database::shared::postgres")]
+    DatabaseSharedPostgres,
     /// (Will probably be removed)
+    #[strum(to_string = "secrets")]
     Secrets,
     /// Local provisioner only
+    #[strum(to_string = "container")]
     Container,
 }
 
@@ -287,6 +291,36 @@ mod test {
         for input in inputs {
             let actual = Type::from_str(&input.to_string()).unwrap();
             assert_eq!(input, actual, ":{} should map back to itself", input);
+        }
+    }
+
+    #[test]
+    fn to_string_and_back_beta() {
+        let inputs = [
+            ResourceTypeBeta::DatabaseSharedPostgres,
+            ResourceTypeBeta::Secrets,
+            ResourceTypeBeta::Container,
+        ];
+
+        for input in inputs {
+            let actual = ResourceTypeBeta::from_str(&input.to_string()).unwrap();
+            assert_eq!(input, actual, ":{} should map back to itself", input);
+        }
+    }
+
+    #[test]
+    fn beta_compat() {
+        let inputs = [
+            (
+                Type::Database(database::Type::Shared(database::SharedEngine::Postgres)),
+                ResourceTypeBeta::DatabaseSharedPostgres,
+            ),
+            (Type::Secrets, ResourceTypeBeta::Secrets),
+            (Type::Container, ResourceTypeBeta::Container),
+        ];
+
+        for (alpha, beta) in inputs {
+            assert_eq!(alpha.to_string(), beta.to_string());
         }
     }
 }

@@ -157,6 +157,12 @@ pub enum Type {
 pub enum ResourceTypeBeta {
     #[strum(to_string = "database::shared::postgres")]
     DatabaseSharedPostgres,
+    #[strum(to_string = "database::aws_rds::postgres")]
+    DatabaseAwsRdsPostgres,
+    #[strum(to_string = "database::aws_rds::mysql")]
+    DatabaseAwsRdsMysql,
+    #[strum(to_string = "database::aws_rds::mariadb")]
+    DatabaseAwsRdsMariaDB,
     /// (Will probably be removed)
     #[strum(to_string = "secrets")]
     Secrets,

@@ -635,6 +635,7 @@ pub mod beta {
                         config: shuttle_resource.config,
                         output: serde_json::to_value(&state.secrets).unwrap(),
                     },
+                    other => unimplemented!("Resource {other} not supported yet"),
                 };
 
                 serde_json::to_vec(&response).unwrap()

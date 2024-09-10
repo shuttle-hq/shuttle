@@ -2707,14 +2707,9 @@ impl Shuttle {
             let teams = client.get_teams_list().await?;
 
             for team in teams {
-                let team_projects_table = if self.beta {
-                    let team_projects =
-                        client.get_team_projects_list_beta(&team.id).await?.projects;
-                    project::get_projects_table_beta(&team_projects, table_args.raw)
-                } else {
-                    let team_projects = client.get_team_projects_list(&team.id).await?;
-                    project::get_projects_table(&team_projects, table_args.raw)
-                };
+                let team_projects = client.get_team_projects_list(&team.id).await?;
+                let team_projects_table =
+                    project::get_projects_table(&team_projects, table_args.raw);
 
                 println!("{}", format!("{}'s Projects", team.display_name).bold());
                 println!("{team_projects_table}\n");

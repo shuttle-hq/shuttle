@@ -129,7 +129,7 @@ commands:
           command: |
             curl -OL https://github.com/sagiegurari/cargo-make/releases/download/$VERSION/cargo-make-v$VERSION-x86_64-unknown-linux-musl.zip && \
               unzip cargo-make-v$VERSION-x86_64-unknown-linux-musl.zip && \
-              mv cargo-make-v0.37.8-x86_64-unknown-linux-musl/cargo-make ~/.cargo/bin && \
+              mv cargo-make-v$VERSION-x86_64-unknown-linux-musl/cargo-make ~/.cargo/bin && \
               rm -rf cargo-make-v$VERSION-x86_64-unknown-linux-musl*
   install-cargo-audit:
     steps:
@@ -192,6 +192,9 @@ jobs:
       - run: cargo make ci-workspace
       - install-protoc
       - run: cargo make proto validate
+      - run: curl --proto '=https' --tlsv1.2 -LsSf https://github.com/1Password/typeshare/releases/download/v1.11.0/typeshare-cli-v1.11.0-installer.sh | sh
+      - run: cargo make types
+      - run: cargo make check-types
       - save-sccache
       - save-cargo-cache
   cargo-audit:

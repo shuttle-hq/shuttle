@@ -7,9 +7,10 @@ use strum::{Display, EnumString};
 pub type UserId = String;
 
 #[derive(Deserialize, Serialize, Debug)]
-pub struct Response {
+#[typeshare::typeshare]
+pub struct UserResponse {
     pub name: String,
-    pub id: UserId,
+    pub id: String,
     pub key: String,
     pub account_tier: String,
     pub subscriptions: Vec<Subscription>,
@@ -17,6 +18,7 @@ pub struct Response {
 }
 
 #[derive(Deserialize, Serialize, Debug)]
+#[typeshare::typeshare]
 pub struct Subscription {
     pub id: String,
     pub r#type: SubscriptionType,
@@ -26,6 +28,7 @@ pub struct Subscription {
 }
 
 #[derive(Deserialize, Debug)]
+#[typeshare::typeshare]
 pub struct SubscriptionRequest {
     pub id: String,
     pub r#type: SubscriptionType,
@@ -35,6 +38,7 @@ pub struct SubscriptionRequest {
 #[derive(Clone, Debug, EnumString, Display, Deserialize, Serialize, Eq, PartialEq)]
 #[serde(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
+#[typeshare::typeshare]
 pub enum SubscriptionType {
     Pro,
     Rds,

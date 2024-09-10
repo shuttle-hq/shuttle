@@ -93,6 +93,14 @@ if ! git diff --exit-code Cargo.lock; then
 fi
 '''
 
+[tasks.check-types]
+script = '''
+if ! git diff --exit-code common/types.ts; then
+    echo "Please commit an up to date common/types.ts: cargo make types"
+    exit 1
+fi
+'''
+
 [tasks.proto]
 # To generate: cargo make proto
 # To validate: cargo make proto validate
@@ -120,6 +128,11 @@ proto-gen \
 install_crate = { crate_name = "git-cliff", binary = "git-cliff", test_arg = ["-V"], min_version = "2.1.2" }
 command = "git-cliff"
 args = ["-o", "CHANGELOG.md", "-t", "${@}"]
+
+[tasks.types]
+install_crate = { crate_name = "typeshare-cli", binary = "typeshare", test_arg = ["-V"], min_version = "1.11.0" }
+command = "typeshare"
+args = ["common", "-l", "typescript", "-c", "common/typeshare.toml", "-o", "common/types.ts"]
 
 ### CI TASKS
 

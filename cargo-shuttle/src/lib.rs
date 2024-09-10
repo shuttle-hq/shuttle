@@ -41,13 +41,13 @@ use shuttle_common::{
         SHUTTLE_IDLE_DOCS_URL, SHUTTLE_INSTALL_DOCS_URL, SHUTTLE_LOGIN_URL, STORAGE_DIRNAME,
         TEMPLATES_SCHEMA_VERSION,
     },
-    deployment::{EcsState, DEPLOYER_END_MESSAGES_BAD, DEPLOYER_END_MESSAGES_GOOD},
+    deployment::{DeploymentStateBeta, DEPLOYER_END_MESSAGES_BAD, DEPLOYER_END_MESSAGES_GOOD},
     log::LogsRange,
     models::{
         deployment::{
             deployments_table_beta, get_deployments_table, BuildArgsBeta, BuildArgsRustBeta,
             BuildMetaBeta, DeploymentRequest, DeploymentRequestBeta,
-            DeploymentRequestBuildArchiveBeta, DeploymentRequestImageBeta, ResponseBeta,
+            DeploymentRequestBuildArchiveBeta, DeploymentRequestImageBeta, DeploymentResponseBeta,
             CREATE_SERVICE_BODY_LIMIT, GIT_STRINGS_MAX_LENGTH,
         },
         error::ApiError,
@@ -846,7 +846,7 @@ impl Shuttle {
         wait_with_spinner(2000, |_, pb| async move {
             let deployment = client.get_current_deployment_beta(p).await?;
 
-            let get_cleanup = |d: Option<ResponseBeta>| {
+            let get_cleanup = |d: Option<DeploymentResponseBeta>| {
                 move || {
                     if let Some(d) = d {
                         println!("{}", d.to_string_colored());
@@ -861,14 +861,14 @@ impl Shuttle {
             pb.set_message(deployment.to_string_summary_colored());
             let cleanup = get_cleanup(Some(deployment));
             match state {
-                    EcsState::Pending
-                    | EcsState::Stopping
-                    | EcsState::InProgress
-                    | EcsState::Running => Ok(None),
-                    EcsState::Building // a building deployment should take it back to InProgress then Running, so don't follow that sequence
-                    | EcsState::Failed
-                    | EcsState::Stopped
-                    | EcsState::Unknown => Ok(Some(cleanup)),
+                    DeploymentStateBeta::Pending
+                    | DeploymentStateBeta::Stopping
+                    | DeploymentStateBeta::InProgress
+                    | DeploymentStateBeta::Running => Ok(None),
+                    DeploymentStateBeta::Building // a building deployment should take it back to InProgress then Running, so don't follow that sequence
+                    | DeploymentStateBeta::Failed
+                    | DeploymentStateBeta::Stopped
+                    | DeploymentStateBeta::Unknown => Ok(Some(cleanup)),
                 }
         })
         .await?;
@@ -1624,7 +1624,6 @@ impl Shuttle {
                     *bytes = serde_json::to_vec(&ShuttleResourceOutput {
                         output: res,
                         custom: shuttle_resource.custom,
-                        state: None
                     })
                     .unwrap();
                 }
@@ -1638,7 +1637,6 @@ impl Shuttle {
                     *bytes = serde_json::to_vec(&ShuttleResourceOutput {
                         output: secrets.clone(),
                         custom: shuttle_resource.custom,
-                        state: None
                     })
                     .unwrap();
                 }
@@ -1657,7 +1655,6 @@ impl Shuttle {
                     *bytes = serde_json::to_vec(&ShuttleResourceOutput {
                         output: res,
                         custom: shuttle_resource.custom,
-                        state: None
                     })
                     .unwrap();
                 }
@@ -1943,7 +1940,6 @@ impl Shuttle {
             dunce::canonicalize(runtime_executable).context("canonicalize path of executable")?,
         )
         .current_dir(&service.workspace_path)
-        .args(["--run"])
         .envs([
             ("SHUTTLE_BETA", "true"),
             ("SHUTTLE_PROJECT_ID", "proj_LOCAL"),
@@ -2369,10 +2365,14 @@ impl Shuttle {
                     println!("{}", deployment.to_string_colored());
                 };
                 match state {
-                    EcsState::Pending | EcsState::Building | EcsState::InProgress => Ok(None),
-                    EcsState::Running => Ok(Some(cleanup)),
-                    EcsState::Stopped | EcsState::Stopping | EcsState::Unknown => Ok(Some(cleanup)),
-                    EcsState::Failed => {
+                    DeploymentStateBeta::Pending
+                    | DeploymentStateBeta::Building
+                    | DeploymentStateBeta::InProgress => Ok(None),
+                    DeploymentStateBeta::Running => Ok(Some(cleanup)),
+                    DeploymentStateBeta::Stopped
+                    | DeploymentStateBeta::Stopping
+                    | DeploymentStateBeta::Unknown => Ok(Some(cleanup)),
+                    DeploymentStateBeta::Failed => {
                         for log in client
                             .get_deployment_logs_beta(project_name, id)
                             .await?

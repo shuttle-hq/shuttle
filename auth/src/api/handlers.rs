@@ -20,7 +20,7 @@ pub(crate) async fn get_user(
     _: Admin,
     State(user_manager): State<UserManagerState>,
     Path(user_id): Path<UserId>,
-) -> Result<Json<user::Response>, Error> {
+) -> Result<Json<user::UserResponse>, Error> {
     let user = user_manager.get_user(user_id).await?;
 
     Ok(Json(user.into()))
@@ -31,7 +31,7 @@ pub(crate) async fn get_user_by_name(
     _: Admin,
     State(user_manager): State<UserManagerState>,
     Path(account_name): Path<String>,
-) -> Result<Json<user::Response>, Error> {
+) -> Result<Json<user::UserResponse>, Error> {
     let user = user_manager.get_user_by_name(&account_name).await?;
     Span::current().record("account.user_id", &user.id);
 
@@ -43,7 +43,7 @@ pub(crate) async fn post_user(
     _: Admin,
     State(user_manager): State<UserManagerState>,
     Path((account_name, account_tier)): Path<(String, AccountTier)>,
-) -> Result<Json<user::Response>, Error> {
+) -> Result<Json<user::UserResponse>, Error> {
     let user = user_manager.create_user(account_name, account_tier).await?;
     Span::current().record("account.user_id", &user.id);
 

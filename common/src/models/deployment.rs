@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, fmt::Display, str::FromStr};
 use uuid::Uuid;
 
-use crate::deployment::{EcsState, State};
+use crate::deployment::{DeploymentStateBeta, State};
 
 /// Max length of strings in the git metadata
 pub const GIT_STRINGS_MAX_LENGTH: usize = 80;
@@ -30,9 +30,10 @@ pub struct Response {
 }
 
 #[derive(Deserialize, Serialize)]
-pub struct ResponseBeta {
+#[typeshare::typeshare]
+pub struct DeploymentResponseBeta {
     pub id: String,
-    pub state: EcsState,
+    pub state: DeploymentStateBeta,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     /// URIs where this deployment can currently be reached (only relevant for Running)
@@ -57,7 +58,7 @@ impl Display for Response {
     }
 }
 
-impl ResponseBeta {
+impl DeploymentResponseBeta {
     pub fn to_string_summary_colored(&self) -> String {
         // TODO: make this look nicer
         format!(
@@ -92,7 +93,7 @@ impl State {
     }
 }
 
-pub fn deployments_table_beta(deployments: &[ResponseBeta], raw: bool) -> String {
+pub fn deployments_table_beta(deployments: &[DeploymentResponseBeta], raw: bool) -> String {
     let mut table = Table::new();
     table
         .load_preset(if raw { NOTHING } else { UTF8_BORDERS_ONLY })
@@ -256,6 +257,7 @@ pub fn get_deployments_table(
 }
 
 #[derive(Deserialize, Serialize)]
+#[typeshare::typeshare]
 pub struct UploadArchiveResponseBeta {
     /// The S3 object version ID of the uploaded object
     pub archive_version_id: String,
@@ -274,6 +276,7 @@ pub struct DeploymentRequest {
 
 #[derive(Deserialize, Serialize)]
 #[serde(tag = "type", content = "content")]
+#[typeshare::typeshare]
 pub enum DeploymentRequestBeta {
     /// Build an image from the source code in an attached zip archive
     BuildArchive(DeploymentRequestBuildArchiveBeta),
@@ -283,6 +286,7 @@ pub enum DeploymentRequestBeta {
 }
 
 #[derive(Default, Deserialize, Serialize)]
+#[typeshare::typeshare]
 pub struct DeploymentRequestBuildArchiveBeta {
     /// The S3 object version ID of the archive to use
     pub archive_version_id: String,
@@ -295,6 +299,7 @@ pub struct DeploymentRequestBuildArchiveBeta {
 
 #[derive(Deserialize, Serialize, Default)]
 #[serde(tag = "type", content = "content")]
+#[typeshare::typeshare]
 pub enum BuildArgsBeta {
     Rust(BuildArgsRustBeta),
     #[default]
@@ -302,6 +307,7 @@ pub enum BuildArgsBeta {
 }
 
 #[derive(Deserialize, Serialize)]
+#[typeshare::typeshare]
 pub struct BuildArgsRustBeta {
     /// Version of shuttle-runtime used by this crate
     pub shuttle_runtime_version: Option<String>,
@@ -337,6 +343,7 @@ impl Default for BuildArgsRustBeta {
 }
 
 #[derive(Default, Deserialize, Serialize)]
+#[typeshare::typeshare]
 pub struct BuildMetaBeta {
     pub git_commit_id: Option<String>,
     pub git_commit_msg: Option<String>,
@@ -345,6 +352,7 @@ pub struct BuildMetaBeta {
 }
 
 #[derive(Default, Deserialize, Serialize)]
+#[typeshare::typeshare]
 pub struct DeploymentRequestImageBeta {
     pub image: String,
     /// TODO: Remove this in favour of a separate secrets uploading action.

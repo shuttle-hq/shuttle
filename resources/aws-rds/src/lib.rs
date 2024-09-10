@@ -91,7 +91,7 @@ impl IntoResource<String> for OutputWrapper {
 
 // If these were done in the main macro above, this would produce two conflicting `impl IntoResource<sqlx::MySqlPool>`
 
-#[cfg(feature = "diesel_async")]
+#[cfg(feature = "diesel-async")]
 mod _diesel_async {
     use super::*;
 

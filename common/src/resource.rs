@@ -152,22 +152,28 @@ pub enum Type {
 #[derive(
     Clone, Copy, Debug, strum::EnumString, strum::Display, Deserialize, Serialize, Eq, PartialEq,
 )]
-#[serde(rename_all = "lowercase")]
 #[typeshare::typeshare]
+// is a flat enum instead of nested enum to allow typeshare
 pub enum ResourceTypeBeta {
     #[strum(to_string = "database::shared::postgres")]
+    #[serde(rename = "database::shared::postgres")]
     DatabaseSharedPostgres,
     #[strum(to_string = "database::aws_rds::postgres")]
+    #[serde(rename = "database::aws_rds::postgres")]
     DatabaseAwsRdsPostgres,
     #[strum(to_string = "database::aws_rds::mysql")]
+    #[serde(rename = "database::aws_rds::mysql")]
     DatabaseAwsRdsMysql,
     #[strum(to_string = "database::aws_rds::mariadb")]
+    #[serde(rename = "database::aws_rds::mariadb")]
     DatabaseAwsRdsMariaDB,
     /// (Will probably be removed)
     #[strum(to_string = "secrets")]
+    #[serde(rename = "secrets")]
     Secrets,
     /// Local provisioner only
     #[strum(to_string = "container")]
+    #[serde(rename = "container")]
     Container,
 }
 
@@ -320,6 +326,18 @@ mod test {
             (
                 Type::Database(database::Type::Shared(database::SharedEngine::Postgres)),
                 ResourceTypeBeta::DatabaseSharedPostgres,
+            ),
+            (
+                Type::Database(database::Type::AwsRds(database::AwsRdsEngine::Postgres)),
+                ResourceTypeBeta::DatabaseAwsRdsPostgres,
+            ),
+            (
+                Type::Database(database::Type::AwsRds(database::AwsRdsEngine::MySql)),
+                ResourceTypeBeta::DatabaseAwsRdsMysql,
+            ),
+            (
+                Type::Database(database::Type::AwsRds(database::AwsRdsEngine::MariaDB)),
+                ResourceTypeBeta::DatabaseAwsRdsMariaDB,
             ),
             (Type::Secrets, ResourceTypeBeta::Secrets),
             (Type::Container, ResourceTypeBeta::Container),

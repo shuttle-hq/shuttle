@@ -111,7 +111,10 @@ export interface ProjectListResponseBeta {
 }
 
 export enum ResourceTypeBeta {
-	SharedPostgres = "sharedpostgres",
+	DatabaseSharedPostgres = "database::shared::postgres",
+	DatabaseAwsRdsPostgres = "database::aws_rds::postgres",
+	DatabaseAwsRdsMysql = "database::aws_rds::mysql",
+	DatabaseAwsRdsMariaDB = "database::aws_rds::mariadb",
 	/** (Will probably be removed) */
 	Secrets = "secrets",
 	/** Local provisioner only */

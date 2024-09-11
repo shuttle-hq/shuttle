@@ -186,6 +186,10 @@ export interface ResourceResponseBeta {
 	output: any;
 }
 
+export interface ResourceListResponseBeta {
+	resources: ResourceResponseBeta[];
+}
+
 export enum SubscriptionType {
 	Pro = "pro",
 	Rds = "rds",

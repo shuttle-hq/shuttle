@@ -66,14 +66,29 @@ export interface DeleteCertificateRequest {
 	subject: string;
 }
 
-export type DeploymentRequestBeta = 
-	/** Build an image from the source code in an attached zip archive */
-	| { type: "BuildArchive", content: DeploymentRequestBuildArchiveBeta }
-	/** Use this image directly. Can be used to skip the build step. */
-	| { type: "Image", content: DeploymentRequestImageBeta };
+export enum DeploymentStateBeta {
+	Pending = "pending",
+	Building = "building",
+	Running = "running",
+	InProgress = "inprogress",
+	Stopped = "stopped",
+	Stopping = "stopping",
+	Failed = "failed",
+	/** Fallback */
+	Unknown = "unknown",
+}
+
+export interface DeploymentResponseBeta {
+	id: string;
+	state: DeploymentStateBeta;
+	created_at: string;
+	updated_at: string;
+	/** URIs where this deployment can currently be reached (only relevant for Running state) */
+	uris: string[];
+}
 
 export interface DeploymentListResponseBeta {
-	deployments: DeploymentRequestBeta[];
+	deployments: DeploymentResponseBeta[];
 }
 
 export type BuildArgsBeta = 
@@ -96,27 +111,6 @@ export interface DeploymentRequestImageBeta {
 	image: string;
 	/** TODO: Remove this in favour of a separate secrets uploading action. */
 	secrets?: Record<string, string>;
-}
-
-export enum DeploymentStateBeta {
-	Pending = "pending",
-	Building = "building",
-	Running = "running",
-	InProgress = "inprogress",
-	Stopped = "stopped",
-	Stopping = "stopping",
-	Failed = "failed",
-	/** Fallback */
-	Unknown = "unknown",
-}
-
-export interface DeploymentResponseBeta {
-	id: string;
-	state: DeploymentStateBeta;
-	created_at: string;
-	updated_at: string;
-	/** URIs where this deployment can currently be reached (only relevant for Running state) */
-	uris: string[];
 }
 
 export interface LogItemBeta {
@@ -232,4 +226,10 @@ export interface UserResponse {
 	subscriptions: Subscription[];
 	has_access_to_beta: boolean;
 }
+
+export type DeploymentRequestBeta = 
+	/** Build an image from the source code in an attached zip archive */
+	| { type: "BuildArchive", content: DeploymentRequestBuildArchiveBeta }
+	/** Use this image directly. Can be used to skip the build step. */
+	| { type: "Image", content: DeploymentRequestImageBeta };
 

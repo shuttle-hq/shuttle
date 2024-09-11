@@ -85,6 +85,8 @@ export interface DeploymentResponseBeta {
 	updated_at: string;
 	/** URIs where this deployment can currently be reached (only relevant for Running state) */
 	uris: string[];
+	build_id?: string;
+	build_meta?: BuildMetaBeta;
 }
 
 export interface DeploymentListResponseBeta {

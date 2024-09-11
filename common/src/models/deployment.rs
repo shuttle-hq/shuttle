@@ -44,6 +44,8 @@ pub struct DeploymentResponseBeta {
     pub updated_at: DateTime<Utc>,
     /// URIs where this deployment can currently be reached (only relevant for Running state)
     pub uris: Vec<String>,
+    pub build_id: Option<String>,
+    pub build_meta: Option<BuildMetaBeta>,
 }
 
 impl Display for Response {
@@ -108,6 +110,7 @@ pub fn deployments_table_beta(deployments: &[DeploymentResponseBeta], raw: bool)
             Cell::new("Deployment ID"),
             Cell::new("Status"),
             Cell::new("Date"),
+            Cell::new("Git"),
         ]);
 
     for deploy in deployments.iter() {
@@ -118,6 +121,13 @@ pub fn deployments_table_beta(deployments: &[DeploymentResponseBeta], raw: bool)
                 // Unwrap is safe because Color::from_str returns the color white if str is not a Color.
                 .fg(Color::from_str(deploy.state.get_color()).unwrap()),
             Cell::new(datetime.to_rfc3339_opts(chrono::SecondsFormat::Secs, false)),
+            Cell::new(
+                deploy
+                    .build_meta
+                    .as_ref()
+                    .map(ToString::to_string)
+                    .unwrap_or_default(),
+            ),
         ]);
     }
 
@@ -355,6 +365,22 @@ pub struct BuildMetaBeta {
     pub git_commit_msg: Option<String>,
     pub git_branch: Option<String>,
     pub git_dirty: Option<bool>,
+}
+
+impl std::fmt::Display for BuildMetaBeta {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if let Some(ref c) = self.git_commit_id {
+            write!(f, "{c} ")?;
+        }
+        if let Some(true) = self.git_dirty {
+            write!(f, "(dirty) ")?;
+        }
+        if let Some(ref m) = self.git_commit_msg {
+            write!(f, "{m}")?;
+        }
+
+        Ok(())
+    }
 }
 
 #[derive(Default, Deserialize, Serialize)]

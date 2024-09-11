@@ -8,14 +8,17 @@ use reqwest::Response;
 use reqwest_middleware::{ClientWithMiddleware, RequestBuilder};
 use serde::{Deserialize, Serialize};
 use shuttle_common::certificate::{
-    AddCertificateRequest, CertificateResponse, DeleteCertificateRequest,
+    AddCertificateRequest, CertificateListResponse, CertificateResponse, DeleteCertificateRequest,
 };
 use shuttle_common::log::{LogsRange, LogsResponseBeta};
 use shuttle_common::models::deployment::{
-    DeploymentRequest, DeploymentRequestBeta, UploadArchiveResponseBeta,
+    DeploymentListResponseBeta, DeploymentRequest, DeploymentRequestBeta, UploadArchiveResponseBeta,
 };
+use shuttle_common::models::project::ProjectListResponseBeta;
 use shuttle_common::models::{deployment, project, service, team, user};
-use shuttle_common::resource::{ProvisionResourceRequestBeta, ResourceResponseBeta};
+use shuttle_common::resource::{
+    ProvisionResourceRequestBeta, ResourceListResponseBeta, ResourceResponseBeta,
+};
 use shuttle_common::{resource, LogItem, VersionInfo};
 use tokio::net::TcpStream;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
@@ -186,7 +189,7 @@ impl ShuttleApiClient {
     pub async fn get_service_resources_beta(
         &self,
         project: &str,
-    ) -> Result<Vec<ResourceResponseBeta>> {
+    ) -> Result<ResourceListResponseBeta> {
         self.get_json(format!("/projects/{project}/resources"))
             .await
     }
@@ -229,7 +232,7 @@ impl ShuttleApiClient {
             .await
     }
 
-    pub async fn list_certificates_beta(&self, project: &str) -> Result<Vec<CertificateResponse>> {
+    pub async fn list_certificates_beta(&self, project: &str) -> Result<CertificateListResponse> {
         self.get_json(format!("/projects/{project}/certificates"))
             .await
     }
@@ -284,7 +287,7 @@ impl ShuttleApiClient {
     pub async fn get_projects_list(&self) -> Result<Vec<project::Response>> {
         self.get_json("/projects".to_owned()).await
     }
-    pub async fn get_projects_list_beta(&self) -> Result<project::ProjectListResponseBeta> {
+    pub async fn get_projects_list_beta(&self) -> Result<ProjectListResponseBeta> {
         self.get_json("/projects".to_owned()).await
     }
 
@@ -323,7 +326,7 @@ impl ShuttleApiClient {
     pub async fn get_team_projects_list_beta(
         &self,
         team_id: &str,
-    ) -> Result<project::ProjectListResponseBeta> {
+    ) -> Result<ProjectListResponseBeta> {
         self.get_json(format!("/teams/{team_id}/projects")).await
     }
 
@@ -398,7 +401,7 @@ impl ShuttleApiClient {
         project: &str,
         page: i32,
         per_page: i32,
-    ) -> Result<Vec<deployment::DeploymentResponseBeta>> {
+    ) -> Result<DeploymentListResponseBeta> {
         let path = format!(
             "/projects/{project}/deployments?page={}&per_page={}",
             page.saturating_sub(1).max(0),

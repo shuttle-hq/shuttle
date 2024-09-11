@@ -186,7 +186,7 @@ impl ShuttleApiClient {
     pub async fn get_service_resources_beta(
         &self,
         project: &str,
-    ) -> Result<Vec<resource::Response>> {
+    ) -> Result<Vec<ResourceResponseBeta>> {
         self.get_json(format!("/projects/{project}/resources"))
             .await
     }

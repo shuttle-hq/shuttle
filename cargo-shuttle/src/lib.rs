@@ -33,7 +33,6 @@ use indicatif::ProgressBar;
 use indoc::{formatdoc, printdoc};
 use reqwest::header::HeaderMap;
 use shuttle_api_client::ShuttleApiClient;
-use shuttle_common::models::resource::get_certificates_table_beta;
 use shuttle_common::{
     constants::{
         headers::X_CARGO_SHUTTLE_VERSION, API_URL_DEFAULT, DEFAULT_IDLE_MINUTES, EXAMPLES_REPO,
@@ -52,7 +51,7 @@ use shuttle_common::{
         },
         error::ApiError,
         project,
-        resource::get_resource_tables,
+        resource::{get_certificates_table_beta, get_resource_tables, get_resource_tables_beta},
     },
     resource::{self, ResourceInput, ShuttleResourceOutput},
     semvers_are_compatible,
@@ -273,7 +272,13 @@ impl Shuttle {
                 ResourceCommand::List {
                     table,
                     show_secrets,
-                } => self.resources_list(table, show_secrets).await,
+                } => {
+                    if self.beta {
+                        self.resources_list_beta(table, show_secrets).await
+                    } else {
+                        self.resources_list(table, show_secrets).await
+                    }
+                }
                 ResourceCommand::Delete {
                     resource_type,
                     confirmation: ConfirmationArgs { yes },
@@ -1222,24 +1227,36 @@ impl Shuttle {
         show_secrets: bool,
     ) -> Result<CommandOutcome> {
         let client = self.client.as_ref().unwrap();
-        let resources = if self.beta {
-            client
-                .get_service_resources_beta(self.ctx.project_name())
-                .await?
-        } else {
-            client
-                .get_service_resources(self.ctx.project_name())
-                .await
-                .map_err(suggestions::resources::get_service_resources_failure)?
-        };
-
-        // TODO: Beta table formats
+        let resources = client
+            .get_service_resources(self.ctx.project_name())
+            .await
+            .map_err(suggestions::resources::get_service_resources_failure)?;
         let table = get_resource_tables(
             &resources,
             self.ctx.project_name(),
             table_args.raw,
             show_secrets,
-            self.beta,
+        );
+
+        println!("{table}");
+
+        Ok(CommandOutcome::Ok)
+    }
+
+    async fn resources_list_beta(
+        &self,
+        table_args: TableArgs,
+        show_secrets: bool,
+    ) -> Result<CommandOutcome> {
+        let client = self.client.as_ref().unwrap();
+        let resources = client
+            .get_service_resources_beta(self.ctx.project_name())
+            .await?;
+        let table = get_resource_tables_beta(
+            resources.as_slice(),
+            self.ctx.project_name(),
+            table_args.raw,
+            show_secrets,
         );
 
         println!("{table}");
@@ -1507,13 +1524,7 @@ impl Shuttle {
 
         println!(
             "{}",
-            get_resource_tables(
-                &mocked_responses,
-                service_name.as_str(),
-                false,
-                false,
-                false,
-            )
+            get_resource_tables(&mocked_responses, service_name.as_str(), false, false,)
         );
 
         //
@@ -2595,8 +2606,7 @@ impl Shuttle {
         let resources = client
             .get_service_resources(self.ctx.project_name())
             .await?;
-        let resources =
-            get_resource_tables(&resources, self.ctx.project_name(), false, false, self.beta);
+        let resources = get_resource_tables(&resources, self.ctx.project_name(), false, false);
 
         println!("{resources}{service}");
 

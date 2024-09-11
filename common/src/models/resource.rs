@@ -9,7 +9,7 @@ use crossterm::style::Stylize;
 
 use crate::{
     certificate::CertificateResponse,
-    resource::{Response, Type},
+    resource::{ResourceResponseBeta, ResourceTypeBeta, Response, Type},
     secrets::SecretStore,
     DatabaseInfoBeta, DatabaseResource,
 };
@@ -19,60 +19,92 @@ pub fn get_resource_tables(
     service_name: &str,
     raw: bool,
     show_secrets: bool,
-    beta: bool,
 ) -> String {
     if resources.is_empty() {
-        if raw {
+        return if raw {
             "No resources are linked to this service\n".to_string()
         } else {
             format!("{}\n", "No resources are linked to this service".bold())
-        }
-    } else {
-        let resource_groups = resources.iter().fold(HashMap::new(), |mut acc, x| {
-            let title = match x.r#type {
-                Type::Database(_) => "Databases",
-                Type::Secrets => "Secrets",
-                Type::Persist => "Persist",
-                // ignore variants that don't represent Shuttle-hosted resources
-                Type::Container => return acc,
-            };
-
-            let elements: &mut Vec<_> = acc.entry(title).or_default();
-            elements.push(x);
-
-            acc
-        });
-
-        let mut output = Vec::new();
-
-        if let Some(databases) = resource_groups.get("Databases") {
-            if beta {
-                output.push(get_databases_table_beta(
-                    databases,
-                    service_name,
-                    raw,
-                    show_secrets,
-                ));
-            } else {
-                output.push(get_databases_table(
-                    databases,
-                    service_name,
-                    raw,
-                    show_secrets,
-                ));
-            }
         };
-
-        if let Some(secrets) = resource_groups.get("Secrets") {
-            output.push(get_secrets_table(secrets, service_name, raw));
-        };
-
-        if resource_groups.contains_key("Persist") {
-            output.push(format!("This persist instance is linked to {service_name}\nShuttle Persist: {service_name}\n"));
-        };
-
-        output.join("\n")
     }
+
+    let resource_groups = resources.iter().fold(HashMap::new(), |mut acc, x| {
+        let title = match x.r#type {
+            Type::Database(_) => "Databases",
+            Type::Secrets => "Secrets",
+            Type::Persist => "Persist",
+            // ignore variants that don't represent Shuttle-hosted resources
+            Type::Container => return acc,
+        };
+
+        let elements: &mut Vec<_> = acc.entry(title).or_default();
+        elements.push(x);
+
+        acc
+    });
+
+    let mut output = Vec::new();
+
+    if let Some(databases) = resource_groups.get("Databases") {
+        output.push(get_databases_table(
+            databases,
+            service_name,
+            raw,
+            show_secrets,
+        ));
+    };
+
+    if let Some(secrets) = resource_groups.get("Secrets") {
+        output.push(get_secrets_table(secrets, service_name, raw));
+    };
+
+    if resource_groups.contains_key("Persist") {
+        output.push(format!(
+            "This persist instance is linked to {service_name}\nShuttle Persist: {service_name}\n"
+        ));
+    };
+
+    output.join("\n")
+}
+
+pub fn get_resource_tables_beta(
+    resources: &[ResourceResponseBeta],
+    service_name: &str,
+    raw: bool,
+    show_secrets: bool,
+) -> String {
+    if resources.is_empty() {
+        return "No resources are linked to this service\n".to_string();
+    }
+    let mut output = Vec::new();
+    output.push(get_secrets_table_beta(
+        &resources
+            .iter()
+            .filter(|r| matches!(r.r#type, ResourceTypeBeta::Secrets))
+            .map(Clone::clone)
+            .collect::<Vec<_>>(),
+        service_name,
+        raw,
+    ));
+    output.push(get_databases_table_beta(
+        &resources
+            .iter()
+            .filter(|r| {
+                matches!(
+                    r.r#type,
+                    ResourceTypeBeta::DatabaseSharedPostgres
+                        | ResourceTypeBeta::DatabaseAwsRdsMariaDB
+                        | ResourceTypeBeta::DatabaseAwsRdsMysql
+                        | ResourceTypeBeta::DatabaseAwsRdsPostgres
+                )
+            })
+            .map(Clone::clone)
+            .collect::<Vec<_>>(),
+        service_name,
+        raw,
+        show_secrets,
+    ));
+    output.join("\n")
 }
 
 fn get_databases_table(
@@ -149,11 +181,15 @@ fn get_databases_table(
 }
 
 fn get_databases_table_beta(
-    databases: &Vec<&Response>,
+    databases: &[ResourceResponseBeta],
     service_name: &str,
     raw: bool,
     show_secrets: bool,
 ) -> String {
+    if databases.is_empty() {
+        return String::new();
+    }
+
     let mut table = Table::new();
 
     if raw {
@@ -172,7 +208,7 @@ fn get_databases_table_beta(
     }
 
     for database in databases {
-        let connection_string = serde_json::from_value::<DatabaseInfoBeta>(database.data.clone())
+        let connection_string = serde_json::from_value::<DatabaseInfoBeta>(database.output.clone())
             .expect("resource data to be a valid database")
             .connection_string(show_secrets);
 
@@ -239,6 +275,38 @@ fn get_secrets_table(secrets: &[&Response], service_name: &str, raw: bool) -> St
     }
 
     let secrets = serde_json::from_value::<SecretStore>(secrets[0].data.clone()).unwrap();
+
+    for key in secrets.secrets.keys() {
+        table.add_row(vec![key]);
+    }
+
+    format!("These secrets can be accessed by {service_name}\n{table}\n")
+}
+
+fn get_secrets_table_beta(
+    secrets: &[ResourceResponseBeta],
+    service_name: &str,
+    raw: bool,
+) -> String {
+    let Some(secrets) = secrets.first() else {
+        return String::new();
+    };
+
+    let mut table = Table::new();
+
+    if raw {
+        table
+            .load_preset(NOTHING)
+            .set_content_arrangement(ContentArrangement::Disabled)
+            .set_header(vec![Cell::new("Key").set_alignment(CellAlignment::Left)]);
+    } else {
+        table
+            .load_preset(UTF8_BORDERS_ONLY)
+            .set_content_arrangement(ContentArrangement::Disabled)
+            .set_header(vec![Cell::new("Key")]);
+    }
+
+    let secrets = serde_json::from_value::<SecretStore>(secrets.output.clone()).unwrap();
 
     for key in secrets.secrets.keys() {
         table.add_row(vec![key]);

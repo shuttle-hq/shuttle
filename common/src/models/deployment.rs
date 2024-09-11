@@ -36,7 +36,7 @@ pub struct DeploymentResponseBeta {
     pub state: DeploymentStateBeta,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
-    /// URIs where this deployment can currently be reached (only relevant for Running)
+    /// URIs where this deployment can currently be reached (only relevant for Running state)
     pub uris: Vec<String>,
 }
 

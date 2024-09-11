@@ -3,6 +3,8 @@ use std::fmt::Formatter;
 use std::fmt::Write;
 use std::str::FromStr;
 
+use chrono::DateTime;
+use chrono::Utc;
 use comfy_table::{
     modifiers::UTF8_ROUND_CORNERS,
     presets::{NOTHING, UTF8_BORDERS_ONLY, UTF8_FULL},
@@ -30,11 +32,14 @@ pub struct Response {
 #[typeshare::typeshare]
 pub struct ProjectResponseBeta {
     pub id: String,
-    pub name: String,
-    /// State of the current deployment if one exists (something has been deployed).
-    pub deployment_state: Option<DeploymentStateBeta>,
     /// Project owner
     pub user_id: String,
+    pub name: String,
+    pub created_at: DateTime<Utc>,
+    /// State of the current deployment if one exists (something has been deployed).
+    pub deployment_state: Option<DeploymentStateBeta>,
+    /// URIs where running deployments can be reached
+    pub uris: Vec<String>,
 }
 
 impl ProjectResponseBeta {

@@ -200,11 +200,21 @@ export interface UploadArchiveResponseBeta {
 	archive_version_id: string;
 }
 
+export enum AccountTier {
+	Basic = "basic",
+	PendingPaymentPro = "pendingpaymentpro",
+	CancelledPro = "cancelledpro",
+	Pro = "pro",
+	Team = "team",
+	Admin = "admin",
+	Deployer = "deployer",
+}
+
 export interface UserResponse {
 	name: string;
 	id: string;
 	key: string;
-	account_tier: string;
+	account_tier: AccountTier;
 	subscriptions: Subscription[];
 	has_access_to_beta: boolean;
 }

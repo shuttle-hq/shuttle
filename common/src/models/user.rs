@@ -12,9 +12,30 @@ pub struct UserResponse {
     pub name: String,
     pub id: String,
     pub key: String,
-    pub account_tier: String,
+    pub account_tier: AccountTier,
     pub subscriptions: Vec<Subscription>,
     pub has_access_to_beta: bool,
+}
+
+#[derive(
+    Clone, Copy, Debug, Default, Deserialize, Serialize, Eq, PartialEq, Ord, PartialOrd, EnumString,
+)]
+#[serde(rename_all = "lowercase")]
+#[cfg_attr(feature = "display", derive(strum::Display))]
+#[cfg_attr(feature = "display", strum(serialize_all = "lowercase"))]
+#[cfg_attr(feature = "persist", derive(sqlx::Type))]
+#[cfg_attr(feature = "persist", sqlx(rename_all = "lowercase"))]
+#[typeshare::typeshare]
+pub enum AccountTier {
+    #[default]
+    Basic,
+    // A basic user that is pending a payment on the backend.
+    PendingPaymentPro,
+    CancelledPro,
+    Pro,
+    Team,
+    Admin,
+    Deployer,
 }
 
 #[derive(Deserialize, Serialize, Debug)]

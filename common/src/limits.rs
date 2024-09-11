@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    claims::AccountTier,
     constants::limits::{MAX_PROJECTS_DEFAULT, MAX_PROJECTS_EXTRA},
+    models::user::AccountTier,
 };
 
 #[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq)]

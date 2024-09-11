@@ -1,6 +1,6 @@
 use clap::Parser;
 use shuttle_backends::trace::setup_tracing;
-use shuttle_common::{claims::AccountTier, log::Backend};
+use shuttle_common::{log::Backend, models::user::AccountTier};
 use tracing::trace;
 
 use shuttle_auth::{copy_environment, init, pgpool_init, start, sync, Args, Commands};

@@ -10,7 +10,12 @@ use axum::{
 use chrono::{DateTime, Utc};
 use shuttle_backends::{client::PermissionsDal, headers::XShuttleAdminSecret};
 use shuttle_common::{
-    claims::AccountTier, limits::Limits, models, models::user::UserId, ApiKey, Secret,
+    limits::Limits,
+    models::{
+        self,
+        user::{AccountTier, UserId},
+    },
+    ApiKey, Secret,
 };
 use sqlx::{postgres::PgRow, query, FromRow, PgPool, Row};
 use stripe::{SubscriptionId, SubscriptionStatus};
@@ -468,7 +473,7 @@ impl From<User> for models::user::UserResponse {
             name: user.name.to_string(),
             id: user.id,
             key: user.key.expose().as_ref().to_owned(),
-            account_tier: user.account_tier.to_string(),
+            account_tier: user.account_tier,
             subscriptions: user.subscriptions.into_iter().map(Into::into).collect(),
             has_access_to_beta: user.has_access_to_beta,
         }

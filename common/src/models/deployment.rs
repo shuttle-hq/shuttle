@@ -32,7 +32,7 @@ pub struct Response {
 #[derive(Deserialize, Serialize)]
 #[typeshare::typeshare]
 pub struct DeploymentListResponseBeta {
-    deployments: Vec<DeploymentRequestBeta>,
+    pub deployments: Vec<DeploymentRequestBeta>,
 }
 
 #[derive(Deserialize, Serialize)]

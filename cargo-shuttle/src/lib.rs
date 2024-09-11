@@ -995,7 +995,10 @@ impl Shuttle {
         } else {
             let id = if args.latest {
                 // Find latest deployment (not always an active one)
-                let deployments = client.get_deployments_beta(proj_name, 1, 1).await?;
+                let deployments = client
+                    .get_deployments_beta(proj_name, 1, 1)
+                    .await?
+                    .deployments;
                 let Some(most_recent) = deployments.first() else {
                     println!("No deployments found");
                     return Ok(CommandOutcome::Ok);
@@ -1135,7 +1138,8 @@ impl Shuttle {
         let deployments_len = if self.beta {
             let mut deployments = client
                 .get_deployments_beta(proj_name, page as i32, limit as i32)
-                .await?;
+                .await?
+                .deployments;
             let page_hint = if deployments.len() == limit as usize {
                 deployments.pop();
                 true
@@ -1251,7 +1255,8 @@ impl Shuttle {
         let client = self.client.as_ref().unwrap();
         let resources = client
             .get_service_resources_beta(self.ctx.project_name())
-            .await?;
+            .await?
+            .resources;
         let table = get_resource_tables_beta(
             resources.as_slice(),
             self.ctx.project_name(),
@@ -1322,7 +1327,8 @@ impl Shuttle {
         let client = self.client.as_ref().unwrap();
         let certs = client
             .list_certificates_beta(self.ctx.project_name())
-            .await?;
+            .await?
+            .certificates;
 
         let table = get_certificates_table_beta(certs.as_ref(), table_args.raw);
         println!("{}", table);

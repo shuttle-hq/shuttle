@@ -1,7 +1,7 @@
 use std::{path::PathBuf, sync::Arc, time::Duration};
 
 use async_trait::async_trait;
-use shuttle_common::{claims::Claim, constants::EXECUTABLE_DIRNAME};
+use shuttle_common::{claims::Claim, constants::EXECUTABLE_DIRNAME, models::user::AccountTier};
 use shuttle_common_tests::{
     logger::{get_mocked_logger_client, MockedLogger},
     provisioner::get_mocked_provisioner_client,
@@ -349,8 +349,8 @@ async fn make_and_built(crate_name: &str) -> (Built, PathBuf) {
             claim: Some(Claim::new(
                 "test".into(),
                 Vec::new(),
-                shuttle_common::claims::AccountTier::Basic,
-                shuttle_common::claims::AccountTier::Basic,
+                AccountTier::Basic,
+                AccountTier::Basic,
             )),
             secrets: Default::default(),
         },

@@ -176,10 +176,11 @@ impl DatabaseInfo {
 
 /// Holds the data for building a database connection string on the Beta platform.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[typeshare::typeshare]
 pub struct DatabaseInfoBeta {
     engine: String,
     role_name: String,
-    role_password: Secret<String>,
+    role_password: String,
     database_name: String,
     port: String,
     hostname: String,
@@ -201,7 +202,7 @@ impl DatabaseInfoBeta {
         Self {
             engine,
             role_name,
-            role_password: Secret::new(role_password),
+            role_password,
             database_name,
             port,
             hostname,
@@ -216,9 +217,9 @@ impl DatabaseInfoBeta {
             self.engine,
             self.role_name,
             if show_password {
-                self.role_password.expose()
+                &self.role_password
             } else {
-                self.role_password.redacted()
+                "********"
             },
             self.hostname,
             self.port,

@@ -66,6 +66,16 @@ export interface DeleteCertificateRequest {
 	subject: string;
 }
 
+export type DeploymentRequestBeta = 
+	/** Build an image from the source code in an attached zip archive */
+	| { type: "BuildArchive", content: DeploymentRequestBuildArchiveBeta }
+	/** Use this image directly. Can be used to skip the build step. */
+	| { type: "Image", content: DeploymentRequestImageBeta };
+
+export interface DeploymentListResponseBeta {
+	deployments: DeploymentRequestBeta[];
+}
+
 export type BuildArgsBeta = 
 	| { type: "Rust", content: BuildArgsRustBeta }
 	| { type: "Unknown", content?: undefined };
@@ -218,10 +228,4 @@ export interface UserResponse {
 	subscriptions: Subscription[];
 	has_access_to_beta: boolean;
 }
-
-export type DeploymentRequestBeta = 
-	/** Build an image from the source code in an attached zip archive */
-	| { type: "BuildArchive", content: DeploymentRequestBuildArchiveBeta }
-	/** Use this image directly. Can be used to skip the build step. */
-	| { type: "Image", content: DeploymentRequestImageBeta };
 

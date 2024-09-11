@@ -14,7 +14,7 @@ pub struct UserResponse {
     pub key: String,
     pub account_tier: AccountTier,
     pub subscriptions: Vec<Subscription>,
-    pub has_access_to_beta: bool,
+    pub has_access_to_beta: Option<bool>,
 }
 
 #[derive(

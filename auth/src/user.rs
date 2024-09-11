@@ -475,7 +475,7 @@ impl From<User> for models::user::UserResponse {
             key: user.key.expose().as_ref().to_owned(),
             account_tier: user.account_tier,
             subscriptions: user.subscriptions.into_iter().map(Into::into).collect(),
-            has_access_to_beta: user.has_access_to_beta,
+            has_access_to_beta: Some(user.has_access_to_beta),
         }
     }
 }

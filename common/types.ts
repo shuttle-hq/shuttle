@@ -6,6 +6,11 @@ export interface AddCertificateRequest {
 	subject: string;
 }
 
+export interface ApiError {
+	message: string;
+	status_code: number;
+}
+
 export interface BuildArgsRustBeta {
 	/** Version of shuttle-runtime used by this crate */
 	shuttle_runtime_version?: string;

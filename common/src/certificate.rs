@@ -22,3 +22,9 @@ pub struct CertificateResponse {
     pub serial_hex: String,
     pub not_after: String,
 }
+
+#[derive(Deserialize, Serialize, Debug)]
+#[typeshare::typeshare]
+pub struct CertificateListResponse {
+    pub certificates: Vec<CertificateResponse>,
+}

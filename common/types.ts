@@ -47,6 +47,10 @@ export interface CertificateResponse {
 	not_after: string;
 }
 
+export interface CertificateListResponse {
+	certificates: CertificateResponse[];
+}
+
 /** Holds the data for building a database connection string on the Beta platform. */
 export interface DatabaseInfoBeta {
 	engine: string;

@@ -278,11 +278,7 @@ pub fn get_projects_table_beta(projects: &[ProjectResponseBeta], raw: bool) -> S
     table
         .load_preset(if raw { NOTHING } else { UTF8_BORDERS_ONLY })
         .set_content_arrangement(ContentArrangement::Disabled)
-        .set_header(vec![
-            Cell::new("Project Id"),
-            Cell::new("Project Name"),
-            Cell::new("Deployment Status"),
-        ]);
+        .set_header(vec!["Project ID", "Project Name", "Deployment Status"]);
 
     for project in projects {
         let state = project

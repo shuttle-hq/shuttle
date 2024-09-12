@@ -1,4 +1,4 @@
-use chrono::{DateTime, Local, Utc};
+use chrono::{DateTime, Local, SecondsFormat, Utc};
 use comfy_table::{
     modifiers::UTF8_ROUND_CORNERS,
     presets::{NOTHING, UTF8_BORDERS_ONLY, UTF8_FULL},
@@ -106,12 +106,7 @@ pub fn deployments_table_beta(deployments: &[DeploymentResponseBeta], raw: bool)
     table
         .load_preset(if raw { NOTHING } else { UTF8_BORDERS_ONLY })
         .set_content_arrangement(ContentArrangement::Disabled)
-        .set_header(vec![
-            Cell::new("Deployment ID"),
-            Cell::new("Status"),
-            Cell::new("Date"),
-            Cell::new("Git"),
-        ]);
+        .set_header(vec!["Deployment ID", "Status", "Date", "Git revision"]);
 
     for deploy in deployments.iter() {
         let datetime: DateTime<Local> = DateTime::from(deploy.created_at);
@@ -120,7 +115,7 @@ pub fn deployments_table_beta(deployments: &[DeploymentResponseBeta], raw: bool)
             Cell::new(&deploy.state)
                 // Unwrap is safe because Color::from_str returns the color white if str is not a Color.
                 .fg(Color::from_str(deploy.state.get_color()).unwrap()),
-            Cell::new(datetime.to_rfc3339_opts(chrono::SecondsFormat::Secs, false)),
+            Cell::new(datetime.to_rfc3339_opts(SecondsFormat::Secs, false)),
             Cell::new(
                 deploy
                     .build_meta
@@ -369,11 +364,11 @@ pub struct BuildMetaBeta {
 
 impl std::fmt::Display for BuildMetaBeta {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if let Some(ref c) = self.git_commit_id {
-            write!(f, "{c} ")?;
-        }
         if let Some(true) = self.git_dirty {
             write!(f, "(dirty) ")?;
+        }
+        if let Some(ref c) = self.git_commit_id {
+            write!(f, "[{}] ", c.chars().take(8).collect::<String>())?;
         }
         if let Some(ref m) = self.git_commit_msg {
             write!(f, "{m}")?;

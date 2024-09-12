@@ -191,21 +191,10 @@ fn get_databases_table_beta(
     }
 
     let mut table = Table::new();
-
-    if raw {
-        table
-            .load_preset(NOTHING)
-            .set_content_arrangement(ContentArrangement::Disabled)
-            .set_header(vec![
-                Cell::new("Type").set_alignment(CellAlignment::Left),
-                Cell::new("Connection string").set_alignment(CellAlignment::Left),
-            ]);
-    } else {
-        table
-            .load_preset(UTF8_BORDERS_ONLY)
-            .set_content_arrangement(ContentArrangement::Disabled)
-            .set_header(vec![Cell::new("Type"), Cell::new("Connection string")]);
-    }
+    table
+        .load_preset(if raw { NOTHING } else { UTF8_BORDERS_ONLY })
+        .set_content_arrangement(ContentArrangement::Disabled)
+        .set_header(vec!["Type", "Connection string"]);
 
     for database in databases {
         let connection_string = serde_json::from_value::<DatabaseInfoBeta>(database.output.clone())
@@ -226,32 +215,16 @@ fn get_databases_table_beta(
 
 pub fn get_certificates_table_beta(certs: &[CertificateResponse], raw: bool) -> String {
     let mut table = Table::new();
-
-    if raw {
-        table
-            .load_preset(NOTHING)
-            .set_content_arrangement(ContentArrangement::Disabled)
-            .set_header(vec![
-                Cell::new("ID").set_alignment(CellAlignment::Left),
-                Cell::new("Subject").set_alignment(CellAlignment::Left),
-                Cell::new("Expires").set_alignment(CellAlignment::Left),
-            ]);
-    } else {
-        table
-            .load_preset(UTF8_BORDERS_ONLY)
-            .set_content_arrangement(ContentArrangement::Disabled)
-            .set_header(vec![
-                Cell::new("ID"),
-                Cell::new("Subject"),
-                Cell::new("Expires"),
-            ]);
-    }
+    table
+        .load_preset(if raw { NOTHING } else { UTF8_BORDERS_ONLY })
+        .set_content_arrangement(ContentArrangement::Disabled)
+        .set_header(vec!["Certificate ID", "Subject", "Expires"]);
 
     for cert in certs {
         table.add_row(vec![
-            cert.id.clone(),
-            cert.subject.clone(),
-            cert.not_after.clone(),
+            Cell::new(&cert.id).add_attribute(Attribute::Bold),
+            Cell::new(&cert.subject),
+            Cell::new(&cert.not_after),
         ]);
     }
 
@@ -293,18 +266,10 @@ fn get_secrets_table_beta(
     };
 
     let mut table = Table::new();
-
-    if raw {
-        table
-            .load_preset(NOTHING)
-            .set_content_arrangement(ContentArrangement::Disabled)
-            .set_header(vec![Cell::new("Key").set_alignment(CellAlignment::Left)]);
-    } else {
-        table
-            .load_preset(UTF8_BORDERS_ONLY)
-            .set_content_arrangement(ContentArrangement::Disabled)
-            .set_header(vec![Cell::new("Key")]);
-    }
+    table
+        .load_preset(if raw { NOTHING } else { UTF8_BORDERS_ONLY })
+        .set_content_arrangement(ContentArrangement::Disabled)
+        .set_header(vec!["Key"]);
 
     let secrets = serde_json::from_value::<SecretStore>(secrets.output.clone()).unwrap();
 

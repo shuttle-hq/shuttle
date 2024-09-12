@@ -175,7 +175,7 @@ impl DatabaseInfo {
 }
 
 /// Holds the data for building a database connection string on the Beta platform.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 #[typeshare::typeshare]
 pub struct DatabaseInfoBeta {
     engine: String,
@@ -237,6 +237,17 @@ impl DatabaseInfoBeta {
 
     pub fn instance_name(&self) -> Option<String> {
         self.instance_name.clone()
+    }
+}
+
+// Don't leak password in Debug
+impl std::fmt::Debug for DatabaseInfoBeta {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "DatabaseInfo {{ \"{}\" }}",
+            self.connection_string(false)
+        )
     }
 }
 

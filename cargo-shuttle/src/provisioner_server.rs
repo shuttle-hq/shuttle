@@ -508,6 +508,7 @@ pub mod beta {
     };
     use shuttle_common::{
         database,
+        models::resource::get_resource_tables_beta,
         resource::{
             self, ProvisionResourceRequestBeta, ResourceResponseBeta, ResourceState,
             ResourceTypeBeta,
@@ -577,13 +578,16 @@ pub mod beta {
     ) -> Result<Vec<u8>> {
         Ok(match (method, uri) {
             (Method::GET, "/projects/proj_LOCAL/resources/secrets") => {
-                serde_json::to_vec(&ResourceResponseBeta {
+                let response = ResourceResponseBeta {
                     r#type: ResourceTypeBeta::Secrets,
                     state: ResourceState::Ready,
                     config: serde_json::Value::Null,
                     output: serde_json::to_value(&state.secrets).unwrap(),
-                })
-                .unwrap()
+                };
+                let table =
+                    get_resource_tables_beta(&[response.clone()], "local service", false, true);
+                println!("{table}");
+                serde_json::to_vec(&response).unwrap()
             }
             (Method::POST, "/projects/proj_LOCAL/resources") => {
                 let prov = LocalProvisioner::new().unwrap();
@@ -592,6 +596,8 @@ pub mod beta {
 
                 let response = match shuttle_resource.r#type {
                     ResourceTypeBeta::DatabaseSharedPostgres => {
+                        // TODO: Let client ignore request if local_uri is given.
+                        //       Always set a DatabaseInfoBeta as output here.
                         let config: DbInput =
                             serde_json::from_value(shuttle_resource.config.clone())
                                 .context("deserializing resource config")?;
@@ -637,6 +643,10 @@ pub mod beta {
                     },
                     other => unimplemented!("Resource {other} not supported yet"),
                 };
+
+                let table =
+                    get_resource_tables_beta(&[response.clone()], "local service", false, true);
+                println!("{table}");
 
                 serde_json::to_vec(&response).unwrap()
             }

@@ -19,7 +19,7 @@ impl ToJson for reqwest::Response {
             .unwrap_or_else(|_| format!("[{} bytes]", bytes.len()));
 
         #[cfg(feature = "tracing")]
-        tracing::trace!(response = string, "Parsing response to JSON");
+        tracing::trace!(response = %string, "Parsing response to JSON");
 
         if matches!(
             status_code,

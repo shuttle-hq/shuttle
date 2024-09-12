@@ -16,12 +16,12 @@ use opentelemetry::global;
 use opentelemetry_http::HeaderInjector;
 use pin_project::pin_project;
 use serde::{Deserialize, Serialize};
-use strum::{EnumMessage, EnumString};
+use strum::EnumMessage;
 use tower::{Layer, Service};
 use tracing::{error, trace, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
-use crate::limits::Limits;
+use crate::{limits::Limits, models::user::AccountTier};
 
 /// Minutes before a claim expires
 ///
@@ -163,26 +163,6 @@ impl ScopeBuilder {
     pub fn build(self) -> Vec<Scope> {
         self.0
     }
-}
-
-#[derive(
-    Clone, Copy, Debug, Default, Deserialize, Serialize, Eq, PartialEq, Ord, PartialOrd, EnumString,
-)]
-#[serde(rename_all = "lowercase")]
-#[cfg_attr(feature = "display", derive(strum::Display))]
-#[cfg_attr(feature = "display", strum(serialize_all = "lowercase"))]
-#[cfg_attr(feature = "persist", derive(sqlx::Type))]
-#[cfg_attr(feature = "persist", sqlx(rename_all = "lowercase"))]
-pub enum AccountTier {
-    #[default]
-    Basic,
-    // A basic user that is pending a payment on the backend.
-    PendingPaymentPro,
-    CancelledPro,
-    Pro,
-    Team,
-    Admin,
-    Deployer,
 }
 
 impl AccountTier {

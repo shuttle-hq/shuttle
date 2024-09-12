@@ -6,8 +6,8 @@ use serde_json::{json, Value};
 use shuttle_auth::{pgpool_init, ApiBuilder};
 use shuttle_backends::{headers::X_SHUTTLE_ADMIN_SECRET, test_utils::gateway::PermissionsMock};
 use shuttle_common::{
-    claims::{AccountTier, Claim},
-    models::user,
+    claims::Claim,
+    models::user::{self, AccountTier},
 };
 use shuttle_common_tests::postgres::DockerInstance;
 use sqlx::query;

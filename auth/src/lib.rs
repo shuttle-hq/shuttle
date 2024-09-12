@@ -11,7 +11,7 @@ use shuttle_backends::client::{
     permit::{self, Error, ResponseContent},
     PermissionsDal,
 };
-use shuttle_common::{claims::AccountTier, ApiKey};
+use shuttle_common::{models::user::AccountTier, ApiKey};
 use sqlx::{query, PgPool};
 use tracing::info;
 pub use user::User;

@@ -112,6 +112,12 @@ pub struct ResourceResponseBeta {
     pub output: Value,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+#[typeshare::typeshare]
+pub struct ResourceListResponseBeta {
+    pub resources: Vec<ResourceResponseBeta>,
+}
+
 /// Common type to hold all the information we need for a generic resource
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 pub struct Response {

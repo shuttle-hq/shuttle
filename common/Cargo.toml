@@ -51,6 +51,7 @@ claims = [
     "headers",
     "http-body",
     "jsonwebtoken",
+    "models",
     "opentelemetry",
     "opentelemetry-http",
     "pin-project",

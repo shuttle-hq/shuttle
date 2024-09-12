@@ -11,7 +11,7 @@ mod needs_docker {
         permit::{Client, Error, Owner, ResponseContent, Team},
         PermissionsDal,
     };
-    use shuttle_common::{claims::AccountTier, models::team};
+    use shuttle_common::models::{team, user::AccountTier};
     use shuttle_common_tests::permit_pdp::DockerInstance;
     use test_context::{test_context, AsyncTestContext};
     use uuid::Uuid;

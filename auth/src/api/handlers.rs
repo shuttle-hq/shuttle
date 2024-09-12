@@ -8,8 +8,8 @@ use axum::{
 };
 use http::StatusCode;
 use shuttle_common::{
-    claims::{AccountTier, Claim},
-    models::user::{self, SubscriptionRequest, UserId},
+    claims::Claim,
+    models::user::{self, AccountTier, SubscriptionRequest, UserId},
 };
 use tracing::{field, instrument, Span};
 

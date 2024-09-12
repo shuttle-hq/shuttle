@@ -3,6 +3,7 @@ use std::fmt::Formatter;
 use std::fmt::Write;
 use std::str::FromStr;
 
+use chrono::{DateTime, SecondsFormat, Utc};
 use comfy_table::{
     modifiers::UTF8_ROUND_CORNERS,
     presets::{NOTHING, UTF8_BORDERS_ONLY, UTF8_FULL},
@@ -30,29 +31,42 @@ pub struct Response {
 #[typeshare::typeshare]
 pub struct ProjectResponseBeta {
     pub id: String,
-    pub name: String,
-    /// State of the current deployment if one exists (something has been deployed).
-    pub deployment_state: Option<DeploymentStateBeta>,
     /// Project owner
     pub user_id: String,
+    pub name: String,
+    pub created_at: DateTime<Utc>,
+    /// State of the current deployment if one exists (something has been deployed).
+    pub deployment_state: Option<DeploymentStateBeta>,
+    /// URIs where running deployments can be reached
+    pub uris: Vec<String>,
 }
 
 impl ProjectResponseBeta {
     pub fn to_string_colored(&self) -> String {
-        // TODO: make this look nicer
         let mut s = String::new();
-        writeln!(&mut s, "Project Name: {}", self.name.as_str().bold()).unwrap();
-        writeln!(&mut s, "Project Id: {}", self.id.as_str().bold()).unwrap();
+        writeln!(&mut s, "{}", "Project info:".bold()).unwrap();
+        writeln!(&mut s, "  Project ID: {}", self.id).unwrap();
+        writeln!(&mut s, "  Project Name: {}", self.name).unwrap();
         writeln!(
             &mut s,
-            "Deployment state: {}",
+            "  Deployment Status: {}",
             self.deployment_state
                 .as_ref()
                 .map(|s| s.to_string_colored())
                 .unwrap_or_else(|| "N/A".dark_grey().to_string())
         )
         .unwrap();
-        writeln!(&mut s, "Owner: {}", self.user_id).unwrap();
+        writeln!(&mut s, "  Owner: {}", self.user_id).unwrap();
+        writeln!(
+            &mut s,
+            "  Created: {}",
+            self.created_at.to_rfc3339_opts(SecondsFormat::Secs, true)
+        )
+        .unwrap();
+        writeln!(&mut s, "  URIs:").unwrap();
+        for uri in &self.uris {
+            writeln!(&mut s, "    - {uri}").unwrap();
+        }
 
         s
     }
@@ -273,11 +287,7 @@ pub fn get_projects_table_beta(projects: &[ProjectResponseBeta], raw: bool) -> S
     table
         .load_preset(if raw { NOTHING } else { UTF8_BORDERS_ONLY })
         .set_content_arrangement(ContentArrangement::Disabled)
-        .set_header(vec![
-            Cell::new("Project Id"),
-            Cell::new("Project Name"),
-            Cell::new("Deployment Status"),
-        ]);
+        .set_header(vec!["Project ID", "Project Name", "Deployment Status"]);
 
     for project in projects {
         let state = project

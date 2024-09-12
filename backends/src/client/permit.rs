@@ -34,7 +34,7 @@ use permit_pdp_client_rs::{
 };
 use serde::{Deserialize, Serialize};
 use shuttle_common::{
-    claims::AccountTier,
+    models::user::AccountTier,
     models::{error::ApiError, project, team},
 };
 use tracing::{error, instrument};

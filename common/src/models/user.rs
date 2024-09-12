@@ -1,4 +1,7 @@
+use std::fmt::Write;
+
 use chrono::{DateTime, Utc};
+use crossterm::style::Stylize;
 use serde::{Deserialize, Serialize};
 use strum::{Display, EnumString};
 
@@ -12,9 +15,51 @@ pub struct UserResponse {
     pub name: String,
     pub id: String,
     pub key: String,
-    pub account_tier: String,
+    pub account_tier: AccountTier,
     pub subscriptions: Vec<Subscription>,
-    pub has_access_to_beta: bool,
+    pub has_access_to_beta: Option<bool>,
+}
+
+impl UserResponse {
+    pub fn to_string_colored(&self) -> String {
+        let mut s = String::new();
+        writeln!(&mut s, "{}", "Account info:".bold()).unwrap();
+        writeln!(&mut s, "  User Id: {}", self.id).unwrap();
+        writeln!(&mut s, "  Username: {}", self.name).unwrap();
+        writeln!(&mut s, "  Account tier: {}", self.account_tier).unwrap();
+        writeln!(&mut s, "  Subscriptions:").unwrap();
+        for sub in &self.subscriptions {
+            writeln!(
+                &mut s,
+                "    - {}: Type: {}, Quantity: {}, Created: {}, Updated: {}",
+                sub.id, sub.r#type, sub.quantity, sub.created_at, sub.updated_at,
+            )
+            .unwrap();
+        }
+
+        s
+    }
+}
+
+#[derive(
+    Clone, Copy, Debug, Default, Deserialize, Serialize, Eq, PartialEq, Ord, PartialOrd, EnumString,
+)]
+#[serde(rename_all = "lowercase")]
+#[cfg_attr(feature = "display", derive(strum::Display))]
+#[cfg_attr(feature = "display", strum(serialize_all = "lowercase"))]
+#[cfg_attr(feature = "persist", derive(sqlx::Type))]
+#[cfg_attr(feature = "persist", sqlx(rename_all = "lowercase"))]
+#[typeshare::typeshare]
+pub enum AccountTier {
+    #[default]
+    Basic,
+    // A basic user that is pending a payment on the backend.
+    PendingPaymentPro,
+    CancelledPro,
+    Pro,
+    Team,
+    Admin,
+    Deployer,
 }
 
 #[derive(Deserialize, Serialize, Debug)]

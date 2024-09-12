@@ -12,7 +12,7 @@ mod needs_docker {
     use hyper::http::{header::AUTHORIZATION, Request, StatusCode};
     use pretty_assertions::assert_eq;
     use serde_json::{self, Value};
-    use shuttle_common::models::user;
+    use shuttle_common::models::user::{self, AccountTier};
 
     #[tokio::test]
     async fn post_user() {
@@ -51,7 +51,7 @@ mod needs_docker {
         let user_id1 = user.id.clone();
 
         assert_eq!(user.name, "test-user");
-        assert_eq!(user.account_tier, "basic");
+        assert_eq!(user.account_tier, AccountTier::Basic);
         assert!(user.id.starts_with("user_"));
         assert!(user.key.is_ascii());
 
@@ -65,7 +65,7 @@ mod needs_docker {
         let user_id2 = user.id.clone();
 
         assert_eq!(user.name, "pro-user");
-        assert_eq!(user.account_tier, "pro");
+        assert_eq!(user.account_tier, AccountTier::Pro);
         assert!(user.id.starts_with("user_"));
         assert!(user.key.is_ascii());
 
@@ -165,7 +165,7 @@ mod needs_docker {
 
         assert_eq!(user.name, pro_user.name);
         assert_eq!(user.key, pro_user.key);
-        assert_eq!(pro_user.account_tier, "pro");
+        assert_eq!(pro_user.account_tier, AccountTier::Pro);
 
         let mocked_subscription_obj: Value =
             serde_json::from_str(MOCKED_ACTIVE_SUBSCRIPTION).unwrap();
@@ -217,7 +217,7 @@ mod needs_docker {
         let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
         let actual_user: user::UserResponse = serde_json::from_slice(&body).unwrap();
 
-        assert_eq!(actual_user.account_tier, "pendingpaymentpro");
+        assert_eq!(actual_user.account_tier, AccountTier::PendingPaymentPro);
 
         assert_eq!(
             *app.permissions.calls.lock().await,
@@ -366,7 +366,7 @@ mod needs_docker {
 
         let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
         let user: user::UserResponse = serde_json::from_slice(&body).unwrap();
-        assert_eq!(user.account_tier, "cancelledpro");
+        assert_eq!(user.account_tier, AccountTier::CancelledPro);
 
         // When called again at some later time, the subscription returned from stripe should be
         // cancelled.
@@ -382,7 +382,7 @@ mod needs_docker {
         let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
         let user: user::UserResponse = serde_json::from_slice(&body).unwrap();
 
-        assert_eq!(user.account_tier, "basic");
+        assert_eq!(user.account_tier, AccountTier::Basic);
 
         assert_eq!(
             *app.permissions.calls.lock().await,

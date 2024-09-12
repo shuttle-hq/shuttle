@@ -230,7 +230,7 @@ export interface UserResponse {
 	key: string;
 	account_tier: AccountTier;
 	subscriptions: Subscription[];
-	has_access_to_beta: boolean;
+	has_access_to_beta?: boolean;
 }
 
 export type DeploymentRequestBeta = 

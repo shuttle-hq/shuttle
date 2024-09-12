@@ -212,7 +212,7 @@ impl ShuttleApiClient {
         &self,
         project: &str,
         resource_type: &resource::Type,
-    ) -> Result<()> {
+    ) -> Result<String> {
         let r#type = resource_type.to_string();
         let r#type = utf8_percent_encode(&r#type, percent_encoding::NON_ALPHANUMERIC).to_owned();
 
@@ -247,7 +247,7 @@ impl ShuttleApiClient {
         )
         .await
     }
-    pub async fn delete_certificate_beta(&self, project: &str, subject: String) -> Result<()> {
+    pub async fn delete_certificate_beta(&self, project: &str, subject: String) -> Result<String> {
         self.delete_json_with_body(
             format!("/projects/{project}/certificates"),
             DeleteCertificateRequest { subject },

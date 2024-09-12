@@ -1300,16 +1300,17 @@ impl Shuttle {
         }
 
         if self.beta {
-            client
+            let msg = client
                 .delete_service_resource_beta(self.ctx.project_name(), resource_type)
                 .await?;
+            println!("{msg}");
         } else {
             client
                 .delete_service_resource(self.ctx.project_name(), resource_type)
                 .await?;
+            println!("Deleted resource {resource_type}");
         }
 
-        println!("Deleted resource {resource_type}");
         println!(
             "{}",
             formatdoc! {"
@@ -1370,11 +1371,10 @@ impl Shuttle {
             }
         }
 
-        client
+        let msg = client
             .delete_certificate_beta(self.ctx.project_name(), domain.clone())
             .await?;
-
-        println!("Deleted certificate for {domain}");
+        println!("{msg}");
 
         Ok(CommandOutcome::Ok)
     }

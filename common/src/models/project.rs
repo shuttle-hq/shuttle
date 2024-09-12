@@ -3,8 +3,7 @@ use std::fmt::Formatter;
 use std::fmt::Write;
 use std::str::FromStr;
 
-use chrono::DateTime;
-use chrono::Utc;
+use chrono::{DateTime, SecondsFormat, Utc};
 use comfy_table::{
     modifiers::UTF8_ROUND_CORNERS,
     presets::{NOTHING, UTF8_BORDERS_ONLY, UTF8_FULL},
@@ -44,20 +43,30 @@ pub struct ProjectResponseBeta {
 
 impl ProjectResponseBeta {
     pub fn to_string_colored(&self) -> String {
-        // TODO: make this look nicer
         let mut s = String::new();
-        writeln!(&mut s, "Project Name: {}", self.name.as_str().bold()).unwrap();
-        writeln!(&mut s, "Project Id: {}", self.id.as_str().bold()).unwrap();
+        writeln!(&mut s, "{}", "Project info:".bold()).unwrap();
+        writeln!(&mut s, "  Project ID: {}", self.id).unwrap();
+        writeln!(&mut s, "  Project Name: {}", self.name).unwrap();
         writeln!(
             &mut s,
-            "Deployment state: {}",
+            "  Deployment Status: {}",
             self.deployment_state
                 .as_ref()
                 .map(|s| s.to_string_colored())
                 .unwrap_or_else(|| "N/A".dark_grey().to_string())
         )
         .unwrap();
-        writeln!(&mut s, "Owner: {}", self.user_id).unwrap();
+        writeln!(&mut s, "  Owner: {}", self.user_id).unwrap();
+        writeln!(
+            &mut s,
+            "  Created: {}",
+            self.created_at.to_rfc3339_opts(SecondsFormat::Secs, true)
+        )
+        .unwrap();
+        writeln!(&mut s, "  URIs:").unwrap();
+        for uri in &self.uris {
+            writeln!(&mut s, "    - {uri}").unwrap();
+        }
 
         s
     }

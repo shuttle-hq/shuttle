@@ -1,4 +1,7 @@
+use std::fmt::Write;
+
 use chrono::{DateTime, Utc};
+use crossterm::style::Stylize;
 use serde::{Deserialize, Serialize};
 use strum::{Display, EnumString};
 
@@ -15,6 +18,27 @@ pub struct UserResponse {
     pub account_tier: AccountTier,
     pub subscriptions: Vec<Subscription>,
     pub has_access_to_beta: Option<bool>,
+}
+
+impl UserResponse {
+    pub fn to_string_colored(&self) -> String {
+        let mut s = String::new();
+        writeln!(&mut s, "{}", "Account info:".bold()).unwrap();
+        writeln!(&mut s, "  User Id: {}", self.id).unwrap();
+        writeln!(&mut s, "  Username: {}", self.name).unwrap();
+        writeln!(&mut s, "  Account tier: {}", self.account_tier).unwrap();
+        writeln!(&mut s, "  Subscriptions:").unwrap();
+        for sub in &self.subscriptions {
+            writeln!(
+                &mut s,
+                "    - {}: Type: {}, Quantity: {}, Created: {}, Updated: {}",
+                sub.id, sub.r#type, sub.quantity, sub.created_at, sub.updated_at,
+            )
+            .unwrap();
+        }
+
+        s
+    }
 }
 
 #[derive(

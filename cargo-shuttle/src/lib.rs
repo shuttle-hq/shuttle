@@ -760,17 +760,7 @@ impl Shuttle {
     async fn account(&self) -> Result<CommandOutcome> {
         let client = self.client.as_ref().unwrap();
         let user = client.get_current_user_beta().await?;
-        println!("{}", "Account info:".bold());
-        println!("  User Id: {}", user.id);
-        println!("  Username: {}", user.name);
-        println!("  Account tier: {}", user.account_tier);
-        println!("  Subscriptions:");
-        for sub in user.subscriptions {
-            println!(
-                "    - {}: Type: {}, Quantity: {}, Created: {}, Updated: {}",
-                sub.id, sub.r#type, sub.quantity, sub.created_at, sub.updated_at,
-            );
-        }
+        print!("{}", user.to_string_colored());
 
         Ok(CommandOutcome::Ok)
     }
@@ -2789,7 +2779,7 @@ impl Shuttle {
     async fn project_status_beta(&self) -> Result<CommandOutcome> {
         let client = self.client.as_ref().unwrap();
         let project = client.get_project_beta(self.ctx.project_name()).await?;
-        println!("{}", project.to_string_colored());
+        print!("{}", project.to_string_colored());
 
         Ok(CommandOutcome::Ok)
     }

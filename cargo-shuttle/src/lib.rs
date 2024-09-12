@@ -2993,10 +2993,11 @@ impl Shuttle {
             let mut zip = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
             for (path, name) in archive_files {
                 debug!("Packing {path:?}");
-                zip.start_file(
-                    name.to_str().expect("valid filename"),
-                    FileOptions::default(),
-                )?;
+
+                // windows things
+                let name = name.to_str().expect("valid filename").replace('\\', "/");
+                zip.start_file(name, FileOptions::default())?;
+
                 let mut b = Vec::new();
                 File::open(path)?.read_to_end(&mut b)?;
                 zip.write_all(&b)?;

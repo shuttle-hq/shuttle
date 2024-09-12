@@ -30,7 +30,7 @@ struct BetaEnvArgs {
     ip: IpAddr,
     /// Port to open service on
     port: u16,
-    /// Port to open health check on
+    /// Optional port to open health check on
     healthz_port: Option<u16>,
     /// Where to reach the required Shuttle API endpoints (mainly for provisioning)
     api_url: String,
@@ -86,7 +86,8 @@ pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + S
 
     // start a health check server if requested
     if let Some(healthz_port) = healthz_port {
-        tokio::task::spawn(async move {
+        tokio::spawn(async move {
+            // light hyper server
             let make_service = make_service_fn(|_conn| async {
                 Ok::<_, Infallible>(service_fn(|_req| async move {
                     Result::<Response<Body>, hyper::Error>::Ok(Response::new(Body::empty()))

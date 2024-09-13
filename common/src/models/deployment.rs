@@ -368,7 +368,7 @@ impl std::fmt::Display for BuildMetaBeta {
             write!(f, "(dirty) ")?;
         }
         if let Some(ref c) = self.git_commit_id {
-            write!(f, "[{}] ", c.chars().take(8).collect::<String>())?;
+            write!(f, "[{}] ", c.chars().take(7).collect::<String>())?;
         }
         if let Some(ref m) = self.git_commit_msg {
             write!(f, "{m}")?;

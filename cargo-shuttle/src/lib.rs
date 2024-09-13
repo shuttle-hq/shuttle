@@ -2320,12 +2320,12 @@ impl Shuttle {
             }
         }
 
+        eprintln!("Packing files...");
         let archive = self.make_archive(args.secret_args.secrets.clone(), self.beta)?;
 
         if let Some(path) = args.output_archive {
-            eprintln!("Writing archive to {}...", path.display());
+            eprintln!("Writing archive to {}", path.display());
             std::fs::write(path, archive).context("writing archive")?;
-            eprintln!("Done");
 
             return Ok(CommandOutcome::Ok);
         }
@@ -2342,6 +2342,9 @@ impl Shuttle {
 
         // End early for beta
         if self.beta {
+            // TODO: upload secrets separately
+
+            eprintln!("Uploading code...");
             let arch = client.upload_archive_beta(project_name, archive).await?;
             deployment_req_buildarch_beta.archive_version_id = arch.archive_version_id;
             deployment_req_buildarch_beta.build_meta = Some(BuildMetaBeta {
@@ -2350,6 +2353,8 @@ impl Shuttle {
                 git_branch: deployment_req.git_branch,
                 git_dirty: deployment_req.git_dirty,
             });
+
+            eprintln!("Creating deployment...");
             let deployment = client
                 .deploy_beta(
                     project_name,

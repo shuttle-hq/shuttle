@@ -638,6 +638,8 @@ pub mod beta {
                     other => unimplemented!("Resource {other} not supported yet"),
                 };
 
+                // TODO: print table(?) about resource being available
+
                 serde_json::to_vec(&response).unwrap()
             }
             _ => bail!("Received unsupported resource request"),

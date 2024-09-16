@@ -34,20 +34,22 @@ pub async fn cargo_shuttle_run(working_directory: &str, external: bool) -> Strin
         secret_args: Default::default(),
     };
 
-    let runner = Shuttle::new().unwrap().run(
-        ShuttleArgs {
-            api_url: Some("http://shuttle.invalid:80".to_string()),
-            project_args: ProjectArgs {
-                working_directory: working_directory.clone(),
-                name: None,
+    let runner = Shuttle::new(cargo_shuttle::Binary::CargoShuttle)
+        .unwrap()
+        .run(
+            ShuttleArgs {
+                api_url: Some("http://shuttle.invalid:80".to_string()),
+                project_args: ProjectArgs {
+                    working_directory: working_directory.clone(),
+                    name: None,
+                },
+                offline: false,
+                debug: false,
+                beta: false,
+                cmd: Command::Run(run_args),
             },
-            offline: false,
-            debug: false,
-            beta: false,
-            cmd: Command::Run(run_args),
-        },
-        false,
-    );
+            false,
+        );
 
     tokio::spawn({
         let working_directory = working_directory.clone();

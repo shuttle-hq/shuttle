@@ -35,10 +35,10 @@ use reqwest::header::HeaderMap;
 use shuttle_api_client::ShuttleApiClient;
 use shuttle_common::{
     constants::{
-        headers::X_CARGO_SHUTTLE_VERSION, API_URL_DEFAULT, DEFAULT_IDLE_MINUTES, EXAMPLES_REPO,
-        EXECUTABLE_DIRNAME, RESOURCE_SCHEMA_VERSION, RUNTIME_NAME, SHUTTLE_GH_ISSUE_URL,
-        SHUTTLE_IDLE_DOCS_URL, SHUTTLE_INSTALL_DOCS_URL, SHUTTLE_LOGIN_URL, STORAGE_DIRNAME,
-        TEMPLATES_SCHEMA_VERSION,
+        headers::X_CARGO_SHUTTLE_VERSION, API_URL_BETA, API_URL_DEFAULT, DEFAULT_IDLE_MINUTES,
+        EXAMPLES_REPO, EXECUTABLE_DIRNAME, RESOURCE_SCHEMA_VERSION, RUNTIME_NAME,
+        SHUTTLE_GH_ISSUE_URL, SHUTTLE_IDLE_DOCS_URL, SHUTTLE_INSTALL_DOCS_URL, SHUTTLE_LOGIN_URL,
+        STORAGE_DIRNAME, TEMPLATES_SCHEMA_VERSION,
     },
     deployment::{DeploymentStateBeta, DEPLOYER_END_MESSAGES_BAD, DEPLOYER_END_MESSAGES_GOOD},
     log::LogsRange,
@@ -73,6 +73,7 @@ use tokio::process::Child;
 use tokio::time::{sleep, Duration};
 use tonic::{Request, Status};
 use tracing::{debug, error, info, trace, warn};
+use tracing_subscriber::{fmt, prelude::*, registry, EnvFilter};
 use uuid::Uuid;
 use zip::write::FileOptions;
 
@@ -102,17 +103,42 @@ pub fn parse_args() -> (ShuttleArgs, bool) {
     (args, provided_path_to_init)
 }
 
+pub fn setup_tracing(debug: bool) {
+    registry()
+        .with(fmt::layer())
+        .with(
+            // let user set RUST_LOG if they want to
+            EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+                if debug {
+                    EnvFilter::new("info,cargo_shuttle=trace,shuttle=trace")
+                } else {
+                    EnvFilter::default()
+                }
+            }),
+        )
+        .init();
+}
+
+#[derive(PartialEq)]
+pub enum Binary {
+    CargoShuttle,
+    Shuttle,
+}
+
 pub struct Shuttle {
     ctx: RequestContext,
     client: Option<ShuttleApiClient>,
     version_info: Option<VersionInfo>,
+    /// Strings to print at the end of command execution
     version_warnings: Vec<String>,
-    /// alter behaviour to interact with the new platform
+    /// Alter behaviour to interact with the new platform
     beta: bool,
+    /// Alter behaviour based on which CLI is used
+    bin: Binary,
 }
 
 impl Shuttle {
-    pub fn new() -> Result<Self> {
+    pub fn new(bin: Binary) -> Result<Self> {
         let ctx = RequestContext::load_global()?;
         Ok(Self {
             ctx,
@@ -120,14 +146,19 @@ impl Shuttle {
             version_info: None,
             version_warnings: vec![],
             beta: false,
+            bin,
         })
     }
 
     pub async fn run(
         mut self,
-        args: ShuttleArgs,
+        mut args: ShuttleArgs,
         provided_path_to_init: bool,
     ) -> Result<CommandOutcome> {
+        if self.bin == Binary::Shuttle {
+            // beta is always enabled in `shuttle`
+            args.beta = true;
+        }
         self.beta = args.beta;
         if self.beta {
             if matches!(args.cmd, Command::Project(ProjectCommand::Restart { .. })) {
@@ -149,7 +180,9 @@ impl Shuttle {
                 eprintln!("This command is not yet implemented on the beta platform.");
                 return Ok(CommandOutcome::Ok);
             }
-            eprintln!("INFO: Using beta platform API");
+            if self.bin == Binary::CargoShuttle {
+                eprintln!("INFO: Using beta platform API");
+            }
         } else if matches!(
             args.cmd,
             Command::Deployment(DeploymentCommand::Stop) | Command::Account
@@ -158,7 +191,7 @@ impl Shuttle {
             return Ok(CommandOutcome::Ok);
         }
         if let Some(ref url) = args.api_url {
-            if url != API_URL_DEFAULT {
+            if (!self.beta && url != API_URL_DEFAULT) || (self.beta && url != API_URL_BETA) {
                 eprintln!("INFO: Targeting non-standard API: {url}");
             }
             if url.ends_with('/') {
@@ -245,7 +278,7 @@ impl Shuttle {
             Command::Feedback => self.feedback(),
             Command::Run(run_args) => {
                 if self.beta {
-                    self.local_run_beta(run_args).await
+                    self.local_run_beta(run_args, args.debug).await
                 } else {
                     self.local_run(run_args).await
                 }
@@ -1901,7 +1934,7 @@ impl Shuttle {
         Ok(CommandOutcome::Ok)
     }
 
-    async fn local_run_beta(&self, mut run_args: RunArgs) -> Result<CommandOutcome> {
+    async fn local_run_beta(&self, mut run_args: RunArgs, debug: bool) -> Result<CommandOutcome> {
         let project_name = self.ctx.project_name().to_owned();
         let services = self.pre_local_run(&run_args).await?;
         let service = services
@@ -1957,6 +1990,14 @@ impl Shuttle {
             (
                 "SHUTTLE_API",
                 format!("http://127.0.0.1:{}", api_port).as_str(),
+            ),
+            (
+                "RUST_LOG",
+                if debug {
+                    "info,shuttle=trace,reqwest=debug"
+                } else {
+                    "info"
+                },
             ),
         ])
         .stdout(std::process::Stdio::piped())
@@ -2075,8 +2116,6 @@ impl Shuttle {
                 runtime.kill().await?;
             }
         }
-
-        println!("Run `cargo shuttle deploy` to deploy your Shuttle service.");
 
         Ok(CommandOutcome::Ok)
     }
@@ -3250,7 +3289,7 @@ mod tests {
         deploy_args: DeployArgs,
         zip: bool,
     ) -> Vec<String> {
-        let mut shuttle = Shuttle::new().unwrap();
+        let mut shuttle = Shuttle::new(crate::Binary::CargoShuttle).unwrap();
         shuttle.load_project(&project_args).unwrap();
 
         let archive = shuttle
@@ -3374,7 +3413,7 @@ mod tests {
             name: None,
         };
 
-        let mut shuttle = Shuttle::new().unwrap();
+        let mut shuttle = Shuttle::new(crate::Binary::CargoShuttle).unwrap();
         shuttle.load_project(&project_args).unwrap();
 
         assert_eq!(

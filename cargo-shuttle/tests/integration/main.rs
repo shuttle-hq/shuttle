@@ -11,7 +11,7 @@ async fn cargo_shuttle_command(
 ) -> anyhow::Result<CommandOutcome> {
     let working_directory = Path::new(working_directory).to_path_buf();
 
-    Shuttle::new()
+    Shuttle::new(cargo_shuttle::Binary::CargoShuttle)
         .unwrap()
         .run(
             ShuttleArgs {

@@ -4,7 +4,14 @@
     html_favicon_url = "https://raw.githubusercontent.com/shuttle-hq/shuttle/main/assets/favicon.ico"
 )]
 
+mod alpha;
+mod beta;
+/// Built-in plugins
+mod plugins;
+mod start;
+
 // Public API
+pub use plugins::{Metadata, Secrets};
 pub use shuttle_codegen::main;
 pub use shuttle_service::{
     CustomError, DbInput, DeploymentMetadata, Environment, Error, IntoResource, ResourceFactory,
@@ -15,19 +22,11 @@ pub use shuttle_service::{
 pub use async_trait::async_trait;
 pub use tokio;
 
-mod alpha;
-mod beta;
-mod start;
-
 const NAME: &str = env!("CARGO_PKG_NAME");
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 fn version() -> String {
     format!("{} {}", crate::NAME, crate::VERSION)
 }
-
-pub use plugins::{Metadata, Secrets};
-/// Built-in plugins
-mod plugins;
 
 // Not part of public API
 #[doc(hidden)]

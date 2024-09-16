@@ -17,6 +17,7 @@ use shuttle_common::{
     secrets::Secret,
 };
 use shuttle_service::{Environment, ResourceFactory, Service};
+use tracing::{debug, info, trace};
 
 use crate::__internals::{Loader, Runner};
 
@@ -69,6 +70,7 @@ impl BetaEnvArgs {
 }
 
 pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + Send + 'static) {
+    debug!("Parsing environment variables");
     let BetaEnvArgs {
         shuttle,
         project_id,
@@ -86,9 +88,13 @@ pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + S
 
     // start a health check server if requested
     if let Some(healthz_port) = healthz_port {
+        trace!("Starting health check server on port {healthz_port}");
         tokio::task::spawn(async move {
             let make_service = make_service_fn(|_conn| async {
                 Ok::<_, Infallible>(service_fn(|_req| async move {
+                    trace!("Receivied health check");
+                    // TODO: A hook into the `Service` trait can be added here
+                    trace!("Responding to health check");
                     Result::<Response<Body>, hyper::Error>::Ok(Response::new(Body::empty()))
                 }))
             });
@@ -96,7 +102,7 @@ pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + S
                 .serve(make_service);
 
             if let Err(e) = server.await {
-                eprintln!("Health check error: {}", e);
+                eprintln!("ERROR: Health check error: {e}");
                 exit(200);
             }
         });
@@ -105,8 +111,9 @@ pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + S
     //
     // LOADING / PROVISIONING PHASE
     //
-    println!("Loading resources...");
+    info!("Loading resources");
 
+    trace!("Getting secrets");
     let secrets: BTreeMap<String, String> = match client
         .get_secrets_beta(&project_id)
         .await
@@ -114,7 +121,7 @@ pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + S
     {
         Ok(s) => s,
         Err(e) => {
-            eprintln!("Runtime Secret Loading phase failed: {e}");
+            eprintln!("ERROR: Runtime Secret Loading phase failed: {e}");
             exit(101);
         }
     };
@@ -122,11 +129,12 @@ pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + S
     // Sort secrets by key
     let secrets = BTreeMap::from_iter(secrets.into_iter().map(|(k, v)| (k, Secret::new(v))));
 
+    // TODO: rework resourcefactory
     let factory = ResourceFactory::new(project_name, secrets.clone(), env);
     let mut resources = match loader.load(factory).await {
         Ok(r) => r,
         Err(e) => {
-            eprintln!("Runtime Loader phase failed: {e}");
+            eprintln!("ERROR: Runtime Loader phase failed: {e}");
             exit(111);
         }
     };
@@ -141,7 +149,7 @@ pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + S
     {
         Ok(v) => v,
         Err(e) => {
-            eprintln!("Runtime Provisioning phase failed: {e}");
+            eprintln!("ERROR: Runtime Provisioning phase failed: {e}");
             exit(121);
         }
     };
@@ -162,31 +170,36 @@ pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + S
             *bytes = serde_json::to_vec(&secrets).expect("to serialize struct");
             continue;
         }
-        println!("Provisioning {:?}", shuttle_resource.r#type);
+
+        info!("Provisioning {:?}", shuttle_resource.r#type);
         loop {
+            trace!("Checking state of {:?}", shuttle_resource.r#type);
             match client
                 .provision_resource_beta(&project_id, shuttle_resource.clone())
                 .await
             {
-                Ok(res) => match res.state.clone() {
-                    ResourceState::Provisioning | ResourceState::Authorizing => {
-                        tokio::time::sleep(tokio::time::Duration::from_millis(2000)).await;
+                Ok(res) => {
+                    trace!("Got response {:?}", res);
+                    match res.state {
+                        ResourceState::Provisioning | ResourceState::Authorizing => {
+                            tokio::time::sleep(tokio::time::Duration::from_millis(2000)).await;
+                        }
+                        ResourceState::Ready => {
+                            *bytes = serde_json::to_vec(&res.output).expect("to serialize struct");
+                            break;
+                        }
+                        bad_state => {
+                            eprintln!(
+                                "ERROR: Runtime Provisioning phase failed: Received {:?} resource with state '{}'.",
+                                shuttle_resource.r#type,
+                                bad_state
+                            );
+                            exit(132);
+                        }
                     }
-                    ResourceState::Ready => {
-                        *bytes = serde_json::to_vec(&res.output).expect("to serialize struct");
-                        break;
-                    }
-                    bad_state => {
-                        eprintln!(
-                            "Runtime Provisioning phase failed: Received '{:?}' resource with state '{}'.",
-                            shuttle_resource.r#type,
-                            bad_state
-                        );
-                        exit(132);
-                    }
-                },
+                }
                 Err(e) => {
-                    eprintln!("Runtime Provisioning phase failed: {e}");
+                    eprintln!("ERROR: Runtime Provisioning phase failed: {e}");
                     exit(131);
                 }
             };
@@ -196,6 +209,7 @@ pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + S
     // TODO?: call API to say running state is being entered
 
     if shuttle {
+        trace!("Sending sidecar shutdown request");
         // Tell sidecar to shut down.
         // Ignore error, since the endpoint does not send a response.
         let _ = client.client.get("/__shuttle/shutdown").send().await;
@@ -208,7 +222,7 @@ pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + S
     let service = match runner.run(resources).await {
         Ok(s) => s,
         Err(e) => {
-            eprintln!("Runtime Resource Initialization phase failed: {e}");
+            eprintln!("ERROR: Runtime Resource Initialization phase failed: {e}");
             exit(151);
         }
     };
@@ -216,10 +230,10 @@ pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + S
     //
     // RUNNING PHASE
     //
-    println!("Starting service!");
+    info!("Starting service");
 
     if let Err(e) = service.bind(service_addr).await {
-        eprintln!("Service encountered an error in `bind`: {e}");
+        eprintln!("ERROR: Service encountered an error in `bind`: {e}");
         exit(1);
     }
 }

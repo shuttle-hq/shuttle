@@ -13,7 +13,7 @@ pub async fn cargo_shuttle_run(working_directory: &str, external: bool) -> Strin
                 "Did not find directory: {} !!! because {:?}",
                 working_directory, e
             );
-            tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+            sleep(Duration::from_millis(500)).await;
             canonicalize(working_directory).unwrap()
         }
     };

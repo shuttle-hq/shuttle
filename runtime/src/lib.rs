@@ -32,17 +32,12 @@ fn version() -> String {
 #[doc(hidden)]
 pub mod __internals {
     // Internals used by the codegen
-    pub use crate::alpha::Alpha;
     pub use crate::start::start;
 
     // Dependencies required by the codegen
     pub use anyhow::Context;
-    #[cfg(feature = "setup-tracing")]
-    pub use colored;
     pub use serde_json;
     pub use strfmt::strfmt;
-    #[cfg(feature = "setup-tracing")]
-    pub use tracing_subscriber;
 
     use super::*;
     use std::future::Future;

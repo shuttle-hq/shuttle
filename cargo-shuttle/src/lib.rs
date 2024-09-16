@@ -1960,18 +1960,38 @@ impl Shuttle {
             ),
         ])
         .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
         .kill_on_drop(true)
         .spawn()
         .context("spawning runtime process")?;
 
-        let child_stdout = runtime
-            .stdout
-            .take()
-            .context("child process did not have a handle to stdout")?;
-        let mut reader = BufReader::new(child_stdout).lines();
         let raw = run_args.raw;
+        let mut stdout_reader = BufReader::new(
+            runtime
+                .stdout
+                .take()
+                .context("child process did not have a handle to stdout")?,
+        )
+        .lines();
         tokio::spawn(async move {
-            while let Some(line) = reader.next_line().await.unwrap() {
+            while let Some(line) = stdout_reader.next_line().await.unwrap() {
+                if raw {
+                    println!("{}", line);
+                } else {
+                    let log_item = LogItemBeta::new(Utc::now(), "app".to_owned(), line);
+                    println!("{log_item}");
+                }
+            }
+        });
+        let mut stderr_reader = BufReader::new(
+            runtime
+                .stderr
+                .take()
+                .context("child process did not have a handle to stderr")?,
+        )
+        .lines();
+        tokio::spawn(async move {
+            while let Some(line) = stderr_reader.next_line().await.unwrap() {
                 if raw {
                     println!("{}", line);
                 } else {

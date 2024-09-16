@@ -3038,7 +3038,7 @@ impl Shuttle {
 
                 // windows things
                 let name = name.to_str().expect("valid filename").replace('\\', "/");
-                zip.start_file(name, FileOptions::default())?;
+                zip.start_file(name, FileOptions::<()>::default())?;
 
                 let mut b = Vec::new();
                 File::open(path)?.read_to_end(&mut b)?;

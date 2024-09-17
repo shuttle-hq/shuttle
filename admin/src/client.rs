@@ -111,4 +111,10 @@ impl Client {
 
         Ok(())
     }
+
+    pub async fn renew_old_certificates(&self) -> Result<serde_json::Value> {
+        self.inner
+            .put_json("/admin/certificates/renew", Option::<()>::None)
+            .await
+    }
 }

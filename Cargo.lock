@@ -5791,7 +5791,6 @@ version = "0.47.0"
 dependencies = [
  "anyhow",
  "async-trait",
- "colored",
  "hyper 0.14.30",
  "portpicker",
  "serde",
@@ -5806,6 +5805,7 @@ dependencies = [
  "tokio-stream",
  "tokio-util",
  "tonic 0.10.2",
+ "tracing",
  "tracing-subscriber",
  "uuid",
 ]

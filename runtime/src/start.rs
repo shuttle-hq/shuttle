@@ -1,4 +1,5 @@
 use anyhow::Context;
+use tracing::warn;
 
 use crate::{
     __internals::{Loader, Runner},
@@ -53,10 +54,12 @@ pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + S
         return;
     }
 
+    println!("{} {} starting", crate::NAME, crate::VERSION);
+
     let args = match Args::parse() {
         Ok(args) => args,
         Err(e) => {
-            eprintln!("Runtime failed to parse args: {e}");
+            eprintln!("ERROR: Runtime failed to parse args: {e}");
             let help_str = "[HINT]: Run your Shuttle app with `cargo shuttle run`";
             let wrapper_str = "-".repeat(help_str.len());
             eprintln!("{wrapper_str}\n{help_str}\n{wrapper_str}");
@@ -64,32 +67,24 @@ pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + S
         }
     };
 
-    println!("{} {} executable started", crate::NAME, crate::VERSION);
-
     // this is handled after arg parsing to not interfere with --version above
     #[cfg(feature = "setup-tracing")]
     {
-        use colored::Colorize;
-        use tracing_subscriber::prelude::*;
-
-        colored::control::set_override(true); // always apply color
-
-        tracing_subscriber::registry()
-            .with(tracing_subscriber::fmt::layer().without_time())
+        use tracing_subscriber::{fmt, prelude::*, registry, EnvFilter};
+        registry()
+            .with(fmt::layer().without_time())
             .with(
                 // let user override RUST_LOG in local run if they want to
-                tracing_subscriber::EnvFilter::try_from_default_env()
+                EnvFilter::try_from_default_env()
                     // otherwise use our default
-                    .or_else(|_| tracing_subscriber::EnvFilter::try_new("info,shuttle=trace"))
+                    .or_else(|_| EnvFilter::try_new("info,shuttle=trace"))
                     .unwrap(),
             )
             .init();
 
-        println!(
-            "{}",
-            "Shuttle's default tracing subscriber is initialized!".yellow(),
+        warn!(
+            "Default tracing subscriber initialized (https://docs.shuttle.rs/configuration/logs)"
         );
-        println!("To disable it and use your own, check the docs: https://docs.shuttle.rs/configuration/logs");
     }
 
     if args.beta {

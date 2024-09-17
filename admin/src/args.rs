@@ -46,6 +46,8 @@ pub enum Command {
     UnsetBetaAccess {
         user_id: String,
     },
+
+    RenewCerts,
 }
 
 #[derive(Subcommand, Debug)]

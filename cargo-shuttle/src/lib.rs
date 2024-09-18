@@ -1960,18 +1960,38 @@ impl Shuttle {
             ),
         ])
         .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
         .kill_on_drop(true)
         .spawn()
         .context("spawning runtime process")?;
 
-        let child_stdout = runtime
-            .stdout
-            .take()
-            .context("child process did not have a handle to stdout")?;
-        let mut reader = BufReader::new(child_stdout).lines();
         let raw = run_args.raw;
+        let mut stdout_reader = BufReader::new(
+            runtime
+                .stdout
+                .take()
+                .context("child process did not have a handle to stdout")?,
+        )
+        .lines();
         tokio::spawn(async move {
-            while let Some(line) = reader.next_line().await.unwrap() {
+            while let Some(line) = stdout_reader.next_line().await.unwrap() {
+                if raw {
+                    println!("{}", line);
+                } else {
+                    let log_item = LogItemBeta::new(Utc::now(), "app".to_owned(), line);
+                    println!("{log_item}");
+                }
+            }
+        });
+        let mut stderr_reader = BufReader::new(
+            runtime
+                .stderr
+                .take()
+                .context("child process did not have a handle to stderr")?,
+        )
+        .lines();
+        tokio::spawn(async move {
+            while let Some(line) = stderr_reader.next_line().await.unwrap() {
                 if raw {
                     println!("{}", line);
                 } else {
@@ -2320,12 +2340,12 @@ impl Shuttle {
             }
         }
 
+        eprintln!("Packing files...");
         let archive = self.make_archive(args.secret_args.secrets.clone(), self.beta)?;
 
         if let Some(path) = args.output_archive {
-            eprintln!("Writing archive to {}...", path.display());
+            eprintln!("Writing archive to {}", path.display());
             std::fs::write(path, archive).context("writing archive")?;
-            eprintln!("Done");
 
             return Ok(CommandOutcome::Ok);
         }
@@ -2342,6 +2362,9 @@ impl Shuttle {
 
         // End early for beta
         if self.beta {
+            // TODO: upload secrets separately
+
+            eprintln!("Uploading code...");
             let arch = client.upload_archive_beta(project_name, archive).await?;
             deployment_req_buildarch_beta.archive_version_id = arch.archive_version_id;
             deployment_req_buildarch_beta.build_meta = Some(BuildMetaBeta {
@@ -2350,6 +2373,8 @@ impl Shuttle {
                 git_branch: deployment_req.git_branch,
                 git_dirty: deployment_req.git_dirty,
             });
+
+            eprintln!("Creating deployment...");
             let deployment = client
                 .deploy_beta(
                     project_name,
@@ -2993,10 +3018,11 @@ impl Shuttle {
             let mut zip = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
             for (path, name) in archive_files {
                 debug!("Packing {path:?}");
-                zip.start_file(
-                    name.to_str().expect("valid filename"),
-                    FileOptions::default(),
-                )?;
+
+                // windows things
+                let name = name.to_str().expect("valid filename").replace('\\', "/");
+                zip.start_file(name, FileOptions::default())?;
+
                 let mut b = Vec::new();
                 File::open(path)?.read_to_end(&mut b)?;
                 zip.write_all(&b)?;

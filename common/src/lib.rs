@@ -183,6 +183,7 @@ pub struct DatabaseInfoBeta {
     role_password: String,
     database_name: String,
     port: String,
+    #[serde(alias = "hostname_shuttle")] // compatibility to parse from a `DatabaseInfo`
     hostname: String,
     /// The RDS instance name, which is required for deleting provisioned RDS instances, it's
     /// optional because it isn't needed for shared PG deletion.

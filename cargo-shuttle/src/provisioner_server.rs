@@ -596,25 +596,19 @@ pub mod beta {
 
                 let response = match shuttle_resource.r#type {
                     ResourceTypeBeta::DatabaseSharedPostgres => {
-                        // TODO: Let client ignore request if local_uri is given.
-                        //       Always set a DatabaseInfoBeta as output here.
                         let config: DbInput =
                             serde_json::from_value(shuttle_resource.config.clone())
                                 .context("deserializing resource config")?;
-                        let res = match config.local_uri {
-                                Some(local_uri) => DatabaseResource::ConnectionString(local_uri),
-                                None => DatabaseResource::Info(
-                                    prov.provision_database(Request::new(DatabaseRequest {
-                                        project_name: state.project_name.clone(),
-                                        db_type: Some(database::Type::Shared(database::SharedEngine::Postgres).into()),
-                                        db_name: config.db_name,
-                                    }))
-                                    .await
-                                    .context("Failed to start database container. Make sure that a Docker engine is running.")?
-                                    .into_inner()
-                                    .into(),
-                                ),
-                            };
+                        let res = DatabaseResource::Info(
+                            prov.provision_database(Request::new(DatabaseRequest {
+                                project_name: state.project_name.clone(),
+                                db_type: Some(database::Type::Shared(database::SharedEngine::Postgres).into()),
+                                db_name: config.db_name,
+                            }))
+                            .await
+                            .context("Failed to start database container. Make sure that a Docker engine is running.")?
+                            .into_inner()
+                            .into());
                         ResourceResponseBeta {
                             r#type: shuttle_resource.r#type,
                             state: resource::ResourceState::Ready,

@@ -2340,7 +2340,9 @@ impl Shuttle {
             }
         }
 
-        eprintln!("Packing files...");
+        if self.beta {
+            eprintln!("Packing files...");
+        }
         let archive = self.make_archive(args.secret_args.secrets.clone(), self.beta)?;
 
         if let Some(path) = args.output_archive {

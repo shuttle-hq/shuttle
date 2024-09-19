@@ -37,8 +37,8 @@ use shuttle_common::{
     constants::{
         headers::X_CARGO_SHUTTLE_VERSION, API_URL_BETA, API_URL_DEFAULT, DEFAULT_IDLE_MINUTES,
         EXAMPLES_REPO, EXECUTABLE_DIRNAME, RESOURCE_SCHEMA_VERSION, RUNTIME_NAME,
-        SHUTTLE_GH_ISSUE_URL, SHUTTLE_IDLE_DOCS_URL, SHUTTLE_INSTALL_DOCS_URL, SHUTTLE_LOGIN_URL,
-        STORAGE_DIRNAME, TEMPLATES_SCHEMA_VERSION,
+        SHUTTLE_GH_ISSUE_URL, SHUTTLE_GH_REPO_URL, SHUTTLE_IDLE_DOCS_URL, SHUTTLE_INSTALL_DOCS_URL,
+        SHUTTLE_LOGIN_URL, STORAGE_DIRNAME, TEMPLATES_SCHEMA_VERSION,
     },
     deployment::{DeploymentStateBeta, DEPLOYER_END_MESSAGES_BAD, DEPLOYER_END_MESSAGES_GOOD},
     log::LogsRange,
@@ -338,7 +338,7 @@ impl Shuttle {
                 ProjectCommand::Stop => self.project_stop().await,
                 ProjectCommand::Delete(ConfirmationArgs { yes }) => self.project_delete(yes).await,
             },
-            Command::Upgrade => update_cargo_shuttle().await,
+            Command::Upgrade { preview } => update_cargo_shuttle(preview).await,
         };
 
         for w in self.version_warnings {
@@ -3237,7 +3237,20 @@ fn create_spinner() -> ProgressBar {
     pb
 }
 
-async fn update_cargo_shuttle() -> Result<()> {
+async fn update_cargo_shuttle(preview: bool) -> Result<()> {
+    if preview {
+        let _ = tokio::process::Command::new("cargo")
+            .args(["install", "cargo-shuttle", "--git", SHUTTLE_GH_REPO_URL])
+            .kill_on_drop(true)
+            .spawn()
+            .context("Failed to spawn cargo install process")?
+            .wait()
+            .await
+            .context("Failed to wait on cargo install process")?;
+
+        return Ok(());
+    }
+
     #[cfg(target_family = "unix")]
     let _ = tokio::process::Command::new("bash")
         .args(["-c", "curl -sSfL https://www.shuttle.rs/install | bash"])

@@ -167,6 +167,7 @@ commands:
           command: |
             mkdir $BIN_DIR
             mv target/<< parameters.target >>/release/cargo-shuttle<< parameters.suffix >> $BIN_DIR/cargo-shuttle<< parameters.suffix >>
+            mv target/<< parameters.target >>/release/shuttle<< parameters.suffix >> $BIN_DIR/shuttle<< parameters.suffix >>
             mv LICENSE $BIN_DIR/
             mv README.md $BIN_DIR/
             mkdir -p artifacts/<< parameters.target >>

@@ -36,6 +36,8 @@ pub enum Error {
 pub struct ServicesApiClient {
     client: Client,
     base: Uri,
+    /// Default true. Mutate to false to disable check.
+    pub error_on_non_2xx: bool,
 }
 
 impl ServicesApiClient {
@@ -47,6 +49,7 @@ impl ServicesApiClient {
         Self {
             client: Self::builder().build().unwrap(),
             base,
+            error_on_non_2xx: true,
         }
     }
 
@@ -57,6 +60,7 @@ impl ServicesApiClient {
                 .build()
                 .unwrap(),
             base,
+            error_on_non_2xx: true,
         }
     }
 
@@ -64,6 +68,7 @@ impl ServicesApiClient {
         Self {
             client: Self::builder().default_headers(headers).build().unwrap(),
             base,
+            error_on_non_2xx: true,
         }
     }
 
@@ -148,7 +153,7 @@ impl ServicesApiClient {
         let resp = req.send().await?;
         trace!(response = ?resp, "service response");
 
-        if !resp.status().is_success() {
+        if self.error_on_non_2xx && !resp.status().is_success() {
             return Err(Error::RequestError(resp.status()));
         }
 

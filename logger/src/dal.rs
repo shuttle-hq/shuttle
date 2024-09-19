@@ -110,8 +110,6 @@ impl Postgres {
                             if rx.len() >= 200 {
                                 warn!(
                                     queue_size = rx.len(),
-                                    // This string is matched in a honeycomb trigger, changing it will
-                                    // break the trigger.
                                     "database receiver queue is filling up"
                                 );
                             } else if !rx.is_empty() {

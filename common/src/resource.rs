@@ -32,6 +32,32 @@ impl ProvisionResourceRequest {
     }
 }
 
+impl From<ProvisionResourceRequest> for ProvisionResourceRequestBeta {
+    fn from(value: ProvisionResourceRequest) -> Self {
+        Self {
+            r#type: match value.r#type {
+                Type::Database(database::Type::Shared(database::SharedEngine::Postgres)) => {
+                    ResourceTypeBeta::DatabaseSharedPostgres
+                }
+                Type::Secrets => ResourceTypeBeta::Secrets,
+                Type::Container => ResourceTypeBeta::Container,
+                r => panic!("Resource not supported on beta: {r}"),
+            },
+            config: value.config,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[typeshare::typeshare]
+pub struct ProvisionResourceRequestBeta {
+    /// The type of this resource
+    pub r#type: ResourceTypeBeta,
+    /// The config used when creating this resource.
+    /// Use `Self::r#type` to know how to parse this data.
+    pub config: Value,
+}
+
 /// Helper for deserializing
 #[derive(Deserialize)]
 #[serde(untagged)] // Try deserializing as a Shuttle resource, fall back to a custom value
@@ -40,11 +66,21 @@ pub enum ResourceInput {
     Custom(Value),
 }
 
+/// Helper for deserializing
+#[derive(Deserialize)]
+#[serde(untagged)] // Try deserializing as a Shuttle resource, fall back to a custom value
+pub enum ResourceInputBeta {
+    Shuttle(ProvisionResourceRequestBeta),
+    Custom(Value),
+}
+
 /// The resource state represents the stage of the provisioning process the resource is in.
 #[derive(
     Debug, Clone, PartialEq, Eq, strum::Display, strum::EnumString, Serialize, Deserialize,
 )]
+#[serde(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
+#[typeshare::typeshare]
 pub enum ResourceState {
     Authorizing,
     Provisioning,
@@ -63,9 +99,23 @@ pub struct ShuttleResourceOutput<T> {
 
     /// Arbitrary extra data in this resource
     pub custom: Value,
+}
 
-    /// The state of the resource.
-    pub state: Option<ResourceState>,
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[typeshare::typeshare]
+pub struct ResourceResponseBeta {
+    pub r#type: ResourceTypeBeta,
+    pub state: ResourceState,
+    /// The config used when creating this resource. Use the `r#type` to know how to parse this data.
+    pub config: Value,
+    /// The output type for this resource, if state is Ready. Use the `r#type` to know how to parse this data.
+    pub output: Value,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[typeshare::typeshare]
+pub struct ResourceListResponseBeta {
+    pub resources: Vec<ResourceResponseBeta>,
 }
 
 /// Common type to hold all the information we need for a generic resource
@@ -103,6 +153,47 @@ pub enum Type {
     Persist,
     /// Local provisioner only
     Container,
+}
+
+#[derive(
+    Clone, Copy, Debug, strum::EnumString, strum::Display, Deserialize, Serialize, Eq, PartialEq,
+)]
+#[typeshare::typeshare]
+// is a flat enum instead of nested enum to allow typeshare
+pub enum ResourceTypeBeta {
+    #[strum(to_string = "database::shared::postgres")]
+    #[serde(rename = "database::shared::postgres")]
+    DatabaseSharedPostgres,
+    #[strum(to_string = "database::aws_rds::postgres")]
+    #[serde(rename = "database::aws_rds::postgres")]
+    DatabaseAwsRdsPostgres,
+    #[strum(to_string = "database::aws_rds::mysql")]
+    #[serde(rename = "database::aws_rds::mysql")]
+    DatabaseAwsRdsMysql,
+    #[strum(to_string = "database::aws_rds::mariadb")]
+    #[serde(rename = "database::aws_rds::mariadb")]
+    DatabaseAwsRdsMariaDB,
+    /// (Will probably be removed)
+    #[strum(to_string = "secrets")]
+    #[serde(rename = "secrets")]
+    Secrets,
+    /// Local provisioner only
+    #[strum(to_string = "container")]
+    #[serde(rename = "container")]
+    Container,
+}
+
+impl TryFrom<ResourceTypeBeta> for database::AwsRdsEngine {
+    type Error = String;
+
+    fn try_from(value: ResourceTypeBeta) -> Result<Self, Self::Error> {
+        Ok(match value {
+            ResourceTypeBeta::DatabaseAwsRdsPostgres => Self::Postgres,
+            ResourceTypeBeta::DatabaseAwsRdsMysql => Self::MySql,
+            ResourceTypeBeta::DatabaseAwsRdsMariaDB => Self::MariaDB,
+            other => return Err(format!("Invalid conversion of DB type: {other}")),
+        })
+    }
 }
 
 #[derive(Debug, Error)]
@@ -196,6 +287,7 @@ mod _sqlx {
 
     impl<'q> sqlx::Encode<'q, sqlx::Postgres> for ResourceState {
         fn encode_by_ref(&self, buf: &mut PgArgumentBuffer) -> sqlx::encode::IsNull {
+            #[allow(clippy::needless_borrows_for_generic_args)]
             <&str as sqlx::Encode<Postgres>>::encode(&self.to_string(), buf)
         }
     }
@@ -230,6 +322,48 @@ mod test {
         for input in inputs {
             let actual = Type::from_str(&input.to_string()).unwrap();
             assert_eq!(input, actual, ":{} should map back to itself", input);
+        }
+    }
+
+    #[test]
+    fn to_string_and_back_beta() {
+        let inputs = [
+            ResourceTypeBeta::DatabaseSharedPostgres,
+            ResourceTypeBeta::Secrets,
+            ResourceTypeBeta::Container,
+        ];
+
+        for input in inputs {
+            let actual = ResourceTypeBeta::from_str(&input.to_string()).unwrap();
+            assert_eq!(input, actual, ":{} should map back to itself", input);
+        }
+    }
+
+    #[test]
+    fn beta_compat() {
+        let inputs = [
+            (
+                Type::Database(database::Type::Shared(database::SharedEngine::Postgres)),
+                ResourceTypeBeta::DatabaseSharedPostgres,
+            ),
+            (
+                Type::Database(database::Type::AwsRds(database::AwsRdsEngine::Postgres)),
+                ResourceTypeBeta::DatabaseAwsRdsPostgres,
+            ),
+            (
+                Type::Database(database::Type::AwsRds(database::AwsRdsEngine::MySql)),
+                ResourceTypeBeta::DatabaseAwsRdsMysql,
+            ),
+            (
+                Type::Database(database::Type::AwsRds(database::AwsRdsEngine::MariaDB)),
+                ResourceTypeBeta::DatabaseAwsRdsMariaDB,
+            ),
+            (Type::Secrets, ResourceTypeBeta::Secrets),
+            (Type::Container, ResourceTypeBeta::Container),
+        ];
+
+        for (alpha, beta) in inputs {
+            assert_eq!(alpha.to_string(), beta.to_string());
         }
     }
 }

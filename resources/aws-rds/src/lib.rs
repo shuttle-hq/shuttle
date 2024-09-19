@@ -91,7 +91,7 @@ impl IntoResource<String> for OutputWrapper {
 
 // If these were done in the main macro above, this would produce two conflicting `impl IntoResource<sqlx::MySqlPool>`
 
-#[cfg(feature = "diesel_async")]
+#[cfg(feature = "diesel-async")]
 mod _diesel_async {
     use super::*;
 
@@ -112,10 +112,10 @@ mod _diesel_async {
     #[async_trait]
     impl IntoResource<diesel_async::AsyncMysqlConnection> for OutputWrapper {
         async fn into_resource(self) -> Result<diesel_async::AsyncMysqlConnection, Error> {
-            use diesel_async::{AsyncConnection, AsyncPgConnection};
+            use diesel_async::{AsyncConnection, AsyncMysqlConnection};
 
             let connection_string: String = self.into_resource().await.unwrap();
-            Ok(AsyncPgConnection::establish(&connection_string)
+            Ok(AsyncMysqlConnection::establish(&connection_string)
                 .await
                 .map_err(shuttle_service::error::CustomError::new)?)
         }

@@ -24,7 +24,8 @@ pub enum State {
 #[serde(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
 #[strum(ascii_case_insensitive)]
-pub enum EcsState {
+#[typeshare::typeshare]
+pub enum DeploymentStateBeta {
     Pending,
     Building,
     Running,
@@ -37,20 +38,20 @@ pub enum EcsState {
     Unknown,
 }
 
-impl EcsState {
+impl DeploymentStateBeta {
     /// We return a &str rather than a Color here, since `comfy-table` re-exports
     /// crossterm::style::Color and we depend on both `comfy-table` and `crossterm`
     /// we may end up with two different versions of Color.
     pub fn get_color(&self) -> &str {
         match self {
-            EcsState::Pending => "dark_yellow",
-            EcsState::Building => "yellow",
-            EcsState::InProgress => "cyan",
-            EcsState::Running => "green",
-            EcsState::Stopped => "dark_blue",
-            EcsState::Stopping => "blue",
-            EcsState::Failed => "red",
-            EcsState::Unknown => "grey",
+            Self::Pending => "dark_yellow",
+            Self::Building => "yellow",
+            Self::InProgress => "cyan",
+            Self::Running => "green",
+            Self::Stopped => "dark_blue",
+            Self::Stopping => "blue",
+            Self::Failed => "red",
+            Self::Unknown => "grey",
         }
     }
     pub fn to_string_colored(&self) -> String {
@@ -87,6 +88,7 @@ pub const DEPLOYER_END_MSG_BUILD_ERR: &str = "Service build encountered an error
 pub const DEPLOYER_END_MSG_CRASHED: &str = "Service encountered an error and crashed";
 pub const DEPLOYER_END_MSG_STOPPED: &str = "Service was stopped by the user"; // don't include this in end messages so that logs are not stopped too early
 pub const DEPLOYER_END_MSG_COMPLETED: &str = "Service finished running all on its own";
+// There is a typo in this message, but it is matched on in cargo-shuttle, so we leave it for now.
 pub const DEPLOYER_RUNTIME_START_RESPONSE: &str = "Runtime started successully";
 pub const DEPLOYER_RUNTIME_START_FAILED: &str = "Runtime did not start successfully";
 

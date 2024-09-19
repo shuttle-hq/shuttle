@@ -1,0 +1,3 @@
+[typescript.type_mappings]
+"DateTime" = "string"
+"Value" = "any"

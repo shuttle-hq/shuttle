@@ -117,7 +117,7 @@ pub async fn build_workspace(
         tx.clone(),
     )
     .await?;
-    trace!("alpha packages compiled");
+    trace!("packages compiled");
 
     Ok(services)
 }

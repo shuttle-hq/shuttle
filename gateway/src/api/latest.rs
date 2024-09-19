@@ -1257,8 +1257,8 @@ pub mod tests {
     use hyper::StatusCode;
     use serde_json::Value;
     use shuttle_backends::test_utils::gateway::PermissionsMock;
-    use shuttle_common::claims::AccountTier;
     use shuttle_common::constants::limits::{MAX_PROJECTS_DEFAULT, MAX_PROJECTS_EXTRA};
+    use shuttle_common::models::user::AccountTier;
     use test_context::test_context;
     use tokio::sync::mpsc::channel;
     use tokio::sync::oneshot;

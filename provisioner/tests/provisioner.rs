@@ -34,10 +34,7 @@ fn cleanup() {
 
 mod needs_docker {
     use serde_json::json;
-    use shuttle_common::{
-        claims::{AccountTier, Claim},
-        limits::Limits,
-    };
+    use shuttle_common::{claims::Claim, limits::Limits, models::user::AccountTier};
     use shuttle_common_tests::ClaimTestsExt;
     use shuttle_proto::{
         provisioner::{

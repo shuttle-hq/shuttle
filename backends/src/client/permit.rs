@@ -34,10 +34,10 @@ use permit_pdp_client_rs::{
 };
 use serde::{Deserialize, Serialize};
 use shuttle_common::{
-    claims::AccountTier,
+    models::user::AccountTier,
     models::{error::ApiError, project, team},
 };
-use tracing::error;
+use tracing::{error, instrument};
 
 #[async_trait]
 pub trait PermissionsDal {
@@ -339,14 +339,17 @@ impl Client {
 
 #[async_trait]
 impl PermissionsDal for Client {
+    #[instrument(skip_all, fields(shuttle.user.id = user_id, shuttle.permit.client = true))]
     async fn get_user(&self, user_id: &str) -> Result<UserRead> {
         Ok(get_user(&self.api, &self.proj_id, &self.env_id, user_id).await?)
     }
 
+    #[instrument(skip_all, fields(shuttle.user.id = user_id, shuttle.permit.client = true))]
     async fn delete_user(&self, user_id: &str) -> Result<()> {
         Ok(delete_user(&self.api, &self.proj_id, &self.env_id, user_id).await?)
     }
 
+    #[instrument(skip_all, fields(shuttle.user.id = user_id, shuttle.permit.client = true))]
     async fn new_user(&self, user_id: &str) -> Result<UserRead> {
         let user = self.create_user(user_id).await?;
         self.make_basic(&user.id.to_string()).await?;
@@ -354,6 +357,7 @@ impl PermissionsDal for Client {
         self.get_user(&user.id.to_string()).await
     }
 
+    #[instrument(skip_all, fields(shuttle.user.id = user_id, shuttle.permit.client = true))]
     async fn make_pro(&self, user_id: &str) -> Result<()> {
         let user = self.get_user(user_id).await?;
 
@@ -368,6 +372,7 @@ impl PermissionsDal for Client {
         self.assign_role(user_id, &AccountTier::Pro).await
     }
 
+    #[instrument(skip_all, fields(shuttle.user.id = user_id, shuttle.permit.client = true))]
     async fn make_basic(&self, user_id: &str) -> Result<()> {
         let user = self.get_user(user_id).await?;
 
@@ -381,6 +386,11 @@ impl PermissionsDal for Client {
         self.assign_role(user_id, &AccountTier::Basic).await
     }
 
+    #[instrument(skip_all, fields(
+        shuttle.user.id = user_id,
+        shuttle.project.id = project_id,
+        shuttle.permit.client = true,
+    ))]
     async fn create_project(&self, user_id: &str, project_id: &str) -> Result<()> {
         if let Err(e) = create_resource_instance(
             &self.api,
@@ -412,6 +422,7 @@ impl PermissionsDal for Client {
         Ok(())
     }
 
+    #[instrument(skip_all, fields(shuttle.project.id = project_id, shuttle.permit.client = true))]
     async fn delete_project(&self, project_id: &str) -> Result<()> {
         if let Err(e) = delete_resource_instance(
             &self.api,
@@ -435,6 +446,7 @@ impl PermissionsDal for Client {
         Ok(())
     }
 
+    #[instrument(skip_all, fields(shuttle.user.id = user_id, shuttle.permit.client = true))]
     async fn get_personal_projects(&self, user_id: &str) -> Result<Vec<String>> {
         let projects = list_role_assignments(
             &self.api,
@@ -462,6 +474,12 @@ impl PermissionsDal for Client {
         Ok(projects)
     }
 
+    #[instrument(skip_all, fields(
+        shuttle.user.id = user_id,
+        shuttle.project.id = project_id,
+        shuttle.team.action = action,
+        shuttle.permit.client = true,
+    ))]
     async fn allowed(&self, user_id: &str, project_id: &str, action: &str) -> Result<bool> {
         // NOTE: This API function was modified in upstream to use AuthorizationQuery
         let res = is_allowed_allowed_post(
@@ -488,6 +506,11 @@ impl PermissionsDal for Client {
         Ok(res.allow.unwrap_or_default())
     }
 
+    #[instrument(skip_all, fields(
+        shuttle.user.id = user_id,
+        shuttle.team.id = %team.id,
+        shuttle.permit.client = true,
+    ))]
     async fn create_team(&self, user_id: &str, team: &Team) -> Result<()> {
         if !self.allowed_team(user_id, &team.id, "create").await? {
             return Err(Error::ResponseError(ResponseContent {
@@ -536,6 +559,11 @@ impl PermissionsDal for Client {
         Ok(())
     }
 
+    #[instrument(skip_all, fields(
+        shuttle.user.id = user_id,
+        shuttle.team.id = team_id,
+        shuttle.permit.client = true,
+    ))]
     async fn delete_team(&self, user_id: &str, team_id: &str) -> Result<()> {
         if !self.allowed_team(user_id, team_id, "manage").await? {
             return Err(Error::ResponseError(ResponseContent {
@@ -564,6 +592,11 @@ impl PermissionsDal for Client {
         .await?)
     }
 
+    #[instrument(skip_all, fields(
+        shuttle.user.id = user_id,
+        shuttle.team.id = team_id,
+        shuttle.permit.client = true,
+    ))]
     async fn get_team_projects(&self, user_id: &str, team_id: &str) -> Result<Vec<String>> {
         if !self.allowed_team(user_id, team_id, "view").await? {
             return Err(Error::ResponseError(ResponseContent {
@@ -597,6 +630,11 @@ impl PermissionsDal for Client {
         Ok(projects)
     }
 
+    #[instrument(skip_all, fields(
+        shuttle.user.id = user_id,
+        shuttle.team.id = team_id,
+        shuttle.permit.client = true,
+    ))]
     async fn get_team(&self, user_id: &str, team_id: &str) -> Result<team::Response> {
         let mut perms = get_user_permissions_user_permissions_post(
             &self.pdp,
@@ -642,6 +680,7 @@ impl PermissionsDal for Client {
         Ok(res)
     }
 
+    #[instrument(skip_all, fields(shuttle.user.id = user_id, shuttle.permit.client = true))]
     async fn get_teams(&self, user_id: &str) -> Result<Vec<team::Response>> {
         let perms = get_user_permissions_user_permissions_post(
             &self.pdp,
@@ -681,6 +720,11 @@ impl PermissionsDal for Client {
         Ok(res)
     }
 
+    #[instrument(skip_all, fields(
+        shuttle.user.id = user_id,
+        shuttle.project.id = project_id,
+        shuttle.permit.client = true,
+    ))]
     async fn transfer_project_to_user(
         &self,
         user_id: &str,
@@ -696,6 +740,12 @@ impl PermissionsDal for Client {
         Ok(())
     }
 
+    #[instrument(skip_all, fields(
+        shuttle.user.id = user_id,
+        shuttle.team.id = team_id,
+        shuttle.project.id = project_id,
+        shuttle.permit.client = true,
+    ))]
     async fn transfer_project_to_team(
         &self,
         user_id: &str,
@@ -723,6 +773,12 @@ impl PermissionsDal for Client {
         Ok(())
     }
 
+    #[instrument(skip_all, fields(
+        shuttle.user.id = user_id,
+        shuttle.team.id = team_id,
+        shuttle.project.id = project_id,
+        shuttle.permit.client = true,
+    ))]
     async fn transfer_project_from_team(
         &self,
         user_id: &str,
@@ -750,6 +806,11 @@ impl PermissionsDal for Client {
         Ok(())
     }
 
+    #[instrument(skip_all, fields(
+        shuttle.user.id = user_id,
+        shuttle.team.id = team_id,
+        shuttle.permit.client = true,
+    ))]
     async fn add_team_member(&self, admin_user: &str, team_id: &str, user_id: &str) -> Result<()> {
         if !self.allowed_team(admin_user, team_id, "manage").await? {
             return Err(Error::ResponseError(ResponseContent {
@@ -778,6 +839,11 @@ impl PermissionsDal for Client {
         Ok(())
     }
 
+    #[instrument(skip_all, fields(
+        shuttle.user.id = user_id,
+        shuttle.team.id = team_id,
+        shuttle.permit.client = true,
+    ))]
     async fn remove_team_member(
         &self,
         admin_user: &str,
@@ -806,6 +872,11 @@ impl PermissionsDal for Client {
         Ok(())
     }
 
+    #[instrument(skip_all, fields(
+        shuttle.user.id = user_id,
+        shuttle.team.id = team_id,
+        shuttle.permit.client = true,
+    ))]
     async fn get_team_members(
         &self,
         user_id: &str,
@@ -846,6 +917,11 @@ impl PermissionsDal for Client {
         Ok(members)
     }
 
+    #[instrument(skip_all, fields(
+        shuttle.user.id = user_id,
+        shuttle.project.id = project_id,
+        shuttle.permit.client = true,
+    ))]
     async fn get_project_owner(&self, user_id: &str, project_id: &str) -> Result<Owner> {
         if !self.allowed(user_id, project_id, "view").await? {
             return Err(Error::ResponseError(ResponseContent {

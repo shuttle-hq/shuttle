@@ -57,6 +57,7 @@ pub struct LogItem {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
+#[typeshare::typeshare]
 pub struct LogItemBeta {
     pub timestamp: DateTime<Utc>,
     /// Which container / log stream this line came from
@@ -92,6 +93,7 @@ impl std::fmt::Display for LogItemBeta {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[typeshare::typeshare]
 pub struct LogsResponseBeta {
     pub logs: Vec<LogItemBeta>,
 }

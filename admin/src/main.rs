@@ -111,5 +111,9 @@ async fn main() {
             client.set_beta_access(&user_id, false).await.unwrap();
             println!("Unset user {user_id} beta access");
         }
+        Command::RenewCerts => {
+            let res = client.renew_old_certificates().await.unwrap();
+            println!("{res}");
+        }
     };
 }

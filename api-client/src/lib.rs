@@ -1,5 +1,3 @@
-mod middleware;
-
 use std::time::Duration;
 
 use anyhow::{Context, Result};
@@ -9,19 +7,33 @@ use reqwest::header::HeaderMap;
 use reqwest::Response;
 use reqwest_middleware::{ClientWithMiddleware, RequestBuilder};
 use serde::{Deserialize, Serialize};
+use shuttle_common::certificate::{
+    AddCertificateRequest, CertificateListResponse, CertificateResponse, DeleteCertificateRequest,
+};
 use shuttle_common::log::{LogsRange, LogsResponseBeta};
 use shuttle_common::models::deployment::{
-    DeploymentRequest, DeploymentRequestBeta, UploadArchiveResponseBeta,
+    DeploymentListResponseBeta, DeploymentRequest, DeploymentRequestBeta, UploadArchiveResponseBeta,
 };
-use shuttle_common::models::{deployment, project, service, team, user, ToJson};
+use shuttle_common::models::project::ProjectListResponseBeta;
+use shuttle_common::models::{deployment, project, service, team, user};
+use shuttle_common::resource::{
+    ProvisionResourceRequestBeta, ResourceListResponseBeta, ResourceResponseBeta,
+};
 use shuttle_common::{resource, LogItem, VersionInfo};
 use tokio::net::TcpStream;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
-use tracing::{debug, error};
 use uuid::Uuid;
 
+#[cfg(feature = "tracing")]
+mod middleware;
+#[cfg(feature = "tracing")]
 use crate::middleware::LoggingMiddleware;
+#[cfg(feature = "tracing")]
+use tracing::{debug, error};
+
+mod util;
+use util::ToJson;
 
 #[derive(Clone)]
 pub struct ShuttleApiClient {
@@ -37,9 +49,12 @@ impl ShuttleApiClient {
             builder = builder.default_headers(h);
         }
         let client = builder.timeout(Duration::from_secs(60)).build().unwrap();
-        let client = reqwest_middleware::ClientBuilder::new(client)
-            .with(LoggingMiddleware)
-            .build();
+
+        let builder = reqwest_middleware::ClientBuilder::new(client);
+        #[cfg(feature = "tracing")]
+        let builder = builder.with(LoggingMiddleware);
+        let client = builder.build();
+
         Self {
             client,
             api_url,
@@ -93,7 +108,7 @@ impl ShuttleApiClient {
             .context("parsing name check response")
     }
 
-    pub async fn get_current_user(&self) -> Result<user::Response> {
+    pub async fn get_current_user_beta(&self) -> Result<user::UserResponse> {
         self.get_json("/users/me".to_owned()).await
     }
 
@@ -124,13 +139,9 @@ impl ShuttleApiClient {
         &self,
         project: &str,
         deployment_req: DeploymentRequestBeta,
-    ) -> Result<deployment::ResponseBeta> {
+    ) -> Result<deployment::DeploymentResponseBeta> {
         let path = format!("/projects/{project}/deployments");
-        self.post(path, Some(deployment_req))
-            .await
-            .context("failed to start deployment")?
-            .to_json()
-            .await
+        self.post_json(path, Some(deployment_req)).await
     }
 
     pub async fn upload_archive_beta(
@@ -178,7 +189,7 @@ impl ShuttleApiClient {
     pub async fn get_service_resources_beta(
         &self,
         project: &str,
-    ) -> Result<Vec<resource::Response>> {
+    ) -> Result<ResourceListResponseBeta> {
         self.get_json(format!("/projects/{project}/resources"))
             .await
     }
@@ -201,12 +212,47 @@ impl ShuttleApiClient {
         &self,
         project: &str,
         resource_type: &resource::Type,
-    ) -> Result<()> {
+    ) -> Result<String> {
         let r#type = resource_type.to_string();
         let r#type = utf8_percent_encode(&r#type, percent_encoding::NON_ALPHANUMERIC).to_owned();
 
         self.delete_json(format!("/projects/{project}/resources/{}", r#type))
             .await
+    }
+    pub async fn provision_resource_beta(
+        &self,
+        project: &str,
+        req: ProvisionResourceRequestBeta,
+    ) -> Result<ResourceResponseBeta> {
+        self.post_json(format!("/projects/{project}/resources"), Some(req))
+            .await
+    }
+    pub async fn get_secrets_beta(&self, project: &str) -> Result<ResourceResponseBeta> {
+        self.get_json(format!("/projects/{project}/resources/secrets"))
+            .await
+    }
+
+    pub async fn list_certificates_beta(&self, project: &str) -> Result<CertificateListResponse> {
+        self.get_json(format!("/projects/{project}/certificates"))
+            .await
+    }
+    pub async fn add_certificate_beta(
+        &self,
+        project: &str,
+        subject: String,
+    ) -> Result<CertificateResponse> {
+        self.post_json(
+            format!("/projects/{project}/certificates"),
+            Some(AddCertificateRequest { subject }),
+        )
+        .await
+    }
+    pub async fn delete_certificate_beta(&self, project: &str, subject: String) -> Result<String> {
+        self.delete_json_with_body(
+            format!("/projects/{project}/certificates"),
+            DeleteCertificateRequest { subject },
+        )
+        .await
     }
 
     pub async fn create_project(
@@ -218,10 +264,9 @@ impl ShuttleApiClient {
             .await
             .context("failed to make create project request")
     }
-    pub async fn create_project_beta(&self, name: &str) -> Result<project::ResponseBeta> {
+    pub async fn create_project_beta(&self, name: &str) -> Result<project::ProjectResponseBeta> {
         self.post_json(format!("/projects/{name}"), None::<()>)
             .await
-            .context("failed to make create project request")
     }
 
     pub async fn clean_project(&self, project: &str) -> Result<String> {
@@ -235,14 +280,14 @@ impl ShuttleApiClient {
     pub async fn get_project(&self, project: &str) -> Result<project::Response> {
         self.get_json(format!("/projects/{project}")).await
     }
-    pub async fn get_project_beta(&self, project: &str) -> Result<project::ResponseBeta> {
+    pub async fn get_project_beta(&self, project: &str) -> Result<project::ProjectResponseBeta> {
         self.get_json(format!("/projects/{project}")).await
     }
 
     pub async fn get_projects_list(&self) -> Result<Vec<project::Response>> {
         self.get_json("/projects".to_owned()).await
     }
-    pub async fn get_projects_list_beta(&self) -> Result<project::ResponseListBeta> {
+    pub async fn get_projects_list_beta(&self) -> Result<ProjectListResponseBeta> {
         self.get_json("/projects".to_owned()).await
     }
 
@@ -281,7 +326,7 @@ impl ShuttleApiClient {
     pub async fn get_team_projects_list_beta(
         &self,
         team_id: &str,
-    ) -> Result<project::ResponseListBeta> {
+    ) -> Result<ProjectListResponseBeta> {
         self.get_json(format!("/teams/{team_id}/projects")).await
     }
 
@@ -294,9 +339,7 @@ impl ShuttleApiClient {
         let mut path = format!("/projects/{project}/deployments/{deployment_id}/logs");
         Self::add_range_query(range, &mut path);
 
-        self.get_json(path)
-            .await
-            .context("Failed parsing logs. Is your cargo-shuttle outdated?")
+        self.get_json(path).await
     }
     pub async fn get_deployment_logs_beta(
         &self,
@@ -305,12 +348,12 @@ impl ShuttleApiClient {
     ) -> Result<LogsResponseBeta> {
         let path = format!("/projects/{project}/deployments/{deployment_id}/logs");
 
-        self.get_json(path).await.context("Failed parsing logs.")
+        self.get_json(path).await
     }
     pub async fn get_project_logs_beta(&self, project: &str) -> Result<LogsResponseBeta> {
         let path = format!("/projects/{project}/logs");
 
-        self.get_json(path).await.context("Failed parsing logs.")
+        self.get_json(path).await
     }
 
     pub async fn get_logs_ws(
@@ -358,7 +401,7 @@ impl ShuttleApiClient {
         project: &str,
         page: i32,
         per_page: i32,
-    ) -> Result<Vec<deployment::ResponseBeta>> {
+    ) -> Result<DeploymentListResponseBeta> {
         let path = format!(
             "/projects/{project}/deployments?page={}&per_page={}",
             page.saturating_sub(1).max(0),
@@ -370,7 +413,7 @@ impl ShuttleApiClient {
     pub async fn get_current_deployment_beta(
         &self,
         project: &str,
-    ) -> Result<Option<deployment::ResponseBeta>> {
+    ) -> Result<Option<deployment::DeploymentResponseBeta>> {
         let path = format!("/projects/{project}/deployments/current");
 
         self.get_json(path).await
@@ -380,7 +423,7 @@ impl ShuttleApiClient {
         &self,
         project: &str,
         deployment_id: &str,
-    ) -> Result<deployment::ResponseBeta> {
+    ) -> Result<deployment::DeploymentResponseBeta> {
         let path = format!("/projects/{project}/deployments/{deployment_id}");
 
         self.get_json(path).await
@@ -411,6 +454,7 @@ impl ShuttleApiClient {
         }
 
         let (stream, _) = connect_async(request).await.with_context(|| {
+            #[cfg(feature = "tracing")]
             error!("failed to connect to websocket");
             "could not connect to websocket"
         })?;
@@ -418,20 +462,43 @@ impl ShuttleApiClient {
         Ok(stream)
     }
 
-    pub async fn get(&self, path: impl AsRef<str>) -> Result<Response> {
+    pub async fn get<T: Serialize>(
+        &self,
+        path: impl AsRef<str>,
+        body: Option<T>,
+    ) -> Result<Response> {
         let url = format!("{}{}", self.api_url, path.as_ref());
 
         let mut builder = self.client.get(url);
         builder = self.set_auth_bearer(builder);
 
-        builder.send().await.context("failed to make get request")
+        if let Some(body) = body {
+            let body = serde_json::to_string(&body)?;
+            #[cfg(feature = "tracing")]
+            debug!("Outgoing body: {}", body);
+            builder = builder.body(body);
+            builder = builder.header("Content-Type", "application/json");
+        }
+
+        Ok(builder.send().await?)
     }
 
     pub async fn get_json<R>(&self, path: impl AsRef<str>) -> Result<R>
     where
         R: for<'de> Deserialize<'de>,
     {
-        self.get(path).await?.to_json().await
+        self.get(path, Option::<()>::None).await?.to_json().await
+    }
+
+    pub async fn get_json_with_body<R, T: Serialize>(
+        &self,
+        path: impl AsRef<str>,
+        body: T,
+    ) -> Result<R>
+    where
+        R: for<'de> Deserialize<'de>,
+    {
+        self.get(path, Some(body)).await?.to_json().await
     }
 
     pub async fn post<T: Serialize>(
@@ -446,6 +513,7 @@ impl ShuttleApiClient {
 
         if let Some(body) = body {
             let body = serde_json::to_string(&body)?;
+            #[cfg(feature = "tracing")]
             debug!("Outgoing body: {}", body);
             builder = builder.body(body);
             builder = builder.header("Content-Type", "application/json");
@@ -477,6 +545,7 @@ impl ShuttleApiClient {
 
         if let Some(body) = body {
             let body = serde_json::to_string(&body)?;
+            #[cfg(feature = "tracing")]
             debug!("Outgoing body: {}", body);
             builder = builder.body(body);
             builder = builder.header("Content-Type", "application/json");
@@ -496,22 +565,42 @@ impl ShuttleApiClient {
         self.put(path, body).await?.to_json().await
     }
 
-    pub async fn delete(&self, path: impl AsRef<str>) -> Result<Response> {
+    pub async fn delete<T: Serialize>(
+        &self,
+        path: impl AsRef<str>,
+        body: Option<T>,
+    ) -> Result<Response> {
         let url = format!("{}{}", self.api_url, path.as_ref());
 
         let mut builder = self.client.delete(url);
         builder = self.set_auth_bearer(builder);
 
-        builder
-            .send()
-            .await
-            .context("failed to make delete request")
+        if let Some(body) = body {
+            let body = serde_json::to_string(&body)?;
+            #[cfg(feature = "tracing")]
+            debug!("Outgoing body: {}", body);
+            builder = builder.body(body);
+            builder = builder.header("Content-Type", "application/json");
+        }
+
+        Ok(builder.send().await?)
     }
 
     pub async fn delete_json<R>(&self, path: impl AsRef<str>) -> Result<R>
     where
         R: for<'de> Deserialize<'de>,
     {
-        self.delete(path).await?.to_json().await
+        self.delete(path, Option::<()>::None).await?.to_json().await
+    }
+
+    pub async fn delete_json_with_body<R, T: Serialize>(
+        &self,
+        path: impl AsRef<str>,
+        body: T,
+    ) -> Result<R>
+    where
+        R: for<'de> Deserialize<'de>,
+    {
+        self.delete(path, Some(body)).await?.to_json().await
     }
 }

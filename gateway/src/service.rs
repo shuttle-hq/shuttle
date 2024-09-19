@@ -24,13 +24,12 @@ use opentelemetry_http::HeaderInjector;
 use shuttle_backends::client::{permit, PermissionsDal};
 use shuttle_backends::headers::XShuttleAdminSecret;
 use shuttle_backends::project_name::ProjectName;
-use shuttle_common::claims::AccountTier;
 use shuttle_common::constants::SHUTTLE_IDLE_DOCS_URL;
 use shuttle_common::models::error::{
     ApiError, ProjectNotFound, ProjectNotReady, ProjectUnavailable,
 };
 use shuttle_common::models::project::State;
-use shuttle_common::models::user::UserId;
+use shuttle_common::models::user::{AccountTier, UserId};
 use sqlx::error::DatabaseError;
 use sqlx::migrate::Migrator;
 use sqlx::sqlite::SqlitePool;
@@ -287,7 +286,7 @@ impl GatewayService {
     /// Initialize `GatewayService` and its required dependencies.
     ///
     /// * `args` - The [`Args`] with which the service was
-    /// started. Will be passed as [`Context`] to workers and state.
+    ///   started. Will be passed as [`Context`] to workers and state.
     pub async fn init(
         args: ServiceArgs,
         db: SqlitePool,
@@ -756,7 +755,7 @@ impl GatewayService {
 
         let mut transaction = self.db.begin().await?;
         query("INSERT INTO projects (project_id, project_name, account_name, user_id, initial_key, project_state) VALUES (?1, ?2, ?3, ?4, ?5, ?6)")
-            .bind(&project_id.to_string())
+            .bind(project_id.to_string())
             .bind(&project_name)
             .bind("")
             .bind(user_id)

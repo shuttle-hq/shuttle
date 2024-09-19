@@ -10,7 +10,7 @@ executors:
   docker-rust:
     docker:
       # Note: Let CI use our MSRV, rather than latest
-      - image: cimg/rust:1.77.0
+      - image: cimg/rust:1.78.0
     resource_class: small
   machine-ubuntu:
     machine:
@@ -103,7 +103,7 @@ commands:
       - run:
           name: Install Rust (MSRV)
           # Note: Let CI use our MSRV, rather than latest
-          command: which cargo || curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.77.0
+          command: which cargo || curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.78.0
   install-protoc:
     steps:
       - run:
@@ -129,7 +129,7 @@ commands:
           command: |
             curl -OL https://github.com/sagiegurari/cargo-make/releases/download/$VERSION/cargo-make-v$VERSION-x86_64-unknown-linux-musl.zip && \
               unzip cargo-make-v$VERSION-x86_64-unknown-linux-musl.zip && \
-              mv cargo-make-v0.37.8-x86_64-unknown-linux-musl/cargo-make ~/.cargo/bin && \
+              mv cargo-make-v$VERSION-x86_64-unknown-linux-musl/cargo-make ~/.cargo/bin && \
               rm -rf cargo-make-v$VERSION-x86_64-unknown-linux-musl*
   install-cargo-audit:
     steps:
@@ -167,6 +167,7 @@ commands:
           command: |
             mkdir $BIN_DIR
             mv target/<< parameters.target >>/release/cargo-shuttle<< parameters.suffix >> $BIN_DIR/cargo-shuttle<< parameters.suffix >>
+            mv target/<< parameters.target >>/release/shuttle<< parameters.suffix >> $BIN_DIR/shuttle<< parameters.suffix >>
             mv LICENSE $BIN_DIR/
             mv README.md $BIN_DIR/
             mkdir -p artifacts/<< parameters.target >>
@@ -192,6 +193,9 @@ jobs:
       - run: cargo make ci-workspace
       - install-protoc
       - run: cargo make proto validate
+      - run: curl --proto '=https' --tlsv1.2 -LsSf https://github.com/1Password/typeshare/releases/download/v1.11.0/typeshare-cli-v1.11.0-installer.sh | sh
+      - run: cargo make types
+      - run: cargo make check-types
       - save-sccache
       - save-cargo-cache
   cargo-audit:
@@ -331,9 +335,6 @@ jobs:
       mongodb-password:
         description: "Shuttle shared mongodb password"
         type: env_var_name
-      honeycomb-api-key:
-        description: "Shuttle honeycomb api key for observability based on environment"
-        type: env_var_name
       deploys-api-key:
         description: "Shuttle api key used by the gateway to authorise starting idle deployments"
         type: env_var_name
@@ -382,7 +383,6 @@ jobs:
             MONGO_INITDB_ROOT_PASSWORD=${<< parameters.mongodb-password >>} \
             DD_API_KEY=$DD_API_KEY \
             DD_ENV=<< parameters.shuttle-env >> \
-            HONEYCOMB_API_KEY=${<< parameters.honeycomb-api-key >>} \
             DEPLOYS_API_KEY=${<< parameters.deploys-api-key >>} \
             LOGGER_POSTGRES_URI=${<< parameters.logger-postgres-uri >>} \
             STRIPE_SECRET_KEY=${<< parameters.stripe-secret-key >>} \
@@ -658,7 +658,6 @@ workflows:
           name: Deploy images to unstable
           postgres-password: DEV_POSTGRES_PASSWORD
           mongodb-password: DEV_MONGO_INITDB_ROOT_PASSWORD
-          honeycomb-api-key: DEV_HONEYCOMB_API_KEY
           deploys-api-key: DEV_DEPLOYS_API_KEY
           logger-postgres-uri: DEV_LOGGER_POSTGRES_URI
           stripe-secret-key: DEV_STRIPE_SECRET_KEY
@@ -729,7 +728,6 @@ workflows:
           name: deploy-images-to-production
           postgres-password: PROD_POSTGRES_PASSWORD
           mongodb-password: PROD_MONGO_INITDB_ROOT_PASSWORD
-          honeycomb-api-key: PROD_HONEYCOMB_API_KEY
           deploys-api-key: PROD_DEPLOYS_API_KEY
           logger-postgres-uri: PROD_LOGGER_POSTGRES_URI
           stripe-secret-key: PROD_STRIPE_SECRET_KEY

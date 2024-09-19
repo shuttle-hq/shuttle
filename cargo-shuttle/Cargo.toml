@@ -4,11 +4,12 @@ version = "0.47.0"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "A cargo command for the Shuttle platform (https://www.shuttle.rs/)"
+description = "CLI for the Shuttle platform (https://www.shuttle.rs/)"
 homepage = "https://www.shuttle.rs"
+default-run = "cargo-shuttle"
 
 [dependencies]
-shuttle-api-client = { workspace = true }
+shuttle-api-client = { workspace = true, default-features = true }
 shuttle-common = { workspace = true, features = ["models"] }
 shuttle-proto = { workspace = true, features = ["provisioner", "runtime-client"] }
 shuttle-service = { workspace = true, features = ["builder", "runner"] }
@@ -27,14 +28,15 @@ dirs = { workspace = true }
 dunce = { workspace = true }
 flate2 = { workspace = true }
 futures = { workspace = true }
-git2 = { version = "0.18.1", default-features = false }
-gix = { version = "0.63.0", default-features = false, features = [
+git2 = { version = "0.19.0", default-features = false }
+gix = { version = "0.66.0", default-features = false, features = [
   "blocking-http-transport-reqwest-rust-tls",
   "worktree-mutation",
 ] }
 globset = "0.4.13"
 headers = { workspace = true }
 home = { workspace = true }
+hyper = { workspace = true }
 ignore = "0.4.20"
 indicatif = "0.17.3"
 indoc = "2.0.1"
@@ -48,7 +50,7 @@ serde_json = { workspace = true }
 strum = { workspace = true }
 tar = { workspace = true }
 tempfile = { workspace = true }
-tokio = { workspace = true, features = ["macros", "signal", "rt-multi-thread"] }
+tokio = { workspace = true, features = ["rt-multi-thread"] }
 tokio-tungstenite = { workspace = true }
 toml = { workspace = true }
 toml_edit = { workspace = true }
@@ -62,8 +64,8 @@ tracing-subscriber = { workspace = true, features = [
 url = { workspace = true }
 uuid = { workspace = true, features = ["v4"] }
 walkdir = "2.3.3"
-webbrowser = "0.8.2"
-zip = "0.6.6"
+webbrowser = "1.0.1"
+zip = "2.2.0"
 
 [dev-dependencies]
 assert_cmd = "2.0.6"

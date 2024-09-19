@@ -170,8 +170,9 @@ pub mod tests {
     use shuttle_backends::test_utils::gateway::PermissionsMock;
     use shuttle_backends::test_utils::provisioner::get_mocked_provisioner;
     use shuttle_backends::test_utils::resource_recorder::get_mocked_resource_recorder;
-    use shuttle_common::claims::{AccountTier, Claim};
+    use shuttle_common::claims::Claim;
     use shuttle_common::models::deployment::DeploymentRequest;
+    use shuttle_common::models::user::AccountTier;
     use shuttle_common::models::{project, service};
     use sqlx::sqlite::SqliteConnectOptions;
     use sqlx::{query, SqlitePool};

@@ -1,6 +1,9 @@
 use tracing::instrument;
 
-use shuttle_common::claims::{AccountTier, Claim, Scope};
+use shuttle_common::{
+    claims::{Claim, Scope},
+    models::user::AccountTier,
+};
 
 use client::{ProjectsDal, ResourceDal};
 
@@ -13,7 +16,6 @@ pub mod headers;
 pub mod metrics;
 mod otlp_tracing_bridge;
 pub mod project_name;
-pub mod resource;
 pub mod trace;
 
 #[cfg(any(test, feature = "test-utils"))]

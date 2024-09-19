@@ -66,10 +66,6 @@ exporters:
       span_name_as_resource_name: true
       trace_buffer: 25
       # peer_tags_aggregation: true
-  otlp:
-    endpoint: "api.honeycomb.io:443"
-    headers:
-      "x-honeycomb-team": ${env:HONEYCOMB_API_KEY}
 service:
   pipelines:
     traces:

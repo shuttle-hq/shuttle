@@ -1,5 +1,8 @@
 use serde::{Deserialize, Serialize};
-use std::{collections::BTreeMap, fmt::Debug};
+use std::{
+    collections::{BTreeMap, HashMap},
+    fmt::Debug,
+};
 use zeroize::Zeroize;
 
 /// Wrapper type for secret values such as passwords or authentication keys.
@@ -54,6 +57,10 @@ impl<T: Zeroize> Secret<T> {
 pub struct SecretStore {
     pub(crate) secrets: BTreeMap<String, Secret<String>>,
 }
+/// Helper type for typeshare
+#[allow(unused)]
+#[typeshare::typeshare]
+type SecretStoreT = HashMap<String, String>;
 
 impl SecretStore {
     pub fn new(secrets: BTreeMap<String, Secret<String>>) -> Self {

@@ -4,12 +4,13 @@ version = "0.47.0"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Runtime to start and manage any service that runs on shuttle"
+description = "Runtime to run a service on the Shuttle platform"
 
 [lib]
 doctest = false
 
 [dependencies]
+shuttle-api-client = { workspace = true }
 shuttle-codegen = { workspace = true }
 shuttle-common = { workspace = true, features = ["extract_propagation"] }
 shuttle-proto = { workspace = true, features = ["runtime"] }
@@ -17,7 +18,7 @@ shuttle-service = { workspace = true }
 
 anyhow = { workspace = true }
 async-trait = { workspace = true }
-colored = { workspace = true, optional = true }
+hyper = { workspace = true, features = ["http1", "server", "tcp"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 strfmt = { workspace = true }
@@ -25,6 +26,7 @@ tokio = { workspace = true, features = ["full"] }
 tokio-util = { workspace = true }
 tokio-stream = { workspace = true }
 tonic = { workspace = true }
+tracing = { workspace = true }
 tracing-subscriber = { workspace = true, optional = true }
 
 [dev-dependencies]
@@ -35,9 +37,9 @@ uuid = { workspace = true }
 
 [features]
 default = ["setup-tracing"]
+api-client-tracing = ["shuttle-api-client/tracing"]
 
 setup-tracing = [
     "tracing-subscriber/default",
     "tracing-subscriber/env-filter",
-    "colored",
 ]

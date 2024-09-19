@@ -12,7 +12,7 @@ mod needs_docker {
     use hyper::http::{header::AUTHORIZATION, Request, StatusCode};
     use pretty_assertions::assert_eq;
     use serde_json::{self, Value};
-    use shuttle_common::models::user;
+    use shuttle_common::models::user::{self, AccountTier};
 
     #[tokio::test]
     async fn post_user() {
@@ -47,11 +47,11 @@ mod needs_docker {
         assert_eq!(response.status(), StatusCode::OK);
 
         let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
-        let user: user::Response = serde_json::from_slice(&body).unwrap();
+        let user: user::UserResponse = serde_json::from_slice(&body).unwrap();
         let user_id1 = user.id.clone();
 
         assert_eq!(user.name, "test-user");
-        assert_eq!(user.account_tier, "basic");
+        assert_eq!(user.account_tier, AccountTier::Basic);
         assert!(user.id.starts_with("user_"));
         assert!(user.key.is_ascii());
 
@@ -61,11 +61,11 @@ mod needs_docker {
         assert_eq!(response.status(), StatusCode::OK);
 
         let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
-        let user: user::Response = serde_json::from_slice(&body).unwrap();
+        let user: user::UserResponse = serde_json::from_slice(&body).unwrap();
         let user_id2 = user.id.clone();
 
         assert_eq!(user.name, "pro-user");
-        assert_eq!(user.account_tier, "pro");
+        assert_eq!(user.account_tier, AccountTier::Pro);
         assert!(user.id.starts_with("user_"));
         assert!(user.key.is_ascii());
 
@@ -89,7 +89,7 @@ mod needs_docker {
         assert_eq!(response.status(), StatusCode::OK);
 
         let post_body = hyper::body::to_bytes(response.into_body()).await.unwrap();
-        let user: user::Response = serde_json::from_slice(&post_body).unwrap();
+        let user: user::UserResponse = serde_json::from_slice(&post_body).unwrap();
         let user_id = user.id;
 
         // GET user without bearer token.
@@ -138,7 +138,7 @@ mod needs_docker {
         assert_eq!(response.status(), StatusCode::OK);
 
         let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
-        let user: user::Response = serde_json::from_slice(&body).unwrap();
+        let user: user::UserResponse = serde_json::from_slice(&body).unwrap();
         let user_id = &user.id;
 
         // PUT /users/test-user/pro with a completed subscription id to upgrade a user to pro.
@@ -161,11 +161,11 @@ mod needs_docker {
 
         assert_eq!(response.status(), StatusCode::OK);
         let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
-        let pro_user: user::Response = serde_json::from_slice(&body).unwrap();
+        let pro_user: user::UserResponse = serde_json::from_slice(&body).unwrap();
 
         assert_eq!(user.name, pro_user.name);
         assert_eq!(user.key, pro_user.key);
-        assert_eq!(pro_user.account_tier, "pro");
+        assert_eq!(pro_user.account_tier, AccountTier::Pro);
 
         let mocked_subscription_obj: Value =
             serde_json::from_str(MOCKED_ACTIVE_SUBSCRIPTION).unwrap();
@@ -188,7 +188,7 @@ mod needs_docker {
         let response = app.post_user("test-user", "basic").await;
         assert_eq!(response.status(), StatusCode::OK);
         let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
-        let user: user::Response = serde_json::from_slice(&body).unwrap();
+        let user: user::UserResponse = serde_json::from_slice(&body).unwrap();
         let user_id = &user.id;
 
         // Test upgrading to pro with a subscription id that points to a due session.
@@ -215,9 +215,9 @@ mod needs_docker {
         assert_eq!(response.status(), StatusCode::OK);
 
         let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
-        let actual_user: user::Response = serde_json::from_slice(&body).unwrap();
+        let actual_user: user::UserResponse = serde_json::from_slice(&body).unwrap();
 
-        assert_eq!(actual_user.account_tier, "pendingpaymentpro");
+        assert_eq!(actual_user.account_tier, AccountTier::PendingPaymentPro);
 
         assert_eq!(
             *app.permissions.calls.lock().await,
@@ -239,7 +239,7 @@ mod needs_docker {
 
         // Extract the API key from the response so we can use it in a future request.
         let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
-        let user: user::Response = serde_json::from_slice(&body).unwrap();
+        let user: user::UserResponse = serde_json::from_slice(&body).unwrap();
         let user_id = &user.id;
         let basic_user_key = &user.key;
 
@@ -331,7 +331,7 @@ mod needs_docker {
         let response = app.post_user("test-user", "basic").await;
         assert_eq!(response.status(), StatusCode::OK);
         let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
-        let user: user::Response = serde_json::from_slice(&body).unwrap();
+        let user: user::UserResponse = serde_json::from_slice(&body).unwrap();
         let user_id = &user.id;
 
         // Upgrade user to pro
@@ -365,8 +365,8 @@ mod needs_docker {
         assert_eq!(response.status(), StatusCode::OK);
 
         let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
-        let user: user::Response = serde_json::from_slice(&body).unwrap();
-        assert_eq!(user.account_tier, "cancelledpro");
+        let user: user::UserResponse = serde_json::from_slice(&body).unwrap();
+        assert_eq!(user.account_tier, AccountTier::CancelledPro);
 
         // When called again at some later time, the subscription returned from stripe should be
         // cancelled.
@@ -380,9 +380,9 @@ mod needs_docker {
         assert_eq!(response.status(), StatusCode::OK);
 
         let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
-        let user: user::Response = serde_json::from_slice(&body).unwrap();
+        let user: user::UserResponse = serde_json::from_slice(&body).unwrap();
 
-        assert_eq!(user.account_tier, "basic");
+        assert_eq!(user.account_tier, AccountTier::Basic);
 
         assert_eq!(
             *app.permissions.calls.lock().await,

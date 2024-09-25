@@ -137,6 +137,12 @@ pub enum Command {
     Generate(GenerateCommand),
     /// Open an issue on GitHub and provide feedback
     Feedback,
+    /// Upgrade the cargo-shuttle binary
+    Upgrade {
+        /// Install an unreleased version from the repository's main branch
+        #[arg(long)]
+        preview: bool,
+    },
 }
 
 #[derive(Parser)]

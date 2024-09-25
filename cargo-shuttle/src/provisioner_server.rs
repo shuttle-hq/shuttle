@@ -508,6 +508,7 @@ pub mod beta {
     };
     use shuttle_common::{
         database,
+        models::resource::get_resource_tables_beta,
         resource::{
             self, ProvisionResourceRequestBeta, ResourceResponseBeta, ResourceState,
             ResourceTypeBeta,
@@ -577,13 +578,16 @@ pub mod beta {
     ) -> Result<Vec<u8>> {
         Ok(match (method, uri) {
             (Method::GET, "/projects/proj_LOCAL/resources/secrets") => {
-                serde_json::to_vec(&ResourceResponseBeta {
+                let response = ResourceResponseBeta {
                     r#type: ResourceTypeBeta::Secrets,
                     state: ResourceState::Ready,
                     config: serde_json::Value::Null,
                     output: serde_json::to_value(&state.secrets).unwrap(),
-                })
-                .unwrap()
+                };
+                let table =
+                    get_resource_tables_beta(&[response.clone()], "local service", false, true);
+                println!("{table}");
+                serde_json::to_vec(&response).unwrap()
             }
             (Method::POST, "/projects/proj_LOCAL/resources") => {
                 let prov = LocalProvisioner::new().unwrap();
@@ -595,20 +599,16 @@ pub mod beta {
                         let config: DbInput =
                             serde_json::from_value(shuttle_resource.config.clone())
                                 .context("deserializing resource config")?;
-                        let res = match config.local_uri {
-                                Some(local_uri) => DatabaseResource::ConnectionString(local_uri),
-                                None => DatabaseResource::Info(
-                                    prov.provision_database(Request::new(DatabaseRequest {
-                                        project_name: state.project_name.clone(),
-                                        db_type: Some(database::Type::Shared(database::SharedEngine::Postgres).into()),
-                                        db_name: config.db_name,
-                                    }))
-                                    .await
-                                    .context("Failed to start database container. Make sure that a Docker engine is running.")?
-                                    .into_inner()
-                                    .into(),
-                                ),
-                            };
+                        let res = DatabaseResource::Info(
+                            prov.provision_database(Request::new(DatabaseRequest {
+                                project_name: state.project_name.clone(),
+                                db_type: Some(database::Type::Shared(database::SharedEngine::Postgres).into()),
+                                db_name: config.db_name,
+                            }))
+                            .await
+                            .context("Failed to start database container. Make sure that a Docker engine is running.")?
+                            .into_inner()
+                            .into());
                         ResourceResponseBeta {
                             r#type: shuttle_resource.r#type,
                             state: resource::ResourceState::Ready,
@@ -637,6 +637,10 @@ pub mod beta {
                     },
                     other => unimplemented!("Resource {other} not supported yet"),
                 };
+
+                let table =
+                    get_resource_tables_beta(&[response.clone()], "local service", false, true);
+                println!("{table}");
 
                 serde_json::to_vec(&response).unwrap()
             }

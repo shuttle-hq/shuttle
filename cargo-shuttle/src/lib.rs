@@ -266,7 +266,7 @@ impl Shuttle {
             Command::Account => self.account().await,
             Command::Login(login_args) => self.login(login_args, args.offline).await,
             Command::Logout(logout_args) => self.logout(logout_args).await,
-            Command::Feedback => self.feedback(),
+            Command::Feedback => feedback(),
             Command::Run(run_args) => {
                 if self.beta {
                     self.local_run_beta(run_args, args.debug).await
@@ -772,14 +772,6 @@ impl Shuttle {
         trace!("loading project arguments: {project_args:?}");
 
         self.ctx.load_local(project_args)
-    }
-
-    /// Provide feedback on GitHub.
-    fn feedback(&self) -> Result<()> {
-        let _ = webbrowser::open(SHUTTLE_GH_ISSUE_URL);
-        println!("If your browser did not open automatically, go to {SHUTTLE_GH_ISSUE_URL}");
-
-        Ok(())
     }
 
     async fn account(&self) -> Result<()> {
@@ -2358,7 +2350,9 @@ impl Shuttle {
             }
         }
 
-        eprintln!("Packing files...");
+        if self.beta {
+            eprintln!("Packing files...");
+        }
         let archive = self.make_archive(args.secret_args.secrets.clone(), self.beta)?;
 
         if let Some(path) = args.output_archive {
@@ -3235,6 +3229,13 @@ fn create_spinner() -> ProgressBar {
     );
 
     pb
+}
+
+fn feedback() -> Result<()> {
+    let _ = webbrowser::open(SHUTTLE_GH_ISSUE_URL);
+    eprintln!("If your browser did not open automatically, go to {SHUTTLE_GH_ISSUE_URL}");
+
+    Ok(())
 }
 
 async fn update_cargo_shuttle(preview: bool) -> Result<()> {

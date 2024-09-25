@@ -277,5 +277,5 @@ fn get_secrets_table_beta(
         table.add_row(vec![key]);
     }
 
-    format!("These secrets can be accessed by {service_name}\n{table}\n")
+    format!("These secrets can be accessed by {service_name}\n{table}")
 }

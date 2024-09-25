@@ -3,7 +3,8 @@ use serde::{Deserialize, Serialize};
 use shuttle_service::{
     database,
     resource::{ProvisionResourceRequest, ShuttleResourceOutput, Type},
-    DatabaseResource, DbInput, Error, IntoResource, ResourceFactory, ResourceInputBuilder,
+    DatabaseResource, DbInput, Environment, Error, IntoResource, ResourceFactory,
+    ResourceInputBuilder,
 };
 
 #[cfg(any(feature = "diesel-async-bb8", feature = "diesel-async-deadpool"))]
@@ -33,17 +34,38 @@ impl Postgres {
     }
 }
 
+/// Conditionally request a Shuttle resource
+#[derive(Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum MaybeRequest {
+    Request(ProvisionResourceRequest),
+    NotRequest(DatabaseResource),
+}
+
 #[async_trait]
 impl ResourceInputBuilder for Postgres {
-    type Input = ProvisionResourceRequest;
+    type Input = MaybeRequest;
     type Output = OutputWrapper;
 
-    async fn build(self, _factory: &ResourceFactory) -> Result<Self::Input, Error> {
-        Ok(ProvisionResourceRequest::new(
-            Type::Database(database::Type::Shared(database::SharedEngine::Postgres)),
-            serde_json::to_value(self.0).unwrap(),
-            serde_json::Value::Null,
-        ))
+    async fn build(self, factory: &ResourceFactory) -> Result<Self::Input, Error> {
+        let md = factory.get_metadata();
+        Ok(match md.env {
+            Environment::Deployment => MaybeRequest::Request(ProvisionResourceRequest::new(
+                Type::Database(database::Type::Shared(database::SharedEngine::Postgres)),
+                serde_json::to_value(self.0).unwrap(),
+                serde_json::Value::Null,
+            )),
+            Environment::Local => match self.0.local_uri {
+                Some(local_uri) => {
+                    MaybeRequest::NotRequest(DatabaseResource::ConnectionString(local_uri))
+                }
+                None => MaybeRequest::Request(ProvisionResourceRequest::new(
+                    Type::Database(database::Type::Shared(database::SharedEngine::Postgres)),
+                    serde_json::to_value(self.0).unwrap(),
+                    serde_json::Value::Null,
+                )),
+            },
+        })
     }
 }
 
@@ -62,7 +84,7 @@ impl IntoResource<String> for OutputWrapper {
             Self::Beta(o) => o,
         };
         Ok(match output {
-            DatabaseResource::ConnectionString(s) => s.clone(),
+            DatabaseResource::ConnectionString(s) => s,
             DatabaseResource::Info(info) => info.connection_string_shuttle(),
         })
     }

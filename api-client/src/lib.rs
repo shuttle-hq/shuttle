@@ -14,7 +14,7 @@ use shuttle_common::log::{LogsRange, LogsResponseBeta};
 use shuttle_common::models::deployment::{
     DeploymentListResponseBeta, DeploymentRequest, DeploymentRequestBeta, UploadArchiveResponseBeta,
 };
-use shuttle_common::models::project::ProjectListResponseBeta;
+use shuttle_common::models::project::{ProjectCreateRequestBeta, ProjectListResponseBeta};
 use shuttle_common::models::{deployment, project, service, team, user};
 use shuttle_common::resource::{
     ProvisionResourceRequestBeta, ResourceListResponseBeta, ResourceResponseBeta,
@@ -265,8 +265,13 @@ impl ShuttleApiClient {
             .context("failed to make create project request")
     }
     pub async fn create_project_beta(&self, name: &str) -> Result<project::ProjectResponseBeta> {
-        self.post_json(format!("/projects/{name}"), None::<()>)
-            .await
+        self.post_json(
+            format!("/projects"),
+            Some(ProjectCreateRequestBeta {
+                name: name.to_string(),
+            }),
+        )
+        .await
     }
 
     pub async fn clean_project(&self, project: &str) -> Result<String> {

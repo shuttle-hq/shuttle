@@ -312,9 +312,13 @@ impl RequestContext {
         Ok(())
     }
 
-    pub fn save_local_internal(&mut self, id: String) -> Result<()> {
+    pub fn set_project_id(&mut self, id: String) {
         *self.project_internal.as_mut().unwrap().as_mut().unwrap() =
             InternalProjectConfig { id: Some(id) };
+    }
+
+    pub fn save_local_internal(&mut self, id: String) -> Result<()> {
+        self.set_project_id(id);
         self.project_internal.as_ref().unwrap().save()?;
 
         // write updated gitignore file to root of workspace

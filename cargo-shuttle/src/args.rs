@@ -52,8 +52,8 @@ pub struct ProjectArgs {
     /// Specify the working directory
     #[arg(global = true, long, visible_alias = "wd", default_value = ".", value_parser = OsStringValueParser::new().try_map(parse_path))]
     pub working_directory: PathBuf,
-    /// Specify the name of the project (overrides crate name)
-    #[arg(global = true, long)]
+    /// Specify the name or id of the project (overrides crate name)
+    #[arg(global = true, long, visible_alias = "id")]
     pub name: Option<String>,
 }
 

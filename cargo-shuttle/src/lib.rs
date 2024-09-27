@@ -769,11 +769,32 @@ impl Shuttle {
     }
 
     pub async fn load_project(&mut self, project_args: &ProjectArgs) -> Result<()> {
-        trace!("loading project arguments: {project_args:?}");
+        trace!("project arguments: {project_args:?}");
 
         self.ctx.load_local(project_args)?;
         if self.beta {
+            // load project id from file if exists
             self.ctx.load_local_internal(project_args)?;
+            // translate project name to project id if a name was given
+            if let Some(name) = project_args.name.as_ref() {
+                if !name.starts_with("proj_") {
+                    trace!("mapping project name to project id");
+                    let proj = self
+                        .client
+                        .as_ref()
+                        .unwrap()
+                        .get_projects_list_beta()
+                        .await?
+                        .projects
+                        .into_iter()
+                        .find(|p| p.name == *name);
+                    if let Some(proj) = proj {
+                        trace!("found project by name");
+                        self.ctx.set_project_id(proj.id)
+                    }
+                }
+            }
+            // if still no project id is known, prompt to link it
             if !self.ctx.project_id_found() {
                 self.project_link().await?;
             }

@@ -274,11 +274,11 @@ fn edit_shuttle_toml(path: &Path, set_name: Option<&str>) -> Result<()> {
 }
 
 /// Adds any missing recommended ignore rules to .gitignore or .ignore depending on if git is used.
-fn create_ignore_file(path: &Path, name: &str) -> Result<()> {
+pub fn create_ignore_file(path: &Path, name: &str) -> Result<()> {
     let path = path.join(name);
     let mut contents = std::fs::read_to_string(&path).unwrap_or_default();
 
-    for rule in ["/target", ".shuttle-storage", "Secrets*.toml"] {
+    for rule in ["/target", ".shuttle*", "Secrets*.toml"] {
         if !contents.lines().any(|l| l == rule) {
             writeln!(&mut contents, "{rule}")?;
         }

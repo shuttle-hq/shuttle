@@ -9,6 +9,7 @@ use shuttle_common::{constants::API_URL_DEFAULT, ApiKey};
 use tracing::trace;
 
 use crate::args::ProjectArgs;
+use crate::init::create_ignore_file;
 
 /// Helper trait for dispatching fs ops for different config files
 pub trait ConfigManager: Sized {
@@ -311,13 +312,17 @@ impl RequestContext {
         Ok(())
     }
 
-    pub fn save_local_internal(
-        &mut self,
-        /* project_args: &ProjectArgs, */ id: String,
-    ) -> Result<()> {
+    pub fn save_local_internal(&mut self, id: String) -> Result<()> {
         *self.project_internal.as_mut().unwrap().as_mut().unwrap() =
             InternalProjectConfig { id: Some(id) };
         self.project_internal.as_ref().unwrap().save()?;
+
+        // write updated gitignore file to root of workspace
+        create_ignore_file(
+            &self.project.as_ref().unwrap().manager.working_directory,
+            ".gitignore",
+        )
+        .context("Failed to create .gitignore file")?;
 
         Ok(())
     }

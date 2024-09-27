@@ -158,22 +158,19 @@ impl Shuttle {
         self.beta = args.beta;
         if self.beta {
             if matches!(args.cmd, Command::Project(ProjectCommand::Restart { .. })) {
-                bail!("This command is discontinued on the beta platform. Deploy to start a new deployment.");
+                bail!("This command is discontinued on the NEW platform (shuttle.dev). Deploy to start a new deployment.");
             }
             if matches!(args.cmd, Command::Status) {
-                bail!("This command is discontinued on the beta platform. Use `deployment status` instead.");
+                bail!("This command is discontinued on the NEW platform (shuttle.dev). Use `deployment status` instead.");
             }
             if matches!(
                 args.cmd,
                 Command::Stop | Command::Project(ProjectCommand::Stop { .. })
             ) {
-                bail!("This command is discontinued on the beta platform. Use `deployment stop` instead.");
+                bail!("This command is discontinued on the NEW platform (shuttle.dev). Use `deployment stop` instead.");
             }
             if matches!(args.cmd, Command::Clean) {
-                bail!("This command is not yet implemented on the beta platform.");
-            }
-            if self.bin == Binary::CargoShuttle {
-                eprintln!("INFO: Using beta platform API");
+                bail!("This command is not yet implemented on the NEW platform (shuttle.dev).");
             }
         } else if matches!(
             args.cmd,
@@ -181,11 +178,20 @@ impl Shuttle {
                 | Command::Account
                 | Command::Project(ProjectCommand::Link)
         ) {
-            bail!("This command is not supported on the legacy platform. Set --beta or SHUTTLE_BETA=true.");
+            bail!("This command is not supported on the old platform (shuttle.rs).");
+        }
+
+        if self.beta {
+            eprintln!("{}", "INFO: Using NEW platform API (shuttle.dev)".green());
+        } else {
+            eprintln!("{}", "INFO: Using OLD platform API (shuttle.rs)".blue());
         }
         if let Some(ref url) = args.api_url {
             if (!self.beta && url != API_URL_DEFAULT) || (self.beta && url != API_URL_BETA) {
-                eprintln!("INFO: Targeting non-standard API: {url}");
+                eprintln!(
+                    "{}",
+                    format!("INFO: Targeting non-standard API: {url}").yellow(),
+                );
             }
             if url.ends_with('/') {
                 eprintln!("WARNING: API URL is probably incorrect. Ends with '/': {url}");

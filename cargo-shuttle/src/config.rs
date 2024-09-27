@@ -144,11 +144,22 @@ impl GlobalConfig {
     }
 }
 
-/// Project-local config for things like customizing project name
+/// Shuttle.toml schema (User-facing project-local config)
 #[derive(Deserialize, Serialize, Default)]
 pub struct ProjectConfig {
+    // unused on new platform
     pub name: Option<String>,
     pub assets: Option<Vec<String>>,
+    // unused in cargo-shuttle, used in new platform builder.
+    // is used here to validate the type if used.
+    pub build_assets: Option<Vec<String>>,
+}
+
+/// .shuttle/config.toml schema (internal project-local config)
+#[derive(Deserialize, Serialize, Default)]
+pub struct InternalProjectConfig {
+    // should be in internal local config
+    pub id: Option<String>,
 }
 
 /// A handler for configuration files. The type parameter `M` is the [`ConfigManager`] which handles
@@ -233,6 +244,7 @@ where
 pub struct RequestContext {
     global: Config<GlobalConfigManager, GlobalConfig>,
     project: Option<Config<LocalConfigManager, ProjectConfig>>,
+    project_internal: Option<Config<LocalConfigManager, InternalProjectConfig>>,
     api_url: Option<String>,
 }
 
@@ -249,8 +261,65 @@ impl RequestContext {
         Ok(Self {
             global,
             project: None,
+            project_internal: None,
             api_url: None,
         })
+    }
+
+    pub fn load_local_internal(&mut self, project_args: &ProjectArgs) -> Result<()> {
+        let workspace_path = project_args
+            .workspace_path()
+            .unwrap_or(project_args.working_directory.clone());
+
+        trace!(
+            "looking for .shuttle/config.toml in {}",
+            workspace_path.display()
+        );
+        let local_manager =
+            LocalConfigManager::new(workspace_path, ".shuttle/config.toml".to_string());
+        let mut project_internal = Config::new(local_manager);
+        if !project_internal.exists() {
+            trace!("no local .shuttle/config.toml found");
+            project_internal.replace(InternalProjectConfig::default());
+        } else {
+            trace!("found a local .shuttle/config.toml");
+            project_internal.open()?;
+        }
+
+        let config = project_internal.as_mut().unwrap();
+
+        // Project id is preferred in this order:
+        // 1. Name given on command line
+        // 2. Name from .shuttle/config.toml file
+        match (&project_args.name, &config.id) {
+            // Command-line name parameter trumps everything
+            (Some(id_from_args), _) => {
+                trace!("using command-line project id");
+                config.id = Some(id_from_args.clone());
+            }
+            // If key exists in config then keep it as it is
+            (None, Some(_)) => {
+                trace!("using .shuttle/config.toml project id");
+            }
+            (None, None) => {
+                trace!("no project id in args or config found");
+            }
+        };
+
+        self.project_internal = Some(project_internal);
+
+        Ok(())
+    }
+
+    pub fn save_local_internal(
+        &mut self,
+        /* project_args: &ProjectArgs, */ id: String,
+    ) -> Result<()> {
+        *self.project_internal.as_mut().unwrap().as_mut().unwrap() =
+            InternalProjectConfig { id: Some(id) };
+        self.project_internal.as_ref().unwrap().save()?;
+
+        Ok(())
     }
 
     /// Load the project configuration at the given `working_directory`
@@ -277,7 +346,6 @@ impl RequestContext {
         trace!("looking for Shuttle.toml in {}", workspace_path.display());
         let local_manager = LocalConfigManager::new(workspace_path, "Shuttle.toml".to_string());
         let mut project = Config::new(local_manager);
-
         if !project.exists() {
             trace!("no local Shuttle.toml found");
             project.replace(ProjectConfig::default());
@@ -292,7 +360,7 @@ impl RequestContext {
         // 1. Name given on command line
         // 2. Name from Shuttle.toml file
         // 3. Name from Cargo.toml package if it's a crate
-        // 3. Name from the workspace directory if it's a workspace
+        // 4. Name from the workspace directory if it's a workspace
         match (&project_args.name, &config.name) {
             // Command-line name parameter trumps everything
             (Some(name_from_args), _) => {
@@ -309,6 +377,7 @@ impl RequestContext {
                 config.name = Some(project_args.project_name()?);
             }
         };
+
         Ok(project)
     }
 
@@ -373,6 +442,7 @@ impl RequestContext {
         self.global.as_mut().unwrap().clear_api_key();
         self.global.save()
     }
+
     /// Get the current project name.
     ///
     /// # Panics
@@ -399,6 +469,33 @@ impl RequestContext {
             .unwrap()
             .assets
             .as_ref()
+    }
+
+    /// Check if the current project id has been loaded.
+    pub fn project_id_found(&self) -> bool {
+        self.project_internal
+            .as_ref()
+            .unwrap()
+            .as_ref()
+            .unwrap()
+            .id
+            .is_some()
+    }
+
+    /// Get the current project id.
+    ///
+    /// # Panics
+    /// Panics if the internal project configuration has not been loaded.
+    pub fn project_id(&self) -> &str {
+        self.project_internal
+            .as_ref()
+            .unwrap()
+            .as_ref()
+            .unwrap()
+            .id
+            .as_ref()
+            .unwrap()
+            .as_str()
     }
 }
 

@@ -191,30 +191,6 @@ impl Shuttle {
         }
         self.ctx.set_api_url(args.api_url);
 
-        // All commands that need to know which project is being handled
-        if matches!(
-            args.cmd,
-            Command::Deploy(..)
-                | Command::Deployment(..)
-                | Command::Resource(..)
-                | Command::Certificate(..)
-                | Command::Project(
-                    // ProjectCommand::List does not need to know which project we are in
-                    ProjectCommand::Start { .. }
-                        | ProjectCommand::Stop { .. }
-                        | ProjectCommand::Restart { .. }
-                        | ProjectCommand::Status { .. }
-                        | ProjectCommand::Delete { .. }
-                )
-                | Command::Stop
-                | Command::Clean
-                | Command::Status
-                | Command::Logs { .. }
-                | Command::Run(..)
-        ) {
-            self.load_project(&args.project_args)?;
-        }
-
         // All commands that call the API
         if matches!(
             args.cmd,
@@ -247,6 +223,30 @@ impl Shuttle {
             if !args.offline && !self.beta {
                 self.check_api_versions().await?;
             }
+        }
+
+        // All commands that need to know which project is being handled
+        if matches!(
+            args.cmd,
+            Command::Deploy(..)
+                | Command::Deployment(..)
+                | Command::Resource(..)
+                | Command::Certificate(..)
+                | Command::Project(
+                    // ProjectCommand::List does not need to know which project we are in
+                    ProjectCommand::Start { .. }
+                        | ProjectCommand::Stop { .. }
+                        | ProjectCommand::Restart { .. }
+                        | ProjectCommand::Status { .. }
+                        | ProjectCommand::Delete { .. }
+                )
+                | Command::Stop
+                | Command::Clean
+                | Command::Status
+                | Command::Logs { .. }
+                | Command::Run(..)
+        ) {
+            self.load_project(&args.project_args).await?;
         }
 
         let res = match args.cmd {
@@ -686,7 +686,7 @@ impl Shuttle {
             // so `load_project` is ran with the correct project path
             project_args.working_directory.clone_from(&path);
 
-            self.load_project(&project_args)?;
+            self.load_project(&project_args).await?;
             self.project_start(DEFAULT_IDLE_MINUTES).await?;
         }
 
@@ -768,10 +768,55 @@ impl Shuttle {
         }
     }
 
-    pub fn load_project(&mut self, project_args: &ProjectArgs) -> Result<()> {
+    pub async fn load_project(&mut self, project_args: &ProjectArgs) -> Result<()> {
         trace!("loading project arguments: {project_args:?}");
 
-        self.ctx.load_local(project_args)
+        self.ctx.load_local(project_args)?;
+        if self.beta {
+            self.ctx.load_local_internal(project_args)?;
+            if !self.ctx.project_id_found() {
+                self.project_link().await?;
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn project_link(&mut self) -> Result<()> {
+        let client = self.client.as_ref().unwrap();
+        let projs = client.get_projects_list_beta().await?.projects;
+
+        let theme = ColorfulTheme::default();
+
+        println!("Which project do you want to link to this directory?");
+        let mut items = projs.iter().map(|p| p.name.clone()).collect::<Vec<_>>();
+        items.extend_from_slice(&["[CREATE NEW]".to_string()]);
+        let index = Select::with_theme(&theme)
+            .items(&items)
+            .default(0)
+            .interact()?;
+
+        // if last item selected (Create new)
+        let project = if index == projs.len() {
+            let name: String = Input::with_theme(&theme)
+                .with_prompt("Project name")
+                .interact()?;
+
+            let project = client.create_project_beta(&name).await?;
+            println!("Created project '{}' with id {}", project.name, project.id);
+
+            project
+        } else {
+            projs[index].clone()
+        };
+
+        println!(
+            "Linking to project '{}' with id {}",
+            project.name, project.id
+        );
+        self.ctx.save_local_internal(project.id.clone())?;
+
+        Ok(())
     }
 
     async fn account(&self) -> Result<()> {
@@ -3295,13 +3340,13 @@ mod tests {
         dunce::canonicalize(path).unwrap()
     }
 
-    fn get_archive_entries(
+    async fn get_archive_entries(
         project_args: ProjectArgs,
         deploy_args: DeployArgs,
         zip: bool,
     ) -> Vec<String> {
         let mut shuttle = Shuttle::new(crate::Binary::CargoShuttle).unwrap();
-        shuttle.load_project(&project_args).unwrap();
+        shuttle.load_project(&project_args).await.unwrap();
 
         let archive = shuttle
             .make_archive(deploy_args.secret_args.secrets, zip)
@@ -3334,8 +3379,8 @@ mod tests {
         }
     }
 
-    #[test]
-    fn make_archive_respect_rules() {
+    #[tokio::test]
+    async fn make_archive_respect_rules() {
         let working_directory = canonicalize(path_from_workspace_root(
             "cargo-shuttle/tests/resources/archiving",
         ))
@@ -3355,7 +3400,8 @@ mod tests {
             working_directory: working_directory.clone(),
             name: Some("archiving-test".to_owned()),
         };
-        let mut entries = get_archive_entries(project_args.clone(), Default::default(), false);
+        let mut entries =
+            get_archive_entries(project_args.clone(), Default::default(), false).await;
         entries.sort();
 
         let expected = vec![
@@ -3378,7 +3424,7 @@ mod tests {
         assert_eq!(entries, expected);
 
         // check that zip behaves the same way
-        let mut entries = get_archive_entries(project_args.clone(), Default::default(), true);
+        let mut entries = get_archive_entries(project_args.clone(), Default::default(), true).await;
         entries.sort();
         assert_eq!(entries, expected);
 
@@ -3392,7 +3438,8 @@ mod tests {
                 ..Default::default()
             },
             false,
-        );
+        )
+        .await;
         entries.sort();
 
         assert_eq!(
@@ -3417,15 +3464,15 @@ mod tests {
         );
     }
 
-    #[test]
-    fn finds_workspace_root() {
+    #[tokio::test]
+    async fn finds_workspace_root() {
         let project_args = ProjectArgs {
             working_directory: path_from_workspace_root("examples/axum/hello-world/src"),
             name: None,
         };
 
         let mut shuttle = Shuttle::new(crate::Binary::CargoShuttle).unwrap();
-        shuttle.load_project(&project_args).unwrap();
+        shuttle.load_project(&project_args).await.unwrap();
 
         assert_eq!(
             project_args.working_directory,

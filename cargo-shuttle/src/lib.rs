@@ -319,7 +319,7 @@ impl Shuttle {
             Command::Project(cmd) => match cmd {
                 ProjectCommand::Start(ProjectStartArgs { idle_minutes }) => {
                     if self.beta {
-                        self.project_start_beta().await
+                        self.project_create_beta().await
                     } else {
                         self.project_start(idle_minutes).await
                     }
@@ -897,11 +897,11 @@ impl Shuttle {
 
     async fn stop_beta(&self) -> Result<()> {
         let client = self.client.as_ref().unwrap();
-        let p = self.ctx.project_name();
-        let res = client.stop_service_beta(p).await?;
+        let pid = self.ctx.project_id();
+        let res = client.stop_service_beta(pid).await?;
         println!("{res}");
         wait_with_spinner(2000, |_, pb| async move {
-            let deployment = client.get_current_deployment_beta(p).await?;
+            let deployment = client.get_current_deployment_beta(pid).await?;
 
             let get_cleanup = |d: Option<DeploymentResponseBeta>| {
                 move || {
@@ -1041,16 +1041,13 @@ impl Shuttle {
         }
         // TODO: implement logs range
         let client = self.client.as_ref().unwrap();
-        let proj_name = self.ctx.project_name();
+        let pid = self.ctx.project_id();
         let logs = if args.all_deployments {
-            client.get_project_logs_beta(proj_name).await?.logs
+            client.get_project_logs_beta(pid).await?.logs
         } else {
             let id = if args.latest {
                 // Find latest deployment (not always an active one)
-                let deployments = client
-                    .get_deployments_beta(proj_name, 1, 1)
-                    .await?
-                    .deployments;
+                let deployments = client.get_deployments_beta(pid, 1, 1).await?.deployments;
                 let Some(most_recent) = deployments.first() else {
                     println!("No deployments found");
                     return Ok(());
@@ -1060,14 +1057,14 @@ impl Shuttle {
             } else if let Some(id) = args.id {
                 id
             } else {
-                let Some(current) = client.get_current_deployment_beta(proj_name).await? else {
+                let Some(current) = client.get_current_deployment_beta(pid).await? else {
                     println!("No deployments found");
                     return Ok(());
                 };
                 eprintln!("Getting logs from: {}", current.id);
                 current.id
             };
-            client.get_deployment_logs_beta(proj_name, &id).await?.logs
+            client.get_deployment_logs_beta(pid, &id).await?.logs
         };
         for log in logs {
             if args.raw {
@@ -1184,7 +1181,7 @@ impl Shuttle {
 
         let deployments_len = if self.beta {
             let mut deployments = client
-                .get_deployments_beta(proj_name, page as i32, limit as i32)
+                .get_deployments_beta(self.ctx.project_id(), page as i32, limit as i32)
                 .await?
                 .deployments;
             let page_hint = if deployments.len() == limit as usize {
@@ -1236,16 +1233,11 @@ impl Shuttle {
         let client = self.client.as_ref().unwrap();
 
         if self.beta {
+            let pid = self.ctx.project_id();
             let deployment = match deployment_id {
-                Some(id) => {
-                    client
-                        .get_deployment_beta(self.ctx.project_name(), &id)
-                        .await
-                }
+                Some(id) => client.get_deployment_beta(pid, &id).await,
                 None => {
-                    let d = client
-                        .get_current_deployment_beta(self.ctx.project_name())
-                        .await?;
+                    let d = client.get_current_deployment_beta(pid).await?;
                     let Some(d) = d else {
                         println!("No deployment found");
                         return Ok(());
@@ -1292,16 +1284,10 @@ impl Shuttle {
 
     async fn resources_list_beta(&self, table_args: TableArgs, show_secrets: bool) -> Result<()> {
         let client = self.client.as_ref().unwrap();
-        let resources = client
-            .get_service_resources_beta(self.ctx.project_name())
-            .await?
-            .resources;
-        let table = get_resource_tables_beta(
-            resources.as_slice(),
-            self.ctx.project_name(),
-            table_args.raw,
-            show_secrets,
-        );
+        let pid = self.ctx.project_id();
+        let resources = client.get_service_resources_beta(pid).await?.resources;
+        let table =
+            get_resource_tables_beta(resources.as_slice(), pid, table_args.raw, show_secrets);
 
         println!("{table}");
 
@@ -1340,7 +1326,7 @@ impl Shuttle {
 
         if self.beta {
             let msg = client
-                .delete_service_resource_beta(self.ctx.project_name(), resource_type)
+                .delete_service_resource_beta(self.ctx.project_id(), resource_type)
                 .await?;
             println!("{msg}");
         } else {
@@ -1366,7 +1352,7 @@ impl Shuttle {
     async fn list_certificates(&self, table_args: TableArgs) -> Result<()> {
         let client = self.client.as_ref().unwrap();
         let certs = client
-            .list_certificates_beta(self.ctx.project_name())
+            .list_certificates_beta(self.ctx.project_id())
             .await?
             .certificates;
 
@@ -1378,7 +1364,7 @@ impl Shuttle {
     async fn add_certificate(&self, domain: String) -> Result<()> {
         let client = self.client.as_ref().unwrap();
         let cert = client
-            .add_certificate_beta(self.ctx.project_name(), domain.clone())
+            .add_certificate_beta(self.ctx.project_id(), domain.clone())
             .await?;
 
         println!("Added certificate for {}", cert.subject);
@@ -1411,7 +1397,7 @@ impl Shuttle {
         }
 
         let msg = client
-            .delete_certificate_beta(self.ctx.project_name(), domain.clone())
+            .delete_certificate_beta(self.ctx.project_id(), domain.clone())
             .await?;
         println!("{msg}");
 
@@ -2307,7 +2293,7 @@ impl Shuttle {
 
                 let deployment = client
                     .deploy_beta(
-                        project_name,
+                        self.ctx.project_id(),
                         DeploymentRequestBeta::Image(deployment_req_image_beta),
                     )
                     .await?;
@@ -2421,8 +2407,10 @@ impl Shuttle {
         if self.beta {
             // TODO: upload secrets separately
 
+            let pid = self.ctx.project_id();
+
             eprintln!("Uploading code...");
-            let arch = client.upload_archive_beta(project_name, archive).await?;
+            let arch = client.upload_archive_beta(pid, archive).await?;
             deployment_req_buildarch_beta.archive_version_id = arch.archive_version_id;
             deployment_req_buildarch_beta.build_meta = Some(BuildMetaBeta {
                 git_commit_id: deployment_req.git_commit_id,
@@ -2434,7 +2422,7 @@ impl Shuttle {
             eprintln!("Creating deployment...");
             let deployment = client
                 .deploy_beta(
-                    project_name,
+                    pid,
                     DeploymentRequestBeta::BuildArchive(deployment_req_buildarch_beta),
                 )
                 .await?;
@@ -2446,7 +2434,7 @@ impl Shuttle {
 
             let id = &deployment.id;
             wait_with_spinner(2000, |_, pb| async move {
-                let deployment = client.get_deployment_beta(project_name, id).await?;
+                let deployment = client.get_deployment_beta(pid, id).await?;
 
                 let state = deployment.state.clone();
                 pb.set_message(deployment.to_string_summary_colored());
@@ -2462,11 +2450,7 @@ impl Shuttle {
                     | DeploymentStateBeta::Stopping
                     | DeploymentStateBeta::Unknown => Ok(Some(cleanup)),
                     DeploymentStateBeta::Failed => {
-                        for log in client
-                            .get_deployment_logs_beta(project_name, id)
-                            .await?
-                            .logs
-                        {
+                        for log in client.get_deployment_logs_beta(pid, id).await?.logs {
                             if args.raw {
                                 println!("{}", log.line);
                             } else {
@@ -2484,16 +2468,12 @@ impl Shuttle {
 
         deployment_req.data = archive;
         let deployment = client
-            .deploy(self.ctx.project_name(), deployment_req)
+            .deploy(project_name, deployment_req)
             .await
             .map_err(suggestions::deploy::deploy_request_failure)?;
 
         let mut stream = client
-            .get_logs_ws(
-                self.ctx.project_name(),
-                &deployment.id.to_string(),
-                LogsRange::All,
-            )
+            .get_logs_ws(project_name, &deployment.id.to_string(), LogsRange::All)
             .await
             .map_err(|err| {
                 suggestions::deploy::deployment_setup_failure(
@@ -2613,11 +2593,7 @@ impl Shuttle {
                 // the terminal isn't completely spammed
                 sleep(Duration::from_millis(100)).await;
                 stream = client
-                    .get_logs_ws(
-                        self.ctx.project_name(),
-                        &deployment.id.to_string(),
-                        LogsRange::All,
-                    )
+                    .get_logs_ws(project_name, &deployment.id.to_string(), LogsRange::All)
                     .await
                     .map_err(|err| {
                         suggestions::deploy::deployment_setup_failure(
@@ -2634,7 +2610,7 @@ impl Shuttle {
         sleep(Duration::from_millis(500)).await;
 
         let deployment = client
-            .get_deployment_details(self.ctx.project_name(), &deployment.id)
+            .get_deployment_details(project_name, &deployment.id)
             .await
             .map_err(|err| {
                 suggestions::deploy::deployment_setup_failure(
@@ -2680,11 +2656,9 @@ impl Shuttle {
             bail!("");
         }
 
-        let service = client.get_service(self.ctx.project_name()).await?;
-        let resources = client
-            .get_service_resources(self.ctx.project_name())
-            .await?;
-        let resources = get_resource_tables(&resources, self.ctx.project_name(), false, false);
+        let service = client.get_service(project_name).await?;
+        let resources = client.get_service_resources(project_name).await?;
+        let resources = get_resource_tables(&resources, project_name, false, false);
 
         println!("{resources}{service}");
 
@@ -2745,7 +2719,7 @@ impl Shuttle {
         Ok(())
     }
 
-    async fn project_start_beta(&self) -> Result<()> {
+    async fn project_create_beta(&self) -> Result<()> {
         let client = self.client.as_ref().unwrap();
         let name = self.ctx.project_name();
         let project = client.create_project_beta(name).await?;
@@ -2858,7 +2832,7 @@ impl Shuttle {
     }
     async fn project_status_beta(&self) -> Result<()> {
         let client = self.client.as_ref().unwrap();
-        let project = client.get_project_beta(self.ctx.project_name()).await?;
+        let project = client.get_project_beta(self.ctx.project_id()).await?;
         print!("{}", project.to_string_colored());
 
         Ok(())
@@ -2956,7 +2930,7 @@ impl Shuttle {
         }
 
         if self.beta {
-            client.delete_project_beta(self.ctx.project_name()).await?
+            client.delete_project_beta(self.ctx.project_id()).await?
         } else {
             client
                 .delete_project(self.ctx.project_name())

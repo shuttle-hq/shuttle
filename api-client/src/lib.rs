@@ -266,7 +266,7 @@ impl ShuttleApiClient {
     }
     pub async fn create_project_beta(&self, name: &str) -> Result<project::ProjectResponseBeta> {
         self.post_json(
-            format!("/projects"),
+            "/projects",
             Some(ProjectCreateRequestBeta {
                 name: name.to_string(),
             }),

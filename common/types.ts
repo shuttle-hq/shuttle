@@ -130,6 +130,10 @@ export interface LogsResponseBeta {
 	logs: LogItemBeta[];
 }
 
+export interface ProjectCreateRequestBeta {
+	name: string;
+}
+
 export interface ProjectResponseBeta {
 	id: string;
 	/** Project owner */

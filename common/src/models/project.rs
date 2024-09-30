@@ -29,6 +29,12 @@ pub struct Response {
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 #[typeshare::typeshare]
+pub struct ProjectCreateRequestBeta {
+    pub name: String,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+#[typeshare::typeshare]
 pub struct ProjectResponseBeta {
     pub id: String,
     /// Project owner

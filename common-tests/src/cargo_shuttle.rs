@@ -41,7 +41,7 @@ pub async fn cargo_shuttle_run(working_directory: &str, external: bool) -> Strin
                 api_url: Some("http://shuttle.invalid:80".to_string()),
                 project_args: ProjectArgs {
                     working_directory: working_directory.clone(),
-                    name: None,
+                    name_or_id: None,
                 },
                 offline: false,
                 debug: false,

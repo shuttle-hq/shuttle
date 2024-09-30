@@ -51,7 +51,7 @@ pub fn generate_project(
     // if the crate name was not updated, set it in Shuttle.toml instead
     edit_shuttle_toml(&path, (!crate_name_set).then_some(name))
         .context("Failed to edit Shuttle.toml")?;
-    create_ignore_file(&path, if no_git { ".ignore" } else { ".gitignore" })
+    create_or_update_ignore_file(&path.join(if no_git { ".ignore" } else { ".gitignore" }))
         .context("Failed to create .gitignore file")?;
 
     copy_dirs(&path, &dest, GitDir::Ignore)
@@ -273,18 +273,17 @@ fn edit_shuttle_toml(path: &Path, set_name: Option<&str>) -> Result<()> {
     Ok(())
 }
 
-/// Adds any missing recommended ignore rules to .gitignore or .ignore depending on if git is used.
-fn create_ignore_file(path: &Path, name: &str) -> Result<()> {
-    let path = path.join(name);
-    let mut contents = std::fs::read_to_string(&path).unwrap_or_default();
+/// Adds any missing recommended ignore rules to an ignore file (usually .gitignore)
+pub fn create_or_update_ignore_file(path: &Path) -> Result<()> {
+    let mut contents = std::fs::read_to_string(path).unwrap_or_default();
 
-    for rule in ["/target", ".shuttle-storage", "Secrets*.toml"] {
+    for rule in ["/target", ".shuttle*", "Secrets*.toml"] {
         if !contents.lines().any(|l| l == rule) {
             writeln!(&mut contents, "{rule}")?;
         }
     }
 
-    std::fs::write(&path, contents)?;
+    std::fs::write(path, contents)?;
 
     Ok(())
 }

@@ -30,16 +30,16 @@ pub struct ShuttleArgs {
     pub project_args: ProjectArgs,
     /// Run this command against the API at the supplied URL
     /// (allows targeting a custom deployed instance for this command only, mainly for development)
-    #[arg(long, env = "SHUTTLE_API")]
+    #[arg(global = true, long, env = "SHUTTLE_API")]
     pub api_url: Option<String>,
     /// Disable network requests that are not strictly necessary. Limits some features.
-    #[arg(long, env = "SHUTTLE_OFFLINE")]
+    #[arg(global = true, long, env = "SHUTTLE_OFFLINE")]
     pub offline: bool,
     /// Turn on tracing output for Shuttle libraries. (WARNING: can print sensitive data)
-    #[arg(long, env = "SHUTTLE_DEBUG")]
+    #[arg(global = true, long, env = "SHUTTLE_DEBUG")]
     pub debug: bool,
     /// Target Shuttle's development environment
-    #[arg(long, env = "SHUTTLE_BETA", hide = true)]
+    #[arg(global = true, long, env = "SHUTTLE_BETA", hide = true)]
     pub beta: bool,
 
     #[command(subcommand)]
@@ -52,9 +52,10 @@ pub struct ProjectArgs {
     /// Specify the working directory
     #[arg(global = true, long, visible_alias = "wd", default_value = ".", value_parser = OsStringValueParser::new().try_map(parse_path))]
     pub working_directory: PathBuf,
-    /// Specify the name of the project (overrides crate name)
-    #[arg(global = true, long)]
-    pub name: Option<String>,
+    /// Specify the name or id of the project (overrides crate name)
+    #[arg(global = true, long = "name", visible_alias = "id")]
+    // in alpha mode, this is always a name
+    pub name_or_id: Option<String>,
 }
 
 impl ProjectArgs {
@@ -269,6 +270,8 @@ pub enum ProjectCommand {
     /// Delete a project and all linked data
     #[command(visible_alias = "rm")]
     Delete(ConfirmationArgs),
+    /// Link this workspace to a Shuttle project
+    Link,
 }
 
 #[derive(Parser, Debug)]
@@ -597,7 +600,7 @@ mod tests {
     fn workspace_path() {
         let project_args = ProjectArgs {
             working_directory: path_from_workspace_root("examples/axum/hello-world/src"),
-            name: None,
+            name_or_id: None,
         };
 
         assert_eq!(
@@ -610,7 +613,7 @@ mod tests {
     fn project_name() {
         let project_args = ProjectArgs {
             working_directory: path_from_workspace_root("examples/axum/hello-world/src"),
-            name: None,
+            name_or_id: None,
         };
 
         assert_eq!(
@@ -625,7 +628,7 @@ mod tests {
             working_directory: path_from_workspace_root(
                 "examples/rocket/workspace/hello-world/src",
             ),
-            name: None,
+            name_or_id: None,
         };
 
         assert_eq!(

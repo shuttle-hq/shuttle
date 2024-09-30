@@ -30,16 +30,16 @@ pub struct ShuttleArgs {
     pub project_args: ProjectArgs,
     /// Run this command against the API at the supplied URL
     /// (allows targeting a custom deployed instance for this command only, mainly for development)
-    #[arg(long, env = "SHUTTLE_API")]
+    #[arg(global = true, long, env = "SHUTTLE_API")]
     pub api_url: Option<String>,
     /// Disable network requests that are not strictly necessary. Limits some features.
-    #[arg(long, env = "SHUTTLE_OFFLINE")]
+    #[arg(global = true, long, env = "SHUTTLE_OFFLINE")]
     pub offline: bool,
     /// Turn on tracing output for Shuttle libraries. (WARNING: can print sensitive data)
-    #[arg(long, env = "SHUTTLE_DEBUG")]
+    #[arg(global = true, long, env = "SHUTTLE_DEBUG")]
     pub debug: bool,
     /// Target Shuttle's development environment
-    #[arg(long, env = "SHUTTLE_BETA", hide = true)]
+    #[arg(global = true, long, env = "SHUTTLE_BETA", hide = true)]
     pub beta: bool,
 
     #[command(subcommand)]
@@ -269,6 +269,8 @@ pub enum ProjectCommand {
     /// Delete a project and all linked data
     #[command(visible_alias = "rm")]
     Delete(ConfirmationArgs),
+    /// Link this workspace to a Shuttle project
+    Link,
 }
 
 #[derive(Parser, Debug)]

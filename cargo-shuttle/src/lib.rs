@@ -177,7 +177,9 @@ impl Shuttle {
             }
         } else if matches!(
             args.cmd,
-            Command::Deployment(DeploymentCommand::Stop) | Command::Account
+            Command::Deployment(DeploymentCommand::Stop)
+                | Command::Account
+                | Command::Project(ProjectCommand::Link)
         ) {
             bail!("This command is not supported on the legacy platform. Set --beta or SHUTTLE_BETA=true.");
         }
@@ -239,6 +241,7 @@ impl Shuttle {
                         | ProjectCommand::Restart { .. }
                         | ProjectCommand::Status { .. }
                         | ProjectCommand::Delete { .. }
+                        | ProjectCommand::Link
                 )
                 | Command::Stop
                 | Command::Clean
@@ -246,7 +249,11 @@ impl Shuttle {
                 | Command::Logs { .. }
                 | Command::Run(..)
         ) {
-            self.load_project(&args.project_args).await?;
+            self.load_project(
+                &args.project_args,
+                matches!(args.cmd, Command::Project(ProjectCommand::Link)),
+            )
+            .await?;
         }
 
         let res = match args.cmd {
@@ -337,6 +344,7 @@ impl Shuttle {
                 ProjectCommand::List { table, .. } => self.projects_list(table).await,
                 ProjectCommand::Stop => self.project_stop().await,
                 ProjectCommand::Delete(ConfirmationArgs { yes }) => self.project_delete(yes).await,
+                ProjectCommand::Link => Ok(()), // logic is done in `load_local`
             },
             Command::Upgrade { preview } => update_cargo_shuttle(preview).await,
         };
@@ -686,7 +694,7 @@ impl Shuttle {
             // so `load_project` is ran with the correct project path
             project_args.working_directory.clone_from(&path);
 
-            self.load_project(&project_args).await?;
+            self.load_project(&project_args, false).await?;
             self.project_start(DEFAULT_IDLE_MINUTES).await?;
         }
 
@@ -768,7 +776,7 @@ impl Shuttle {
         }
     }
 
-    pub async fn load_project(&mut self, project_args: &ProjectArgs) -> Result<()> {
+    pub async fn load_project(&mut self, project_args: &ProjectArgs, link_cmd: bool) -> Result<()> {
         trace!("project arguments: {project_args:?}");
 
         self.ctx.load_local(project_args)?;
@@ -790,52 +798,64 @@ impl Shuttle {
                         .find(|p| p.name == *name);
                     if let Some(proj) = proj {
                         trace!("found project by name");
-                        self.ctx.set_project_id(proj.id)
+                        self.ctx.set_project_id(proj.id);
                     }
                 }
+                // if called from Link command, command-line override is saved to file
+                if link_cmd {
+                    eprintln!("Linking to project {}", self.ctx.project_id());
+                    self.ctx.save_local_internal()?;
+                    return Ok(());
+                }
             }
-            // if still no project id is known, prompt to link it
-            if !self.ctx.project_id_found() {
-                self.project_link().await?;
+            // if project id is still not known or an explicit linking is wanted, start the linking prompt
+            if !self.ctx.project_id_found() || link_cmd {
+                self.project_link(None).await?;
             }
         }
 
         Ok(())
     }
 
-    async fn project_link(&mut self) -> Result<()> {
+    async fn project_link(&mut self, id_or_name: Option<String>) -> Result<()> {
         let client = self.client.as_ref().unwrap();
         let projs = client.get_projects_list_beta().await?.projects;
 
         let theme = ColorfulTheme::default();
 
-        println!("Which project do you want to link to this directory?");
-        let mut items = projs.iter().map(|p| p.name.clone()).collect::<Vec<_>>();
-        items.extend_from_slice(&["[CREATE NEW]".to_string()]);
-        let index = Select::with_theme(&theme)
-            .items(&items)
-            .default(0)
-            .interact()?;
+        let proj = if let Some(id_or_name) = id_or_name {
+            projs
+                .into_iter()
+                .find(|p| p.id == id_or_name || p.name == id_or_name)
+                .ok_or(anyhow!("Did not find project '{id_or_name}'."))?
+        } else {
+            eprintln!("Which project do you want to link this directory to?");
 
-        // if last item selected (Create new)
-        let project = if index == projs.len() {
-            let name: String = Input::with_theme(&theme)
-                .with_prompt("Project name")
+            let mut items = projs.iter().map(|p| p.name.clone()).collect::<Vec<_>>();
+            items.extend_from_slice(&["[CREATE NEW]".to_string()]);
+            let index = Select::with_theme(&theme)
+                .items(&items)
+                .default(0)
                 .interact()?;
 
-            let project = client.create_project_beta(&name).await?;
-            println!("Created project '{}' with id {}", project.name, project.id);
+            // if last item selected (Create new)
+            if index == projs.len() {
+                let name: String = Input::with_theme(&theme)
+                    .with_prompt("Project name")
+                    .interact()?;
 
-            project
-        } else {
-            projs[index].clone()
+                let project = client.create_project_beta(&name).await?;
+                eprintln!("Created project '{}' with id {}", project.name, project.id);
+
+                project
+            } else {
+                projs[index].clone()
+            }
         };
 
-        println!(
-            "Linking to project '{}' with id {}",
-            project.name, project.id
-        );
-        self.ctx.save_local_internal(project.id.clone())?;
+        eprintln!("Linking to project '{}' with id {}", proj.name, proj.id);
+        self.ctx.set_project_id(proj.id);
+        self.ctx.save_local_internal()?;
 
         Ok(())
     }
@@ -3341,7 +3361,7 @@ mod tests {
         zip: bool,
     ) -> Vec<String> {
         let mut shuttle = Shuttle::new(crate::Binary::CargoShuttle).unwrap();
-        shuttle.load_project(&project_args).await.unwrap();
+        shuttle.load_project(&project_args, false).await.unwrap();
 
         let archive = shuttle
             .make_archive(deploy_args.secret_args.secrets, zip)
@@ -3467,7 +3487,7 @@ mod tests {
         };
 
         let mut shuttle = Shuttle::new(crate::Binary::CargoShuttle).unwrap();
-        shuttle.load_project(&project_args).await.unwrap();
+        shuttle.load_project(&project_args, false).await.unwrap();
 
         assert_eq!(
             project_args.working_directory,

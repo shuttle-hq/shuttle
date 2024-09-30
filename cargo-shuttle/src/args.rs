@@ -53,8 +53,9 @@ pub struct ProjectArgs {
     #[arg(global = true, long, visible_alias = "wd", default_value = ".", value_parser = OsStringValueParser::new().try_map(parse_path))]
     pub working_directory: PathBuf,
     /// Specify the name or id of the project (overrides crate name)
-    #[arg(global = true, long, visible_alias = "id")]
-    pub name: Option<String>,
+    #[arg(global = true, long = "name", visible_alias = "id")]
+    // in alpha mode, this is always a name
+    pub name_or_id: Option<String>,
 }
 
 impl ProjectArgs {
@@ -599,7 +600,7 @@ mod tests {
     fn workspace_path() {
         let project_args = ProjectArgs {
             working_directory: path_from_workspace_root("examples/axum/hello-world/src"),
-            name: None,
+            name_or_id: None,
         };
 
         assert_eq!(
@@ -612,7 +613,7 @@ mod tests {
     fn project_name() {
         let project_args = ProjectArgs {
             working_directory: path_from_workspace_root("examples/axum/hello-world/src"),
-            name: None,
+            name_or_id: None,
         };
 
         assert_eq!(
@@ -627,7 +628,7 @@ mod tests {
             working_directory: path_from_workspace_root(
                 "examples/rocket/workspace/hello-world/src",
             ),
-            name: None,
+            name_or_id: None,
         };
 
         assert_eq!(

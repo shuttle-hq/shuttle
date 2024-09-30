@@ -417,7 +417,7 @@ impl Shuttle {
         let git_template = args.git_template()?;
         let no_git = args.no_git;
 
-        let needs_name = project_args.name.is_none();
+        let needs_name = project_args.name_or_id.is_none();
         let needs_template = git_template.is_none();
         let needs_path = !provided_path_to_init;
         let needs_login = self.ctx.api_key().is_err() && args.login_args.api_key.is_none();
@@ -447,7 +447,7 @@ impl Shuttle {
         let mut prev_name: Option<String> = None;
         loop {
             // prompt if interactive
-            let name: String = if let Some(name) = project_args.name.clone() {
+            let name: String = if let Some(name) = project_args.name_or_id.clone() {
                 name
             } else {
                 // not using `validate_with` due to being blocking.
@@ -458,7 +458,7 @@ impl Shuttle {
             let force_name = args.force_name
                 || (needs_name && prev_name.as_ref().is_some_and(|prev| prev == &name));
             if force_name {
-                project_args.name = Some(name);
+                project_args.name_or_id = Some(name);
                 break;
             }
             // validate and take action based on result
@@ -485,9 +485,12 @@ impl Shuttle {
 
         // 3. Confirm the project directory
         let path = if needs_path {
-            let path = args
-                .path
-                .join(project_args.name.as_ref().expect("name should be set"));
+            let path = args.path.join(
+                project_args
+                    .name_or_id
+                    .as_ref()
+                    .expect("name should be set"),
+            );
 
             loop {
                 println!("Where should we create this project?");
@@ -653,7 +656,7 @@ impl Shuttle {
         crate::init::generate_project(
             path.clone(),
             project_args
-                .name
+                .name_or_id
                 .as_ref()
                 .expect("to have a project name provided"),
             &template,
@@ -673,7 +676,7 @@ impl Shuttle {
                 .with_prompt(format!(
                     r#"Claim the project name "{}" by starting a project container on Shuttle?"#,
                     project_args
-                        .name
+                        .name_or_id
                         .as_ref()
                         .expect("to have a project name provided")
                 ))
@@ -738,7 +741,7 @@ impl Shuttle {
             Ok(true) => {
                 // inner value is inverted on beta
                 if self.beta {
-                    project_args.name = Some(name);
+                    project_args.name_or_id = Some(name);
                     return true;
                 }
 
@@ -749,7 +752,7 @@ impl Shuttle {
             }
             // not possible on beta
             Ok(false) => {
-                project_args.name = Some(name);
+                project_args.name_or_id = Some(name);
 
                 true
             }
@@ -765,7 +768,7 @@ impl Shuttle {
                 }
                 // Else, the API error was about something else.
                 // Ignore and keep going to not prevent the flow of the init command.
-                project_args.name = Some(name);
+                project_args.name_or_id = Some(name);
                 println!(
                     "{}",
                     "Failed to check if project name is available.".yellow()
@@ -784,7 +787,7 @@ impl Shuttle {
             // load project id from file if exists
             self.ctx.load_local_internal(project_args)?;
             // translate project name to project id if a name was given
-            if let Some(name) = project_args.name.as_ref() {
+            if let Some(name) = project_args.name_or_id.as_ref() {
                 if !name.starts_with("proj_") {
                     trace!("mapping project name to project id");
                     let proj = self
@@ -3413,7 +3416,7 @@ mod tests {
 
         let project_args = ProjectArgs {
             working_directory: working_directory.clone(),
-            name: Some("archiving-test".to_owned()),
+            name_or_id: Some("archiving-test".to_owned()),
         };
         let mut entries =
             get_archive_entries(project_args.clone(), Default::default(), false).await;
@@ -3483,7 +3486,7 @@ mod tests {
     async fn finds_workspace_root() {
         let project_args = ProjectArgs {
             working_directory: path_from_workspace_root("examples/axum/hello-world/src"),
-            name: None,
+            name_or_id: None,
         };
 
         let mut shuttle = Shuttle::new(crate::Binary::CargoShuttle).unwrap();

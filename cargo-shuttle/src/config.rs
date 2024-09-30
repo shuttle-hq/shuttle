@@ -292,7 +292,7 @@ impl RequestContext {
         // Project id is preferred in this order:
         // 1. Name given on command line
         // 2. Name from .shuttle/config.toml file
-        match (&project_args.name, &config.id) {
+        match (&project_args.name_or_id, &config.id) {
             // Command-line name parameter trumps everything
             (Some(id_from_args), _) => {
                 trace!("using command-line project id");
@@ -377,7 +377,7 @@ impl RequestContext {
         // 2. Name from Shuttle.toml file
         // 3. Name from Cargo.toml package if it's a crate
         // 4. Name from the workspace directory if it's a workspace
-        match (&project_args.name, &config.name) {
+        match (&project_args.name_or_id, &config.name) {
             // Command-line name parameter trumps everything
             (Some(name_from_args), _) => {
                 trace!("using command-line project name");
@@ -537,7 +537,7 @@ mod tests {
     fn get_local_config_finds_name_in_shuttle_toml() {
         let project_args = ProjectArgs {
             working_directory: path_from_workspace_root("examples/axum/hello-world/"),
-            name: None,
+            name_or_id: None,
         };
 
         let local_config = RequestContext::get_local_config(&project_args).unwrap();
@@ -549,7 +549,7 @@ mod tests {
     fn get_local_config_finds_name_from_workspace_dir() {
         let project_args = ProjectArgs {
             working_directory: path_from_workspace_root("examples/rocket/workspace/hello-world/"),
-            name: None,
+            name_or_id: None,
         };
 
         let local_config = RequestContext::get_local_config(&project_args).unwrap();
@@ -561,7 +561,7 @@ mod tests {
     fn setting_name_overrides_name_in_config() {
         let project_args = ProjectArgs {
             working_directory: path_from_workspace_root("examples/axum/hello-world/"),
-            name: Some("my-fancy-project-name".to_owned()),
+            name_or_id: Some("my-fancy-project-name".to_owned()),
         };
 
         let local_config = RequestContext::get_local_config(&project_args).unwrap();

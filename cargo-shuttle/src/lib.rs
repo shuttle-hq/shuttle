@@ -178,7 +178,7 @@ impl Shuttle {
                 | Command::Account
                 | Command::Project(ProjectCommand::Link)
         ) {
-            bail!("This command is not supported on the old platform (shuttle.rs).");
+            bail!("This command is not supported on the OLD platform (shuttle.rs).");
         }
 
         if self.beta {
@@ -190,7 +190,7 @@ impl Shuttle {
             if (!self.beta && url != API_URL_DEFAULT) || (self.beta && url != API_URL_BETA) {
                 eprintln!(
                     "{}",
-                    format!("INFO: Targeting non-standard API: {url}").yellow(),
+                    format!("INFO: Targeting non-default API: {url}").yellow(),
                 );
             }
             if url.ends_with('/') {
@@ -1124,7 +1124,7 @@ impl Shuttle {
 
     async fn logs_beta(&self, args: LogsArgs) -> Result<()> {
         if args.follow {
-            eprintln!("Streamed logs are not yet supported on beta.");
+            eprintln!("Streamed logs are not yet supported on the new platform.");
             return Ok(());
         }
         // TODO: implement logs range

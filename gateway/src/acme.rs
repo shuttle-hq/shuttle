@@ -278,7 +278,7 @@ impl AcmeClient {
 
         // Wait 60 secs to insert the record manually and for it to
         // propagate before moving on
-        sleep(Duration::from_secs(60)).await;
+        sleep(Duration::from_secs(50)).await;
 
         order
             .set_challenge_ready(&challenge.url)

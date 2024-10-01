@@ -71,11 +71,11 @@ service:
     traces:
       receivers: [otlp]
       processors: [attributes, batch]
-      exporters: [datadog, otlp]
+      exporters: [datadog]
     logs:
       receivers: [otlp]
       processors: [attributes, batch]
-      exporters: [datadog, otlp]
+      exporters: [datadog]
     metrics:
       receivers: [hostmetrics, prometheus/otel, otlp]
       processors: [attributes, batch]

@@ -3,12 +3,12 @@
 set -euo pipefail
 
 cat <<EOF
-     _           _   _   _      
- ___| |__  _   _| |_| |_| | ___ 
+     _           _   _   _
+ ___| |__  _   _| |_| |_| | ___
 / __| '_ \\| | | | __| __| |/ _ \\
 \__ \\ | | | |_| | |_| |_| |  __/
 |___/_| |_|\\__,_|\\__|\\__|_|\\___|
-                                
+
 https://www.shuttle.rs
 https://github.com/shuttle-hq/shuttle
 
@@ -49,10 +49,10 @@ _install_linux() {
     ;;
   "ubuntu" | "ubuntuwsl" | "debian" | "linuxmint" | "parrot" | "kali" | "elementary" | "pop")
     # TODO: distribute .deb packages via `cargo-deb` and install them here
-    _install_unsupported
+    _install_default
     ;;
   *)
-    _install_unsupported
+    _install_default
     ;;
   esac
 }
@@ -63,7 +63,7 @@ _install_arch_linux() {
     pacman_version=$(sudo pacman -Si cargo-shuttle | sed -n 's/^Version *: \(.*\)/\1/p')
     if [[ "${pacman_version}" != "${LATEST_VERSION#v}"* ]]; then
       echo "cargo-shuttle is not updated in the repos, ping @orhun!!!"
-      _install_unsupported
+      _install_default
     else
       echo "Installing with pacman"
       sudo pacman -S --noconfirm cargo-shuttle
@@ -84,7 +84,7 @@ _install_alpine_linux() {
         echo "@testing http://dl-cdn.alpinelinux.org/alpine/edge/testing" | tee -a /etc/apk/repositories
         apk update
       else
-        _install_unsupported
+        _install_default
         return 0
       fi
     fi
@@ -95,7 +95,7 @@ _install_alpine_linux() {
       apk_version=$(apk version cargo-shuttle | awk 'NR==2{print $3}')
       if [[ "${apk_version}" != "${LATEST_VERSION#v}"* ]]; then
         echo "cargo-shuttle is not updated in the testing repository, ping @orhun!!!"
-        _install_unsupported
+        _install_default
       else
         echo "cargo-shuttle is already up to date."
       fi
@@ -108,7 +108,7 @@ _install_alpine_linux() {
 
 # TODO: package cargo-shuttle for Homebrew
 _install_mac() {
-  _install_unsupported
+  _install_default
 }
 
 _install_binary() {
@@ -126,6 +126,8 @@ _install_binary() {
   tar -xzf "cargo-shuttle-$LATEST_VERSION-$target.tar.gz"
   echo "Installing to $HOME/.cargo/bin/cargo-shuttle"
   mv "cargo-shuttle-$target-$LATEST_VERSION/cargo-shuttle" "$HOME/.cargo/bin/"
+  echo "Installing to $HOME/.cargo/bin/shuttle"
+  mv "cargo-shuttle-$target-$LATEST_VERSION/shuttle" "$HOME/.cargo/bin/"
   popd >/dev/null || exit 1
   if [[ ":$PATH:" != *":$HOME/.cargo/bin:"* ]]; then
     echo "Add $HOME/.cargo/bin to PATH to run cargo-shuttle"
@@ -151,7 +153,7 @@ _install_with_cargo() {
   cargo install --locked cargo-shuttle
 }
 
-_install_unsupported() {
+_install_default() {
   echo "Installing with package manager is not supported"
 
   if command -v cargo-binstall &>/dev/null; then
@@ -166,7 +168,7 @@ _install_unsupported() {
     else
       echo "rustup was found, but cargo wasn't. Something is up with your install"
       exit 1
-    fi    
+    fi
   fi
 
   while true; do
@@ -205,7 +207,7 @@ fi
 case "$OSTYPE" in
 linux*) _install_linux ;;
 darwin*) _install_mac ;;
-*) _install_unsupported ;;
+*) _install_default ;;
 esac
 
 cat <<EOF

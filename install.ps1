@@ -72,6 +72,7 @@ Please file an issue if you encounter any problems!
         New-Item -ItemType Directory -Force "$TempDir\cargo-shuttle"
         tar.exe -xzf "$TempDir\cargo-shuttle.tar.gz" -C "$TempDir\cargo-shuttle"
         Move-Item -Force "$TempDir\cargo-shuttle\cargo-shuttle-x86_64-pc-windows-msvc-$LatestRelease\cargo-shuttle.exe" "$CargoHome\bin\cargo-shuttle.exe"
+        Move-Item -Force "$TempDir\cargo-shuttle\cargo-shuttle-x86_64-pc-windows-msvc-$LatestRelease\shuttle.exe" "$CargoHome\bin\shuttle.exe"
         Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "$TempDir\cargo-shuttle.tar.gz", "$TempDir\cargo-shuttle"
         Write-Host "Installed cargo-shuttle, try running ``cargo shuttle --help``" -ForegroundColor Green
         return

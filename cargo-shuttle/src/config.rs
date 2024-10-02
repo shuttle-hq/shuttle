@@ -154,6 +154,14 @@ pub struct ProjectConfig {
     // unused in cargo-shuttle, used in new platform builder.
     // is used here to validate the type if used.
     pub build_assets: Option<Vec<String>>,
+
+    pub deploy: Option<ProjectDeployConfig>,
+}
+/// Deployment command config
+#[derive(Deserialize, Serialize, Default)]
+pub struct ProjectDeployConfig {
+    /// set to true to deny deployments with uncommited changes. (can use `--allow-dirty`)
+    pub deny_dirty: Option<bool>,
 }
 
 /// .shuttle/config.toml schema (internal project-local config)
@@ -485,6 +493,19 @@ impl RequestContext {
             .unwrap()
             .assets
             .as_ref()
+    }
+
+    /// # Panics
+    /// Panics if the project configuration has not been loaded.
+    pub fn deny_dirty(&self) -> Option<bool> {
+        self.project
+            .as_ref()
+            .unwrap()
+            .as_ref()
+            .unwrap()
+            .deploy
+            .as_ref()
+            .and_then(|d| d.deny_dirty)
     }
 
     /// Check if the current project id has been loaded.

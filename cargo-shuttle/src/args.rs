@@ -121,13 +121,13 @@ pub enum Command {
     /// Manage resources
     #[command(subcommand, visible_alias = "res")]
     Resource(ResourceCommand),
-    /// BETA: Manage SSL certificates for custom domains
-    #[command(subcommand, visible_alias = "cert", hide = true)]
+    /// Manage SSL certificates for custom domains
+    #[command(subcommand, visible_alias = "cert")]
     Certificate(CertificateCommand),
     /// Remove cargo build artifacts in the Shuttle environment
     Clean,
-    /// BETA: Show info about your Shuttle account
-    #[command(visible_alias = "acc", hide = true)]
+    /// Show info about your Shuttle account
+    #[command(visible_alias = "acc")]
     Account,
     /// Login to the Shuttle platform
     Login(LoginArgs),
@@ -188,8 +188,7 @@ pub enum DeploymentCommand {
         /// ID of deployment to get status for
         id: Option<String>,
     },
-    /// BETA: Stop running deployment(s)
-    #[command(hide = true)]
+    /// Stop running deployment(s)
     Stop,
 }
 
@@ -306,11 +305,11 @@ pub struct LogoutArgs {
 
 #[derive(Parser, Default)]
 pub struct DeployArgs {
-    /// BETA: Deploy this Docker image instead of building one
+    /// WIP: Deploy this Docker image instead of building one
     #[arg(long, short = 'i', hide = true)]
     pub image: Option<String>, // TODO?: Make this a subcommand instead? `cargo shuttle deploy image ...`
-    /// BETA: Don't follow the deployment status, exit after the deployment begins
-    #[arg(long, visible_alias = "nf", hide = true)]
+    /// Don't follow the deployment status, exit after the deployment begins
+    #[arg(long, visible_alias = "nf")]
     pub no_follow: bool,
 
     /// Allow deployment with uncommitted files

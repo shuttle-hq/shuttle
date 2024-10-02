@@ -1,0 +1,14 @@
+[package]
+name = "shuttle-firecrawl"
+version = "0.47.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "Shuttle plugin for connecting to Firecrawl"
+repository = "https://github.com/shuttle-hq/shuttle"
+keywords = ["shuttle-service", "firecrawl"]
+
+[dependencies]
+firecrawl = "0.1.0"
+async-trait = "0.1.56"
+serde = { version = "1.0.203", features = ["derive"] }
+shuttle-service = { path = "../../service", version = "0.47.0" }

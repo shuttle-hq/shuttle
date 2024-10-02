@@ -248,7 +248,8 @@ pub enum ProjectCommand {
     /// Check the status of this project's environment on Shuttle
     Status {
         #[arg(short, long)]
-        /// Follow status of project command
+        /// Follow status of project
+        // unused in beta (project has no state to follow)
         follow: bool,
     },
     /// Destroy this project's environment (container) on Shuttle

@@ -264,14 +264,16 @@ fn get_secrets_table_beta(
     let Some(secrets) = secrets.first() else {
         return String::new();
     };
+    let secrets = serde_json::from_value::<SecretStore>(secrets.output.clone()).unwrap();
+    if secrets.secrets.is_empty() {
+        return String::new();
+    }
 
     let mut table = Table::new();
     table
         .load_preset(if raw { NOTHING } else { UTF8_BORDERS_ONLY })
         .set_content_arrangement(ContentArrangement::Disabled)
         .set_header(vec!["Key"]);
-
-    let secrets = serde_json::from_value::<SecretStore>(secrets.output.clone()).unwrap();
 
     for key in secrets.secrets.keys() {
         table.add_row(vec![key]);

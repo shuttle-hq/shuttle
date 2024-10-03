@@ -209,6 +209,10 @@ impl Shuttle {
                 | Command::Stop
                 | Command::Clean
                 | Command::Project(..)
+        ) || (
+            // project linking on beta requires api client
+            // TODO: refactor so that beta local run does not need to know project id / always uses crate name ???
+            self.beta && matches!(args.cmd, Command::Run(..))
         ) {
             let client = ShuttleApiClient::new(
                 self.ctx.api_url(self.beta),
@@ -252,6 +256,9 @@ impl Shuttle {
             self.load_project(
                 &args.project_args,
                 matches!(args.cmd, Command::Project(ProjectCommand::Link)),
+                // only deploy should create a project if the provided name is not found in the project list.
+                // (project start should always make the POST call, it's an upsert operation)
+                matches!(args.cmd, Command::Deploy(..)),
             )
             .await?;
         }
@@ -343,7 +350,13 @@ impl Shuttle {
                 }
                 ProjectCommand::List { table, .. } => self.projects_list(table).await,
                 ProjectCommand::Stop => self.project_stop().await,
-                ProjectCommand::Delete(ConfirmationArgs { yes }) => self.project_delete(yes).await,
+                ProjectCommand::Delete(ConfirmationArgs { yes }) => {
+                    if self.beta {
+                        self.project_delete_beta(yes).await
+                    } else {
+                        self.project_delete(yes).await
+                    }
+                }
                 ProjectCommand::Link => Ok(()), // logic is done in `load_local`
             },
             Command::Upgrade { preview } => update_cargo_shuttle(preview).await,
@@ -697,7 +710,7 @@ impl Shuttle {
             // so `load_project` is ran with the correct project path
             project_args.working_directory.clone_from(&path);
 
-            self.load_project(&project_args, false).await?;
+            self.load_project(&project_args, false, false).await?;
             self.project_start(DEFAULT_IDLE_MINUTES).await?;
         }
 
@@ -779,7 +792,12 @@ impl Shuttle {
         }
     }
 
-    pub async fn load_project(&mut self, project_args: &ProjectArgs, link_cmd: bool) -> Result<()> {
+    pub async fn load_project(
+        &mut self,
+        project_args: &ProjectArgs,
+        link_cmd: bool,
+        create_missing_beta_project: bool,
+    ) -> Result<()> {
         trace!("project arguments: {project_args:?}");
 
         self.ctx.load_local(project_args)?;
@@ -789,19 +807,26 @@ impl Shuttle {
             // translate project name to project id if a name was given
             if let Some(name) = project_args.name_or_id.as_ref() {
                 if !name.starts_with("proj_") {
-                    trace!("mapping project name to project id");
-                    let proj = self
-                        .client
-                        .as_ref()
-                        .unwrap()
+                    trace!("unprefixed project id found, assuming it's a project name");
+                    let client = self.client.as_ref().unwrap();
+                    trace!(%name, "looking up project id from project name");
+                    if let Some(proj) = client
                         .get_projects_list_beta()
                         .await?
                         .projects
                         .into_iter()
-                        .find(|p| p.name == *name);
-                    if let Some(proj) = proj {
+                        .find(|p| p.name == *name)
+                    {
                         trace!("found project by name");
                         self.ctx.set_project_id(proj.id);
+                    } else {
+                        trace!("did not find project by name");
+                        if create_missing_beta_project {
+                            trace!("creating project since it was not found");
+                            let proj = client.create_project_beta(name).await?;
+                            eprintln!("Created project '{}' with id {}", proj.name, proj.id);
+                            self.ctx.set_project_id(proj.id);
+                        }
                     }
                 }
                 // if called from Link command, command-line override is saved to file
@@ -832,27 +857,40 @@ impl Shuttle {
                 .find(|p| p.id == id_or_name || p.name == id_or_name)
                 .ok_or(anyhow!("Did not find project '{id_or_name}'."))?
         } else {
-            eprintln!("Which project do you want to link this directory to?");
+            let selected_project = if projs.is_empty() {
+                eprintln!("Create a new project to link to this directory:");
 
-            let mut items = projs.iter().map(|p| p.name.clone()).collect::<Vec<_>>();
-            items.extend_from_slice(&["[CREATE NEW]".to_string()]);
-            let index = Select::with_theme(&theme)
-                .items(&items)
-                .default(0)
-                .interact()?;
+                None
+            } else {
+                eprintln!("Which project do you want to link this directory to?");
 
-            // if last item selected (Create new)
-            if index == projs.len() {
-                let name: String = Input::with_theme(&theme)
-                    .with_prompt("Project name")
+                let mut items = projs.iter().map(|p| p.name.clone()).collect::<Vec<_>>();
+                items.extend_from_slice(&["[CREATE NEW]".to_string()]);
+                let index = Select::with_theme(&theme)
+                    .items(&items)
+                    .default(0)
                     .interact()?;
 
-                let project = client.create_project_beta(&name).await?;
-                eprintln!("Created project '{}' with id {}", project.name, project.id);
+                if index == projs.len() {
+                    // last item selected (create new)
+                    None
+                } else {
+                    Some(projs[index].clone())
+                }
+            };
 
-                project
-            } else {
-                projs[index].clone()
+            match selected_project {
+                Some(proj) => proj,
+                None => {
+                    let name: String = Input::with_theme(&theme)
+                        .with_prompt("Project name")
+                        .interact()?;
+
+                    let proj = client.create_project_beta(&name).await?;
+                    eprintln!("Created project '{}' with id {}", proj.name, proj.id);
+
+                    proj
+                }
             }
         };
 
@@ -2924,45 +2962,26 @@ impl Shuttle {
         Ok(())
     }
 
-    async fn project_delete(&self, no_confirm: bool) -> Result<()> {
+    async fn project_delete_beta(&self, no_confirm: bool) -> Result<()> {
         let client = self.client.as_ref().unwrap();
 
         if !no_confirm {
-            if self.beta {
-                println!(
-                    "{}",
-                    formatdoc!(
-                        r#"
-                        WARNING:
-                            Are you sure you want to delete "{}"?
-                            This will...
-                            - Shut down you service.
-                            - Delete any databases and secrets in this project.
-                            - Delete any custom domains linked to this project.
-                            This action is permanent."#,
-                        self.ctx.project_name()
-                    )
-                    .bold()
-                    .red()
-                );
-            } else {
-                println!(
-                    "{}",
-                    formatdoc!(
-                        r#"
-                        WARNING:
-                            Are you sure you want to delete "{}"?
-                            This will...
-                            - Delete any databases, secrets, and shuttle-persist data in this project.
-                            - Delete any custom domains linked to this project.
-                            - Release the project name from your account.
-                            This action is permanent."#,
-                        self.ctx.project_name()
-                    )
-                    .bold()
-                    .red()
-                );
-            }
+            println!(
+                "{}",
+                formatdoc!(
+                    r#"
+                    WARNING:
+                        Are you sure you want to delete "{}"?
+                        This will...
+                        - Shut down you service.
+                        - Delete any databases and secrets in this project.
+                        - Delete any custom domains linked to this project.
+                        This action is permanent."#,
+                    self.ctx.project_name()
+                )
+                .bold()
+                .red()
+            );
             if !Confirm::with_theme(&ColorfulTheme::default())
                 .with_prompt("Are you sure?")
                 .default(false)
@@ -2973,21 +2992,54 @@ impl Shuttle {
             }
         }
 
-        if self.beta {
-            client.delete_project_beta(self.ctx.project_id()).await?
-        } else {
-            client
-                .delete_project(self.ctx.project_name())
-                .await
-                .map_err(|err| {
-                    suggestions::project::project_request_failure(
-                        err,
-                        "Project delete failed",
-                        true,
-                        "deleting the project or getting project status fails repeatedly",
-                    )
-                })?
-        };
+        let res = client.delete_project_beta(self.ctx.project_id()).await?;
+
+        println!("{res}");
+
+        Ok(())
+    }
+
+    async fn project_delete(&self, no_confirm: bool) -> Result<()> {
+        let client = self.client.as_ref().unwrap();
+
+        if !no_confirm {
+            println!(
+                "{}",
+                formatdoc!(
+                    r#"
+                    WARNING:
+                        Are you sure you want to delete "{}"?
+                        This will...
+                        - Delete any databases, secrets, and shuttle-persist data in this project.
+                        - Delete any custom domains linked to this project.
+                        - Release the project name from your account.
+                        This action is permanent."#,
+                    self.ctx.project_name()
+                )
+                .bold()
+                .red()
+            );
+            if !Confirm::with_theme(&ColorfulTheme::default())
+                .with_prompt("Are you sure?")
+                .default(false)
+                .interact()
+                .unwrap()
+            {
+                return Ok(());
+            }
+        }
+
+        client
+            .delete_project(self.ctx.project_name())
+            .await
+            .map_err(|err| {
+                suggestions::project::project_request_failure(
+                    err,
+                    "Project delete failed",
+                    true,
+                    "deleting the project or getting project status fails repeatedly",
+                )
+            })?;
 
         println!("Deleted project");
 
@@ -3364,7 +3416,10 @@ mod tests {
         zip: bool,
     ) -> Vec<String> {
         let mut shuttle = Shuttle::new(crate::Binary::CargoShuttle).unwrap();
-        shuttle.load_project(&project_args, false).await.unwrap();
+        shuttle
+            .load_project(&project_args, false, false)
+            .await
+            .unwrap();
 
         let archive = shuttle
             .make_archive(deploy_args.secret_args.secrets, zip)
@@ -3490,7 +3545,10 @@ mod tests {
         };
 
         let mut shuttle = Shuttle::new(crate::Binary::CargoShuttle).unwrap();
-        shuttle.load_project(&project_args, false).await.unwrap();
+        shuttle
+            .load_project(&project_args, false, false)
+            .await
+            .unwrap();
 
         assert_eq!(
             project_args.working_directory,

@@ -501,7 +501,7 @@ impl RequestContext {
             .unwrap()
             .deploy
             .as_ref()
-            .and_then(|d| d.include.as_ref().clone())
+            .and_then(|d| d.include.as_ref())
             .or(self
                 .project
                 .as_ref()

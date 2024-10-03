@@ -2442,10 +2442,12 @@ impl Shuttle {
             trace!(?repo_path, "found git repository");
 
             let dirty = is_dirty(&repo);
-            if !args.allow_dirty && dirty.is_err() {
+            deployment_req.git_dirty = Some(dirty.is_err());
+
+            let check_dirty = !self.beta || self.ctx.deny_dirty().is_some_and(|d| d);
+            if check_dirty && !args.allow_dirty && dirty.is_err() {
                 bail!(dirty.unwrap_err());
             }
-            deployment_req.git_dirty = Some(dirty.is_err());
 
             if let Ok(head) = repo.head() {
                 // This is typically the name of the current branch
@@ -3219,7 +3221,7 @@ fn is_dirty(repo: &Repository) -> Result<()> {
         }
 
         writeln!(error).expect("to append error");
-        writeln!(error, "To proceed despite this and include the uncommitted changes, pass the `--allow-dirty` or `--ad` flag").expect("to append error");
+        writeln!(error, "To proceed despite this and include the uncommitted changes, pass the `--allow-dirty` flag (alias `--ad`)").expect("to append error");
 
         bail!(error);
     }

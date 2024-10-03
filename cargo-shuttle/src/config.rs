@@ -150,18 +150,26 @@ impl GlobalConfig {
 pub struct ProjectConfig {
     // unused on new platform
     pub name: Option<String>,
+    // deprecated name
     pub assets: Option<Vec<String>>,
-    // unused in cargo-shuttle, used in new platform builder.
-    // is used here to validate the type if used.
-    pub build_assets: Option<Vec<String>>,
-
     pub deploy: Option<ProjectDeployConfig>,
+    pub build: Option<ProjectBuildConfig>,
 }
 /// Deployment command config
 #[derive(Deserialize, Serialize, Default)]
 pub struct ProjectDeployConfig {
+    /// Successor to `assets`.
+    /// Patterns of ignored files that should be included in deployments.
+    pub include: Option<Vec<String>>,
     /// set to true to deny deployments with uncommited changes. (can use `--allow-dirty`)
     pub deny_dirty: Option<bool>,
+}
+/// Builder config
+#[derive(Deserialize, Serialize, Default)]
+pub struct ProjectBuildConfig {
+    /// Successor to `build_assets`.
+    /// Patterns of files that should be copied from the build to the runtime container.
+    pub assets: Option<Vec<String>>,
 }
 
 /// .shuttle/config.toml schema (internal project-local config)
@@ -485,14 +493,23 @@ impl RequestContext {
 
     /// # Panics
     /// Panics if the project configuration has not been loaded.
-    pub fn assets(&self) -> Option<&Vec<String>> {
+    pub fn include(&self) -> Option<&Vec<String>> {
         self.project
             .as_ref()
             .unwrap()
             .as_ref()
             .unwrap()
-            .assets
+            .deploy
             .as_ref()
+            .and_then(|d| d.include.as_ref().clone())
+            .or(self
+                .project
+                .as_ref()
+                .unwrap()
+                .as_ref()
+                .unwrap()
+                .assets
+                .as_ref())
     }
 
     /// # Panics

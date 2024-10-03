@@ -3049,7 +3049,7 @@ impl Shuttle {
     }
 
     fn make_archive(&self, secrets_file: Option<PathBuf>, zip: bool) -> Result<Vec<u8>> {
-        let include_patterns = self.ctx.assets();
+        let include_patterns = self.ctx.include();
 
         let working_directory = self.ctx.working_directory();
 

@@ -2406,7 +2406,7 @@ impl Shuttle {
             let dirty = is_dirty(&repo);
             deployment_req.git_dirty = Some(dirty.is_err());
 
-            let check_dirty = !self.beta || (self.beta && self.ctx.deny_dirty().is_some_and(|d| d));
+            let check_dirty = !self.beta || self.ctx.deny_dirty().is_some_and(|d| d);
             if check_dirty && !args.allow_dirty && dirty.is_err() {
                 bail!(dirty.unwrap_err());
             }

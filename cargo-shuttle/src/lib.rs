@@ -170,7 +170,7 @@ impl Shuttle {
                 bail!("This command is discontinued on the NEW platform (shuttle.dev). Use `deployment stop` instead.");
             }
             if matches!(args.cmd, Command::Clean) {
-                bail!("This command is not yet implemented on the NEW platform (shuttle.dev).");
+                bail!("This command is discontinued on the NEW platform (shuttle.dev).");
             }
         } else if matches!(
             args.cmd,

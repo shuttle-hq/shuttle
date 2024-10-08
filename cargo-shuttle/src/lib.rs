@@ -38,7 +38,7 @@ use shuttle_common::{
         headers::X_CARGO_SHUTTLE_VERSION, API_URL_BETA, API_URL_DEFAULT, DEFAULT_IDLE_MINUTES,
         EXAMPLES_REPO, EXECUTABLE_DIRNAME, RESOURCE_SCHEMA_VERSION, RUNTIME_NAME,
         SHUTTLE_GH_ISSUE_URL, SHUTTLE_GH_REPO_URL, SHUTTLE_IDLE_DOCS_URL, SHUTTLE_INSTALL_DOCS_URL,
-        SHUTTLE_LOGIN_URL, STORAGE_DIRNAME, TEMPLATES_SCHEMA_VERSION,
+        SHUTTLE_LOGIN_URL, SHUTTLE_LOGIN_URL_BETA, STORAGE_DIRNAME, TEMPLATES_SCHEMA_VERSION,
     },
     deployment::{DeploymentStateBeta, DEPLOYER_END_MESSAGES_BAD, DEPLOYER_END_MESSAGES_GOOD},
     log::LogsRange,
@@ -222,7 +222,7 @@ impl Shuttle {
         ) {
             let client = ShuttleApiClient::new(
                 self.ctx.api_url(self.beta),
-                self.ctx.api_key().ok().map(|s| s.as_ref().to_owned()),
+                self.ctx.api_key().ok(),
                 Some(
                     HeaderMap::try_from(&HashMap::from([(
                         X_CARGO_SHUTTLE_VERSION.clone(),
@@ -917,14 +917,17 @@ impl Shuttle {
 
     /// Log in with the given API key or after prompting the user for one.
     async fn login(&mut self, login_args: LoginArgs, offline: bool) -> Result<()> {
-        let api_key_str = match login_args.api_key {
+        let api_key = match login_args.api_key {
             Some(api_key) => api_key,
             None => {
                 if !offline {
-                    let _ = webbrowser::open(SHUTTLE_LOGIN_URL);
-                    println!(
-                        "If your browser did not automatically open, go to {SHUTTLE_LOGIN_URL}"
-                    );
+                    let url = if self.beta {
+                        SHUTTLE_LOGIN_URL_BETA
+                    } else {
+                        SHUTTLE_LOGIN_URL
+                    };
+                    let _ = webbrowser::open(url);
+                    println!("If your browser did not automatically open, go to {url}");
                 }
 
                 Password::with_theme(&ColorfulTheme::default())
@@ -934,13 +937,10 @@ impl Shuttle {
             }
         };
 
-        // TODO(beta): don't validate the key in c-s
-        let api_key = ApiKey::parse(&api_key_str)?;
-
         self.ctx.set_api_key(api_key.clone())?;
 
         if let Some(client) = self.client.as_mut() {
-            client.api_key = Some(api_key.as_ref().to_string());
+            client.api_key = Some(api_key);
 
             if self.beta {
                 if offline {

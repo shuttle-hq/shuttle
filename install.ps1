@@ -50,7 +50,7 @@ Please file an issue if you encounter any problems!
         Write-Host "Installing cargo-shuttle using cargo binstall"
         cargo-binstall.exe cargo-shuttle --no-confirm
         if ($?) {
-            Write-Host "Installed cargo-shuttle, try running ``cargo shuttle --help``" -ForegroundColor Green
+            Write-Host "Installed cargo-shuttle" -ForegroundColor Green
             return
         }
         else {
@@ -74,7 +74,7 @@ Please file an issue if you encounter any problems!
         Move-Item -Force "$TempDir\cargo-shuttle\cargo-shuttle-x86_64-pc-windows-msvc-$LatestRelease\cargo-shuttle.exe" "$CargoHome\bin\cargo-shuttle.exe"
         Move-Item -Force "$TempDir\cargo-shuttle\cargo-shuttle-x86_64-pc-windows-msvc-$LatestRelease\shuttle.exe" "$CargoHome\bin\shuttle.exe"
         Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "$TempDir\cargo-shuttle.tar.gz", "$TempDir\cargo-shuttle"
-        Write-Host "Installed cargo-shuttle, try running ``cargo shuttle --help``" -ForegroundColor Green
+        Write-Host "Installed cargo-shuttle" -ForegroundColor Green
         return
     }
     elseif ($Arch -ne "AMD64") {
@@ -89,7 +89,7 @@ Please file an issue if you encounter any problems!
         Write-Host "Installing cargo-shuttle using cargo install (from source)"
         cargo.exe install cargo-shuttle --locked
         if ($?) {
-            Write-Host "Installed cargo-shuttle, try running ``cargo shuttle --help``" -ForegroundColor Green
+            Write-Host "Installed cargo-shuttle" -ForegroundColor Green
             return
         }
         else {

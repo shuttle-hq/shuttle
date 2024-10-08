@@ -723,10 +723,14 @@ impl Shuttle {
         if std::env::current_dir().is_ok_and(|d| d != path) {
             println!("You can `cd` to the directory, then:");
         }
-        println!("Run `cargo shuttle run` to run the app locally.");
+        if self.beta {
+            println!("Run `shuttle run` to run the app locally.");
+        } else {
+            println!("Run `cargo shuttle run` to run the app locally.");
+        }
         if !should_create_environment {
             if self.beta {
-                println!("Run `cargo shuttle deploy --allow-dirty` to deploy it to Shuttle.");
+                println!("Run `shuttle deploy` to deploy it to Shuttle.");
             } else {
                 println!(
                     "Run `cargo shuttle project start` to create a project environment on Shuttle."
@@ -1267,7 +1271,7 @@ impl Shuttle {
 
         let proj_name = self.ctx.project_name();
 
-        let deployments_len = if self.beta {
+        if self.beta {
             let mut deployments = client
                 .get_deployments_beta(self.ctx.project_id(), page as i32, limit as i32)
                 .await?
@@ -1288,8 +1292,6 @@ impl Shuttle {
             if page_hint {
                 println!("View the next page using `--page {}`", page + 1);
             }
-
-            deployments.len()
         } else {
             let mut deployments = client
                 .get_deployments(proj_name, page, limit)
@@ -1305,14 +1307,12 @@ impl Shuttle {
                 get_deployments_table(&deployments, proj_name, page, table_args.raw, page_hint);
             println!("{table}");
 
-            deployments.len()
+            if deployments.is_empty() {
+                println!("Run `cargo shuttle deploy` to deploy your project.");
+            } else {
+                println!("Run `cargo shuttle logs <id>` to get logs for a given deployment.");
+            }
         };
-
-        if deployments_len == 0 {
-            println!("Run `cargo shuttle deploy` to deploy your project.");
-        } else {
-            println!("Run `cargo shuttle logs <id>` to get logs for a given deployment.");
-        }
 
         Ok(())
     }

@@ -306,7 +306,7 @@ pub struct LogoutArgs {
 pub struct DeployArgs {
     /// WIP: Deploy this Docker image instead of building one
     #[arg(long, short = 'i', hide = true)]
-    pub image: Option<String>, // TODO?: Make this a subcommand instead? `cargo shuttle deploy image ...`
+    pub image: Option<String>, // TODO?: Make this a subcommand instead? `shuttle deploy image ...`
     /// Don't follow the deployment status, exit after the deployment begins
     #[arg(long, visible_alias = "nf")]
     pub no_follow: bool,

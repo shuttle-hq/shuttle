@@ -2972,6 +2972,7 @@ impl Shuttle {
 
     async fn project_delete_beta(&self, no_confirm: bool) -> Result<()> {
         let client = self.client.as_ref().unwrap();
+        let pid = self.ctx.project_id();
 
         if !no_confirm {
             println!(
@@ -2979,13 +2980,12 @@ impl Shuttle {
                 formatdoc!(
                     r#"
                     WARNING:
-                        Are you sure you want to delete "{}"?
+                        Are you sure you want to delete "{pid}"?
                         This will...
                         - Shut down you service.
                         - Delete any databases and secrets in this project.
                         - Delete any custom domains linked to this project.
-                        This action is permanent."#,
-                    self.ctx.project_name()
+                        This action is permanent."#
                 )
                 .bold()
                 .red()
@@ -3000,7 +3000,7 @@ impl Shuttle {
             }
         }
 
-        let res = client.delete_project_beta(self.ctx.project_id()).await?;
+        let res = client.delete_project_beta(pid).await?;
 
         println!("{res}");
 

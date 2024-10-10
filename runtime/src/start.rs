@@ -37,7 +37,9 @@ impl Args {
 
         if args.beta {
             if std::env::var("SHUTTLE_ENV").is_err() {
-                return Err(anyhow::anyhow!("SHUTTLE_ENV is required to be set on beta"));
+                return Err(anyhow::anyhow!(
+                    "SHUTTLE_ENV is required to be set on shuttle.dev"
+                ));
             }
         } else if args.port.is_none() {
             return Err(anyhow::anyhow!("--port is required"));

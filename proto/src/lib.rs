@@ -323,6 +323,7 @@ pub mod logger {
                 internal_origin: Backend::from_str(&service_name)
                     .expect("backend name to be valid"),
                 timestamp: Utc.from_utc_datetime(
+                    #[allow(deprecated)]
                     &NaiveDateTime::from_timestamp_opt(
                         tx_timestamp.seconds,
                         tx_timestamp.nanos.try_into().unwrap_or_default(),

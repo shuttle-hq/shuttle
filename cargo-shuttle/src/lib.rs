@@ -181,10 +181,15 @@ impl Shuttle {
             bail!("This command is not supported on the OLD platform (shuttle.rs).");
         }
 
-        if self.beta {
-            eprintln!("{}", "INFO: Using NEW platform API (shuttle.dev)".green());
-        } else {
-            eprintln!("{}", "INFO: Using OLD platform API (shuttle.rs)".blue());
+        if !matches!(
+            args.cmd,
+            Command::Feedback | Command::Generate(_) | Command::Upgrade { .. }
+        ) {
+            if self.beta {
+                eprintln!("{}", "INFO: Using NEW platform API (shuttle.dev)".green());
+            } else {
+                eprintln!("{}", "INFO: Using OLD platform API (shuttle.rs)".blue());
+            }
         }
         if let Some(ref url) = args.api_url {
             if (!self.beta && url != API_URL_DEFAULT) || (self.beta && url != API_URL_BETA) {

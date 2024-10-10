@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{anyhow, Context, Result};
 use serde::{Deserialize, Serialize};
 use shuttle_common::constants::API_URL_BETA;
-use shuttle_common::{constants::API_URL_DEFAULT, ApiKey};
+use shuttle_common::constants::API_URL_DEFAULT;
 use tracing::trace;
 
 use crate::args::ProjectArgs;
@@ -128,12 +128,12 @@ pub struct GlobalConfig {
 }
 
 impl GlobalConfig {
-    pub fn api_key(&self) -> Option<Result<ApiKey>> {
-        self.api_key.as_ref().map(|key| ApiKey::parse(key))
+    pub fn api_key(&self) -> Option<String> {
+        self.api_key.clone()
     }
 
-    pub fn set_api_key(&mut self, api_key: ApiKey) -> Option<String> {
-        self.api_key.replace(api_key.as_ref().to_string())
+    pub fn set_api_key(&mut self, api_key: String) -> Option<String> {
+        self.api_key.replace(api_key)
     }
 
     pub fn clear_api_key(&mut self) {
@@ -432,22 +432,19 @@ impl RequestContext {
     /// Get the API key from the `SHUTTLE_API_KEY` env variable, or
     /// otherwise from the global configuration. Returns an error if
     /// an API key is not set.
-    pub fn api_key(&self) -> Result<ApiKey> {
-        let api_key = std::env::var("SHUTTLE_API_KEY");
-
-        if let Ok(key) = api_key {
-            ApiKey::parse(&key).context("environment variable SHUTTLE_API_KEY is invalid")
-        } else {
-            match self.global.as_ref().unwrap().api_key() {
-                Some(key) => key,
+    pub fn api_key(&self) -> Result<String> {
+        match std::env::var("SHUTTLE_API_KEY") {
+            Ok(key) => Ok(key),
+            Err(_) => match self.global.as_ref().unwrap().api_key() {
+                Some(key) => Ok(key),
                 None => Err(anyhow!(
                     "Configuration file: `{}`",
                     self.global.manager.path().display()
                 )
                 .context(anyhow!(
-                    "No valid API key found, try logging in first with:\n\tcargo shuttle login"
+                    "No valid API key found, try logging in first with `shuttle login`"
                 ))),
-            }
+            },
         }
     }
 
@@ -465,7 +462,7 @@ impl RequestContext {
     }
 
     /// Set the API key to the global configuration. Will persist the file.
-    pub fn set_api_key(&mut self, api_key: ApiKey) -> Result<()> {
+    pub fn set_api_key(&mut self, api_key: String) -> Result<()> {
         self.global.as_mut().unwrap().set_api_key(api_key);
         self.global.save()
     }

@@ -998,7 +998,7 @@ dependencies = [
 
 [[package]]
 name = "cargo-shuttle"
-version = "0.48.1"
+version = "0.48.2"
 dependencies = [
  "anyhow",
  "assert_cmd",

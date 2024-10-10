@@ -207,7 +207,7 @@ fn get_databases_table_beta(
     let show_secret_hint = if databases.is_empty() || show_secrets {
         ""
     } else {
-        "Hint: you can show the secrets of these resources using `cargo shuttle resource list --show-secrets`\n"
+        "Hint: you can show the secrets of these resources using `shuttle resource list --show-secrets`\n"
     };
 
     format!("These databases are linked to {service_name}\n{table}\n{show_secret_hint}")

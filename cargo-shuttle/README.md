@@ -44,7 +44,7 @@ cargo install cargo-shuttle
 
 ## Documentation
 
-Run `cargo shuttle help` to see the basic usage.
+Run `shuttle help` to see the basic usage.
 
 Full list of commands and more documentation can be viewed on the [CLI docs](https://docs.shuttle.rs/getting-started/shuttle-commands).
 

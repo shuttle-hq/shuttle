@@ -28,8 +28,7 @@ use shuttle_common::resource;
 pub struct ShuttleArgs {
     #[command(flatten)]
     pub project_args: ProjectArgs,
-    /// Run this command against the API at the supplied URL
-    /// (allows targeting a custom deployed instance for this command only, mainly for development)
+    /// URL for the Shuttle API to target (mainly for development)
     #[arg(global = true, long, env = "SHUTTLE_API")]
     pub api_url: Option<String>,
     /// Disable network requests that are not strictly necessary. Limits some features.
@@ -46,7 +45,7 @@ pub struct ShuttleArgs {
     pub cmd: Command,
 }
 
-// Common args for subcommands that deal with projects.
+/// Global args for subcommands that deal with projects
 #[derive(Parser, Clone, Debug)]
 pub struct ProjectArgs {
     /// Specify the working directory
@@ -102,34 +101,34 @@ impl ProjectArgs {
 pub enum Command {
     /// Generate a Shuttle project from a template
     Init(InitArgs),
-    /// Run a Shuttle service locally
+    /// Run a project locally
     Run(RunArgs),
-    /// Deploy a Shuttle service
+    /// Deploy a project
     Deploy(DeployArgs),
-    /// Manage deployments of a Shuttle service
+    /// Manage deployments
     #[command(subcommand, visible_alias = "depl")]
     Deployment(DeploymentCommand),
     /// View the status of a Shuttle service
     Status,
     /// Stop a Shuttle service
     Stop,
-    /// View logs of a Shuttle service
+    /// View build and deployment logs
     Logs(LogsArgs),
-    /// Manage projects on Shuttle
+    /// Manage Shuttle projects
     #[command(subcommand, visible_alias = "proj")]
     Project(ProjectCommand),
     /// Manage resources
     #[command(subcommand, visible_alias = "res")]
     Resource(ResourceCommand),
-    /// BETA: Manage SSL certificates for custom domains
-    #[command(subcommand, visible_alias = "cert", hide = true)]
+    /// Manage SSL certificates for custom domains
+    #[command(subcommand, visible_alias = "cert")]
     Certificate(CertificateCommand),
     /// Remove cargo build artifacts in the Shuttle environment
     Clean,
-    /// BETA: Show info about your Shuttle account
-    #[command(visible_alias = "acc", hide = true)]
+    /// Show info about your Shuttle account
+    #[command(visible_alias = "acc")]
     Account,
-    /// Login to the Shuttle platform
+    /// Log in to the Shuttle platform
     Login(LoginArgs),
     /// Log out of the Shuttle platform
     Logout(LogoutArgs),
@@ -162,8 +161,8 @@ pub enum GenerateCommand {
 
 #[derive(Parser)]
 pub struct TableArgs {
-    #[arg(long, default_value_t = false)]
     /// Output tables without borders
+    #[arg(long, default_value_t = false)]
     pub raw: bool,
 }
 
@@ -172,12 +171,12 @@ pub enum DeploymentCommand {
     /// List the deployments for a service
     #[command(visible_alias = "ls")]
     List {
-        #[arg(long, default_value = "1")]
         /// Which page to display
+        #[arg(long, default_value = "1")]
         page: u32,
 
-        #[arg(long, default_value = "10", visible_alias = "per-page")]
         /// How many deployments per page to display
+        #[arg(long, default_value = "10", visible_alias = "per-page")]
         limit: u32,
 
         #[command(flatten)]
@@ -188,8 +187,7 @@ pub enum DeploymentCommand {
         /// ID of deployment to get status for
         id: Option<String>,
     },
-    /// BETA: Stop running deployment(s)
-    #[command(hide = true)]
+    /// Stop running deployment(s)
     Stop,
 }
 
@@ -201,8 +199,8 @@ pub enum ResourceCommand {
         #[command(flatten)]
         table: TableArgs,
 
-        #[arg(long, default_value_t = false)]
         /// Show secrets from resources (e.g. a password in a connection string)
+        #[arg(long, default_value_t = false)]
         show_secrets: bool,
     },
     /// Delete a resource
@@ -247,9 +245,9 @@ pub enum ProjectCommand {
     Start(ProjectStartArgs),
     /// Check the status of this project's environment on Shuttle
     Status {
-        #[arg(short, long)]
         /// Follow status of project
         // unused in beta (project has no state to follow)
+        #[arg(short, long)]
         follow: bool,
     },
     /// Destroy this project's environment (container) on Shuttle
@@ -277,8 +275,8 @@ pub enum ProjectCommand {
 
 #[derive(Parser, Debug)]
 pub struct ConfirmationArgs {
-    #[arg(long, short, default_value_t = false)]
     /// Skip confirmations and proceed
+    #[arg(long, short, default_value_t = false)]
     pub yes: bool,
 }
 
@@ -306,11 +304,11 @@ pub struct LogoutArgs {
 
 #[derive(Parser, Default)]
 pub struct DeployArgs {
-    /// BETA: Deploy this Docker image instead of building one
+    /// WIP: Deploy this Docker image instead of building one
     #[arg(long, short = 'i', hide = true)]
-    pub image: Option<String>, // TODO?: Make this a subcommand instead? `cargo shuttle deploy image ...`
-    /// BETA: Don't follow the deployment status, exit after the deployment begins
-    #[arg(long, visible_alias = "nf", hide = true)]
+    pub image: Option<String>, // TODO?: Make this a subcommand instead? `shuttle deploy image ...`
+    /// Don't follow the deployment status, exit after the deployment begins
+    #[arg(long, visible_alias = "nf")]
     pub no_follow: bool,
 
     /// Allow deployment with uncommitted files

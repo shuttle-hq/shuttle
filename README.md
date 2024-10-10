@@ -91,21 +91,20 @@ iwr "https://www.shuttle.rs/install-win" | iex
 After installing, log in with:
 
 ```sh
-cargo shuttle login
+shuttle login
 ```
 
 To initialize your project, simply write:
 
 ```bash
-cargo shuttle init --template axum hello-world
+shuttle init --template axum hello-world
 ```
 
 And to deploy it, write:
 
 ```bash
 cd hello-world
-cargo shuttle project start  # Only needed if project has not already been created during init
-cargo shuttle deploy --allow-dirty
+shuttle deploy
 ```
 
 And... that's it!
@@ -163,7 +162,7 @@ async fn main() -> shuttle_axum::ShuttleAxum {
 }
 ```
 
-Now, with just `cargo shuttle deploy`, you can see your application live. But let's enhance it further by adding a shared Postgres database:
+Now, with just `shuttle deploy`, you can see your application live. But let's enhance it further by adding a shared Postgres database:
 
 ```rust
 use axum::{routing::get, Router};
@@ -187,7 +186,7 @@ async fn main(
 }
 ```
 
-Now, if we run `cargo shuttle deploy`, we'll have an up and running project with a database inside & ready to use.
+Now, if we run `shuttle deploy`, we'll have an up and running project with a database inside & ready to use.
 <br>
 <br>
 

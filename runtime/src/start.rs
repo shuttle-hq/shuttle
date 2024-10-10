@@ -82,9 +82,11 @@ pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + S
             )
             .init();
 
-        warn!(
-            "Default tracing subscriber initialized (https://docs.shuttle.rs/configuration/logs)"
-        );
+        if args.beta {
+            warn!("Default tracing subscriber initialized (https://docs.shuttle.dev/docs/logs)");
+        } else {
+            warn!("Default tracing subscriber initialized (https://docs.shuttle.rs/configuration/logs)");
+        }
     }
 
     if args.beta {

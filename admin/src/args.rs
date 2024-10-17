@@ -1,7 +1,10 @@
 use std::{fs, io, path::PathBuf};
 
 use clap::{Error, Parser, Subcommand};
-use shuttle_common::{constants::API_URL_PRODUCTION, models::user::UserId};
+use shuttle_common::{
+    constants::API_URL_PRODUCTION,
+    models::{project::ComputeTier, user::UserId},
+};
 
 #[derive(Parser, Debug)]
 pub struct Args {
@@ -44,7 +47,7 @@ pub enum Command {
         /// Compute tier to set.
         // TODO: use compute tier model from common.
         #[arg(long, visible_alias = "tier")]
-        compute_tier: String,
+        compute_tier: ComputeTier,
     },
 
     /// Forcefully idle CCH projects.

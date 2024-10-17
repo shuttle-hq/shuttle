@@ -118,7 +118,6 @@ impl Client {
             .await
     }
 
-    // TODO: add tier model to common.
     pub async fn update_project_compute_tier(
         &self,
         project_id: &str,

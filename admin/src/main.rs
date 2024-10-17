@@ -120,7 +120,7 @@ async fn main() {
             compute_tier,
         } => {
             let res = client
-                .update_project_compute_tier(&project_id, &compute_tier)
+                .update_project_compute_tier(&project_id, &compute_tier.to_string())
                 .await
                 .unwrap();
             println!("{res}");

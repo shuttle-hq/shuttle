@@ -11,6 +11,7 @@ use comfy_table::{
 };
 use crossterm::style::Stylize;
 use serde::{Deserialize, Serialize};
+use strum::Display;
 use strum::EnumString;
 
 use crate::deployment::DeploymentStateBeta;
@@ -82,6 +83,17 @@ impl ProjectResponseBeta {
 #[typeshare::typeshare]
 pub struct ProjectListResponseBeta {
     pub projects: Vec<ProjectResponseBeta>,
+}
+
+#[derive(Debug, Default, Clone, PartialEq, Eq, Display, Serialize, Deserialize, EnumString)]
+#[serde(rename_all = "lowercase")]
+#[strum(serialize_all = "lowercase")]
+pub enum ComputeTier {
+    #[default]
+    XS,
+    S,
+    M,
+    L,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, EnumString)]

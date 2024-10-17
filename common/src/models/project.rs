@@ -84,8 +84,9 @@ pub struct ProjectListResponseBeta {
     pub projects: Vec<ProjectResponseBeta>,
 }
 
-#[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize, EnumString)]
 #[serde(rename_all = "lowercase")]
+#[strum(serialize_all = "lowercase")]
 pub enum ComputeTier {
     #[default]
     XS,

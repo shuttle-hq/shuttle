@@ -6,7 +6,7 @@ use error::{Error, Result};
 use hyper::Uri;
 use shuttle_common::{claims::Claim, resource::Type};
 use shuttle_proto::{
-    provisioner::{self, DatabaseRequest},
+    provisioner::{self, DatabaseDumpRequest, DatabaseRequest},
     resource_recorder::{
         self, record_request, ProjectResourcesRequest, RecordRequest, ResourceIds,
         ResourceResponse, ResourcesResponse, ResultResponse,
@@ -310,6 +310,21 @@ impl Persistence {
             },
         )
         .await
+    }
+
+    pub async fn dump_shared_pg(&mut self, project_name: String, claim: Claim) -> Result<Vec<u8>> {
+        let mut req = Request::new(DatabaseDumpRequest { project_name });
+        req.extensions_mut().insert(claim.clone());
+
+        Ok(self
+            .provisioner_client
+            .as_mut()
+            .unwrap()
+            .dump_database(req)
+            .await
+            .map_err(error::Error::Provisioner)?
+            .into_inner()
+            .sql)
     }
 }
 

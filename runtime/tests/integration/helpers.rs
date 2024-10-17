@@ -9,7 +9,8 @@ use async_trait::async_trait;
 use shuttle_proto::{
     provisioner::{
         provisioner_server::{Provisioner, ProvisionerServer},
-        DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse, Ping, Pong,
+        DatabaseDeletionResponse, DatabaseDumpRequest, DatabaseDumpResponse, DatabaseRequest,
+        DatabaseResponse, Ping, Pong,
     },
     runtime,
 };
@@ -88,6 +89,13 @@ impl Provisioner for DummyProvisioner {
         _request: Request<DatabaseRequest>,
     ) -> Result<Response<DatabaseDeletionResponse>, Status> {
         panic!("did not expect any runtime test to delete dbs")
+    }
+
+    async fn dump_database(
+        &self,
+        _request: tonic::Request<DatabaseDumpRequest>,
+    ) -> Result<tonic::Response<DatabaseDumpResponse>, tonic::Status> {
+        panic!("did not expect any runtime test to dump a db");
     }
 
     async fn health_check(&self, _request: Request<Ping>) -> Result<Response<Pong>, Status> {

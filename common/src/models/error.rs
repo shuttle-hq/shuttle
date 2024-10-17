@@ -260,7 +260,7 @@ pub struct ProjectNotReady;
 pub struct ProjectUnavailable;
 
 #[derive(Debug, Error)]
-#[error("Project '{0}' not found. Make sure you are the owner of this project name. Run the `project start` to create a new project.")]
+#[error("Project '{0}' not found. Make sure you are the owner of this project. Run the `project start` command to create a new project.")]
 pub struct ProjectNotFound(pub String);
 
 impl From<ProjectNotFound> for ApiError {

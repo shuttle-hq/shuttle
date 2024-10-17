@@ -332,6 +332,7 @@ impl Shuttle {
                     resource_type,
                     confirmation: ConfirmationArgs { yes },
                 } => self.resource_delete(&resource_type, yes).await,
+                ResourceCommand::Dump { resource_type } => self.resource_dump(&resource_type).await,
             },
             Command::Certificate(cmd) => match cmd {
                 CertificateCommand::Add { domain } => self.add_certificate(domain).await,
@@ -1438,6 +1439,18 @@ impl Shuttle {
             }
             .yellow(),
         );
+
+        Ok(())
+    }
+
+    async fn resource_dump(&self, resource_type: &resource::Type) -> Result<()> {
+        let client = self.client.as_ref().unwrap();
+
+        let bytes = client
+            .dump_service_resource(self.ctx.project_name(), resource_type)
+            .await?;
+
+        std::io::stdout().write_all(&bytes).unwrap();
 
         Ok(())
     }

@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use shuttle_api_client::ShuttleApiClient;
 use shuttle_common::models::{admin::ProjectResponse, stats};
 
@@ -116,5 +116,22 @@ impl Client {
         self.inner
             .put_json("/admin/certificates/renew", Option::<()>::None)
             .await
+    }
+
+    // TODO: add tier model to common.
+    pub async fn update_project_compute_tier(
+        &self,
+        project_id: &str,
+        compute_tier: &str,
+    ) -> Result<String> {
+        self.inner
+            .put(
+                format!("/admin/projects/{}/{}", project_id, compute_tier),
+                Option::<()>::None,
+            )
+            .await?
+            .text()
+            .await
+            .context("failed to read response text")
     }
 }

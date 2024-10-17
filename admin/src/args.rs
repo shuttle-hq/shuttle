@@ -45,7 +45,6 @@ pub enum Command {
         #[arg(long, visible_alias = "id")]
         project_id: String,
         /// Compute tier to set.
-        // TODO: use compute tier model from common.
         #[arg(long, visible_alias = "tier")]
         compute_tier: ComputeTier,
     },

@@ -1,7 +1,10 @@
 use std::{fs, io, path::PathBuf};
 
 use clap::{Error, Parser, Subcommand};
-use shuttle_common::{constants::API_URL_PRODUCTION, models::user::UserId};
+use shuttle_common::{
+    constants::API_URL_PRODUCTION,
+    models::{project::ComputeTier, user::UserId},
+};
 
 #[derive(Parser, Debug)]
 pub struct Args {
@@ -36,6 +39,15 @@ pub enum Command {
     /// Viewing and managing stats
     #[command(subcommand)]
     Stats(StatsCommand),
+
+    UpdateCompute {
+        /// Project to update
+        #[arg(long, visible_alias = "id")]
+        project_id: String,
+        /// Compute tier to set.
+        #[arg(long, visible_alias = "tier")]
+        compute_tier: ComputeTier,
+    },
 
     /// Forcefully idle CCH projects.
     IdleCch,

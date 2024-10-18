@@ -115,5 +115,15 @@ async fn main() {
             let res = client.renew_old_certificates().await.unwrap();
             println!("{res}");
         }
+        Command::UpdateCompute {
+            project_id,
+            compute_tier,
+        } => {
+            let res = client
+                .update_project_compute_tier(&project_id, &compute_tier.to_string())
+                .await
+                .unwrap();
+            println!("{res}");
+        }
     };
 }

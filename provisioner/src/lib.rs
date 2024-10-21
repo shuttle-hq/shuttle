@@ -590,6 +590,7 @@ impl Provisioner for ShuttleProvisioner {
         let output = tokio::process::Command::new("pg_dump")
             .arg(format!("{}{}", self.shared_pg_uri_stripped, database_name))
             .arg("--no-owner")
+            .arg("--no-privileges")
             .output()
             .await
             .map_err(|_| Status::internal("failed to run pg_dump"))?;

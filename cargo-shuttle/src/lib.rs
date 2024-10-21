@@ -820,8 +820,19 @@ impl Shuttle {
         if self.beta {
             // load project id from file if exists
             self.ctx.load_local_internal(project_args)?;
-            // translate project name to project id if a name was given
             if let Some(name) = project_args.name_or_id.as_ref() {
+                // uppercase project id
+                if let Some(suffix) = name.strip_prefix("proj_") {
+                    // Soft (dumb) validation of ULID format in the id (ULIDs are 26 chars)
+                    if suffix.len() == 26 {
+                        let proj_id_uppercase = format!("proj_{}", suffix.to_ascii_uppercase());
+                        if *name != proj_id_uppercase {
+                            eprintln!("INFO: Converted project id to '{}'", proj_id_uppercase);
+                            self.ctx.set_project_id(proj_id_uppercase);
+                        }
+                    }
+                }
+                // translate project name to project id if a name was given
                 if !name.starts_with("proj_") {
                     trace!("unprefixed project id found, assuming it's a project name");
                     let client = self.client.as_ref().unwrap();

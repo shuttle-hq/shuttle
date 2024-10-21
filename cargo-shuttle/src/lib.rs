@@ -172,6 +172,9 @@ impl Shuttle {
             if matches!(args.cmd, Command::Clean) {
                 bail!("This command is discontinued on the NEW platform (shuttle.dev).");
             }
+            if matches!(args.cmd, Command::Resource(ResourceCommand::Dump { .. })) {
+                bail!("This command is not yet supported on the NEW platform (shuttle.dev).");
+            }
         } else if matches!(
             args.cmd,
             Command::Deployment(DeploymentCommand::Stop)

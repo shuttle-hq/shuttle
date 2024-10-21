@@ -224,6 +224,7 @@ export enum AccountTier {
 	CancelledPro = "cancelledpro",
 	Pro = "pro",
 	Team = "team",
+	Employee = "employee",
 	Admin = "admin",
 	Deployer = "deployer",
 }

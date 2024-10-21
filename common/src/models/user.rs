@@ -58,6 +58,7 @@ pub enum AccountTier {
     CancelledPro,
     Pro,
     Team,
+    Employee,
     Admin,
     Deployer,
 }

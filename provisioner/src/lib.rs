@@ -65,10 +65,10 @@ impl ShuttleProvisioner {
             .acquire_timeout(Duration::from_secs(60))
             .connect_lazy(shared_pg_uri)?;
 
-        let shared_pg_uri_stripped = shared_pg_uri
-            .strip_suffix("postgres")
-            .expect("shared pg admin to have 'postgres' db")
-            .to_owned();
+        let idx = shared_pg_uri
+            .rfind('/')
+            .expect("pg uri to end with /database");
+        let shared_pg_uri_stripped = shared_pg_uri[0..idx + 1].to_owned();
 
         let mongodb_options = ClientOptions::parse(shared_mongodb_uri).await?;
         let mongodb_client = mongodb::Client::with_options(mongodb_options)?;

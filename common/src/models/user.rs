@@ -53,11 +53,14 @@ impl UserResponse {
 pub enum AccountTier {
     #[default]
     Basic,
-    // A basic user that is pending a payment on the backend.
+    /// A basic user that is pending a payment on the backend
     PendingPaymentPro,
     CancelledPro,
     Pro,
     Team,
+    /// Higher limits and partial admin endpoint access
+    Employee,
+    /// Unlimited resources, full API access, admin endpoint access
     Admin,
     Deployer,
 }

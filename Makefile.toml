@@ -105,7 +105,7 @@ fi
 # To generate: cargo make proto
 # To validate: cargo make proto validate
 # Requires `protoc` to be installed
-install_crate = { crate_name = "proto-gen", binary = "proto-gen", test_arg = "-V", version = "0.2.0" }
+install_crate = { crate_name = "proto-gen", binary = "proto-gen", test_arg = "-V", version = "0.2.7" }
 script = '''
 OP="generate"
 if [ "$1" = "validate" ]; then

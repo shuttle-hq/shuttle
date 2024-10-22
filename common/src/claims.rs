@@ -176,7 +176,8 @@ impl AccountTier {
             | Self::CancelledPro
             | Self::Team
             | Self::Admin
-            | Self::Deployer => Self::Basic,
+            | Self::Deployer
+            | Self::Employee => Self::Basic,
             Self::Pro => Self::Pro,
         }
     }

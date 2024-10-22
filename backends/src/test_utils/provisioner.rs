@@ -4,7 +4,8 @@ use async_trait::async_trait;
 use portpicker::pick_unused_port;
 use shuttle_proto::provisioner::{
     provisioner_server::{Provisioner, ProvisionerServer},
-    DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse, Ping, Pong,
+    DatabaseDeletionResponse, DatabaseDumpRequest, DatabaseDumpResponse, DatabaseRequest,
+    DatabaseResponse, Ping, Pong,
 };
 use tonic::transport::Server;
 
@@ -24,6 +25,13 @@ impl Provisioner for ProvisionerMock {
         _request: tonic::Request<DatabaseRequest>,
     ) -> Result<tonic::Response<DatabaseDeletionResponse>, tonic::Status> {
         panic!("no run tests should delete a db");
+    }
+
+    async fn dump_database(
+        &self,
+        _request: tonic::Request<DatabaseDumpRequest>,
+    ) -> Result<tonic::Response<DatabaseDumpResponse>, tonic::Status> {
+        panic!("no run tests should dump a db");
     }
 
     async fn health_check(

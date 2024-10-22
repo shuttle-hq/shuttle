@@ -9,8 +9,8 @@ use shuttle_common_tests::{
 use shuttle_proto::{
     logger::Batcher,
     provisioner::{
-        provisioner_server::Provisioner, DatabaseDeletionResponse, DatabaseRequest,
-        DatabaseResponse, Ping, Pong,
+        provisioner_server::Provisioner, DatabaseDeletionResponse, DatabaseDumpRequest,
+        DatabaseDumpResponse, DatabaseRequest, DatabaseResponse, Ping, Pong,
     },
     resource_recorder::{ResourceResponse, ResourcesResponse, ResultResponse},
     runtime::{StopReason, SubscribeStopResponse},
@@ -49,6 +49,13 @@ impl Provisioner for ProvisionerMock {
         _request: tonic::Request<DatabaseRequest>,
     ) -> Result<tonic::Response<DatabaseDeletionResponse>, tonic::Status> {
         panic!("no run tests should delete a db");
+    }
+
+    async fn dump_database(
+        &self,
+        _request: tonic::Request<DatabaseDumpRequest>,
+    ) -> Result<tonic::Response<DatabaseDumpResponse>, tonic::Status> {
+        panic!("no run tests should dump a db");
     }
 
     async fn health_check(

@@ -4,6 +4,7 @@ package provisioner;
 service Provisioner {
   rpc ProvisionDatabase(DatabaseRequest) returns (DatabaseResponse);
   rpc DeleteDatabase(DatabaseRequest) returns (DatabaseDeletionResponse);
+  rpc DumpDatabase(DatabaseDumpRequest) returns (DatabaseDumpResponse);
   rpc HealthCheck(Ping) returns (Pong);
 }
 
@@ -15,6 +16,10 @@ message DatabaseRequest {
   };
   // Override the default db name. Only applies to RDS.
   optional string db_name = 2;
+}
+
+message DatabaseDumpRequest {
+  string project_name = 1;
 }
 
 message Shared {
@@ -45,6 +50,10 @@ message DatabaseResponse {
 }
 
 message DatabaseDeletionResponse {}
+
+message DatabaseDumpResponse {
+  bytes sql = 1;
+}
 
 message Ping {}
 message Pong {}

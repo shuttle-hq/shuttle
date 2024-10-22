@@ -220,10 +220,14 @@ export interface UploadArchiveResponseBeta {
 
 export enum AccountTier {
 	Basic = "basic",
+	/** A basic user that is pending a payment on the backend */
 	PendingPaymentPro = "pendingpaymentpro",
 	CancelledPro = "cancelledpro",
 	Pro = "pro",
 	Team = "team",
+	/** Higher limits and partial admin endpoint access */
+	Employee = "employee",
+	/** Unlimited resources, full API access, admin endpoint access */
 	Admin = "admin",
 	Deployer = "deployer",
 }

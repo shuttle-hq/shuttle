@@ -124,6 +124,9 @@ mod _provisioner_client {
             .service(channel);
 
         Client::new(provisioner_service)
+            // allow dumps up to 50 MB
+            .max_decoding_message_size(50 * 1024 * 1024)
+            .max_encoding_message_size(50 * 1024 * 1024)
     }
 }
 

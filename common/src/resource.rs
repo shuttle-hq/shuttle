@@ -41,7 +41,7 @@ impl From<ProvisionResourceRequest> for ProvisionResourceRequestBeta {
                 }
                 Type::Secrets => ResourceTypeBeta::Secrets,
                 Type::Container => ResourceTypeBeta::Container,
-                r => panic!("Resource not supported on beta: {r}"),
+                r => panic!("Resource not supported on shuttle.dev: {r}"),
             },
             config: value.config,
         }

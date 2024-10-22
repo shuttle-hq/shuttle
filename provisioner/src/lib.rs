@@ -21,6 +21,7 @@ use shuttle_proto::provisioner::{
     aws_rds, database_request::DbType, provisioner_server::Provisioner, shared, AwsRds,
     DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse, Ping, Pong, Shared,
 };
+use shuttle_proto::provisioner::{DatabaseDumpRequest, DatabaseDumpResponse};
 use shuttle_proto::resource_recorder;
 use sqlx::{postgres::PgPoolOptions, ConnectOptions, Executor, PgPool};
 use tokio::sync::Mutex;
@@ -38,6 +39,7 @@ const RDS_SUBNET_GROUP: &str = "shuttle_rds";
 
 pub struct ShuttleProvisioner {
     pool: PgPool,
+    shared_pg_uri_stripped: String,
     rds_client: aws_sdk_rds::Client,
     mongodb_client: mongodb::Client,
     fqdn: String,
@@ -63,6 +65,11 @@ impl ShuttleProvisioner {
             .acquire_timeout(Duration::from_secs(60))
             .connect_lazy(shared_pg_uri)?;
 
+        let idx = shared_pg_uri
+            .rfind('/')
+            .expect("pg uri to end with /database");
+        let shared_pg_uri_stripped = shared_pg_uri[0..idx + 1].to_owned();
+
         let mongodb_options = ClientOptions::parse(shared_mongodb_uri).await?;
         let mongodb_client = mongodb::Client::with_options(mongodb_options)?;
 
@@ -85,6 +92,7 @@ impl ShuttleProvisioner {
 
         Ok(Self {
             pool,
+            shared_pg_uri_stripped,
             rds_client,
             mongodb_client,
             fqdn,
@@ -563,6 +571,31 @@ impl Provisioner for ShuttleProvisioner {
         };
 
         Ok(Response::new(reply))
+    }
+
+    #[tracing::instrument(skip(self))]
+    async fn dump_database(
+        &self,
+        request: Request<DatabaseDumpRequest>,
+    ) -> Result<Response<DatabaseDumpResponse>, Status> {
+        request.verify(Scope::Resources)?;
+        let claim = request.get_claim()?;
+        let request = request.into_inner();
+        if !ProjectName::is_valid(&request.project_name) {
+            return Err(Status::invalid_argument("invalid project name"));
+        }
+        self.verify_ownership(&claim, &request.project_name).await?;
+
+        let database_name = format!("db-{}", request.project_name);
+        let output = tokio::process::Command::new("pg_dump")
+            .arg(format!("{}{}", self.shared_pg_uri_stripped, database_name))
+            .arg("--no-owner")
+            .arg("--no-privileges")
+            .output()
+            .await
+            .map_err(|_| Status::internal("failed to run pg_dump"))?;
+
+        Ok(Response::new(DatabaseDumpResponse { sql: output.stdout }))
     }
 
     #[tracing::instrument(skip(self))]

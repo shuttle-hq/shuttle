@@ -194,6 +194,29 @@ impl ShuttleApiClient {
             .await
     }
 
+    pub async fn dump_service_resource(
+        &self,
+        project: &str,
+        resource_type: &resource::Type,
+    ) -> Result<Vec<u8>> {
+        let r#type = resource_type.to_string();
+        let r#type = utf8_percent_encode(&r#type, percent_encoding::NON_ALPHANUMERIC).to_owned();
+
+        let res = self
+            .get(
+                format!(
+                    "/projects/{project}/services/{project}/resources/{}/dump",
+                    r#type
+                ),
+                Option::<()>::None,
+            )
+            .await?;
+
+        let bytes = res.bytes().await?;
+
+        Ok(bytes.to_vec())
+    }
+
     pub async fn delete_service_resource(
         &self,
         project: &str,

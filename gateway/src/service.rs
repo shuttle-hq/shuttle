@@ -1091,7 +1091,7 @@ impl GatewayService {
         } else if current_container_count < self.soft_container_limit {
             !is_cch_project
         } else if current_container_count < self.hard_container_limit {
-            matches!(account_tier, AccountTier::Pro)
+            matches!(account_tier, AccountTier::Pro | AccountTier::Employee)
         } else {
             false
         };

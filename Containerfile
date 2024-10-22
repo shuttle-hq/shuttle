@@ -141,6 +141,7 @@ ARG RUSTUP_TOOLCHAIN
 FROM bookworm-20230904-slim-plus AS shuttle-provisioner
 ARG SHUTTLE_SERVICE_VERSION
 ENV SHUTTLE_SERVICE_VERSION=${SHUTTLE_SERVICE_VERSION}
+RUN apt update && apt install -y postgresql-client-15; rm -rf /var/lib/apt/lists/*
 ARG CARGO_PROFILE
 COPY --from=chef-builder /build/target/${CARGO_PROFILE}/shuttle-provisioner /usr/local/bin
 ENTRYPOINT ["/usr/local/bin/shuttle-provisioner"]

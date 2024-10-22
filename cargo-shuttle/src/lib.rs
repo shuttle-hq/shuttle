@@ -172,6 +172,9 @@ impl Shuttle {
             if matches!(args.cmd, Command::Clean) {
                 bail!("This command is discontinued on the NEW platform (shuttle.dev).");
             }
+            if matches!(args.cmd, Command::Resource(ResourceCommand::Dump { .. })) {
+                bail!("This command is not yet supported on the NEW platform (shuttle.dev).");
+            }
         } else if matches!(
             args.cmd,
             Command::Deployment(DeploymentCommand::Stop)
@@ -332,6 +335,7 @@ impl Shuttle {
                     resource_type,
                     confirmation: ConfirmationArgs { yes },
                 } => self.resource_delete(&resource_type, yes).await,
+                ResourceCommand::Dump { resource_type } => self.resource_dump(&resource_type).await,
             },
             Command::Certificate(cmd) => match cmd {
                 CertificateCommand::Add { domain } => self.add_certificate(domain).await,
@@ -819,8 +823,19 @@ impl Shuttle {
         if self.beta {
             // load project id from file if exists
             self.ctx.load_local_internal(project_args)?;
-            // translate project name to project id if a name was given
             if let Some(name) = project_args.name_or_id.as_ref() {
+                // uppercase project id
+                if let Some(suffix) = name.strip_prefix("proj_") {
+                    // Soft (dumb) validation of ULID format in the id (ULIDs are 26 chars)
+                    if suffix.len() == 26 {
+                        let proj_id_uppercase = format!("proj_{}", suffix.to_ascii_uppercase());
+                        if *name != proj_id_uppercase {
+                            eprintln!("INFO: Converted project id to '{}'", proj_id_uppercase);
+                            self.ctx.set_project_id(proj_id_uppercase);
+                        }
+                    }
+                }
+                // translate project name to project id if a name was given
                 if !name.starts_with("proj_") {
                     trace!("unprefixed project id found, assuming it's a project name");
                     let client = self.client.as_ref().unwrap();
@@ -1438,6 +1453,18 @@ impl Shuttle {
             }
             .yellow(),
         );
+
+        Ok(())
+    }
+
+    async fn resource_dump(&self, resource_type: &resource::Type) -> Result<()> {
+        let client = self.client.as_ref().unwrap();
+
+        let bytes = client
+            .dump_service_resource(self.ctx.project_name(), resource_type)
+            .await?;
+
+        std::io::stdout().write_all(&bytes).unwrap();
 
         Ok(())
     }

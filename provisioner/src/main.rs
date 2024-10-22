@@ -44,7 +44,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .http2_keepalive_interval(Some(Duration::from_secs(30))) // Prevent deployer clients from loosing connection #ENG-219
         .layer(JwtAuthenticationLayer::new(AuthPublicKey::new(auth_uri)))
         .layer(ExtractPropagationLayer)
-        .add_service(ProvisionerServer::new(provisioner))
+        .add_service(
+            ProvisionerServer::new(provisioner)
+                // allow dumps up to 50 MB
+                .max_decoding_message_size(50 * 1024 * 1024)
+                .max_encoding_message_size(50 * 1024 * 1024),
+        )
         .serve(addr)
         .await?;
 

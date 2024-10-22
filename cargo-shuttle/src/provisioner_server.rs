@@ -22,8 +22,8 @@ use shuttle_common::{
     ContainerRequest, ContainerResponse, Secret,
 };
 use shuttle_proto::provisioner::{
-    provisioner_server::Provisioner, DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse,
-    Ping, Pong,
+    provisioner_server::Provisioner, DatabaseDeletionResponse, DatabaseDumpRequest,
+    DatabaseDumpResponse, DatabaseRequest, DatabaseResponse, Ping, Pong,
 };
 use shuttle_service::database::Type;
 use tokio::time::sleep;
@@ -343,6 +343,13 @@ impl Provisioner for LocalProvisioner {
         _request: Request<DatabaseRequest>,
     ) -> Result<Response<DatabaseDeletionResponse>, Status> {
         panic!("local runner should not try to delete databases");
+    }
+
+    async fn dump_database(
+        &self,
+        _request: Request<DatabaseDumpRequest>,
+    ) -> Result<Response<DatabaseDumpResponse>, Status> {
+        panic!("local runner should not try to dump databases");
     }
 
     async fn health_check(&self, _request: Request<Ping>) -> Result<Response<Pong>, Status> {

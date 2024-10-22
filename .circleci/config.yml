@@ -111,7 +111,7 @@ commands:
           environment:
             ARCH: "linux-x86_64"
             PROTOC_VERSION: "22.2"
-            PROTOGEN_VERSION: "v0.2.0"
+            PROTOGEN_VERSION: "0.2.7"
           command: |
             curl -OL https://github.com/protocolbuffers/protobuf/releases/download/v$PROTOC_VERSION/protoc-$PROTOC_VERSION-$ARCH.zip && \
               sudo unzip -o protoc-$PROTOC_VERSION-$ARCH.zip bin/protoc "include/*" -d /usr/local && \

@@ -95,6 +95,10 @@ impl RouterBuilder {
                     .layer(ScopedLayer::new(vec![Scope::ResourcesWrite])),
             )
             .route(
+                "/projects/:project_name/services/:service_name/resources/:resource_type/dump",
+                get(dump_service_resource).layer(ScopedLayer::new(vec![Scope::Resources])),
+            )
+            .route(
                 "/projects/:project_name/deployments",
                 get(get_deployments).layer(ScopedLayer::new(vec![Scope::Service])),
             )
@@ -282,6 +286,44 @@ pub async fn delete_service_resource(
     }
 
     Ok(Json(()))
+}
+#[instrument(skip_all, fields(shuttle.project.name = %project_name, shuttle.service.name = %service_name, %resource_type))]
+pub async fn dump_service_resource(
+    Extension(mut persistence): Extension<Persistence>,
+    Extension(claim): Extension<Claim>,
+    CustomErrorPath((project_name, service_name, resource_type)): CustomErrorPath<(
+        String,
+        String,
+        String,
+    )>,
+) -> Result<Vec<u8>> {
+    let _service = persistence
+        .get_service_by_name(&service_name)
+        .await?
+        .ok_or_else(|| Error::NotFound("service not found".to_string()))?;
+
+    let r#type =
+        shuttle_common::resource::Type::from_str(resource_type.as_str()).map_err(|err| {
+            error::Error::Convert {
+                from: "str".to_string(),
+                to: "shuttle_common::resource::Type".to_string(),
+                message: format!("Not a valid resource type representation: {}", err).to_string(),
+            }
+        })?;
+
+    if r#type
+        != shuttle_common::resource::Type::Database(shuttle_common::database::Type::Shared(
+            shuttle_common::database::SharedEngine::Postgres,
+        ))
+    {
+        return Err(anyhow!("Unable to dump this type of resource").into());
+    }
+
+    let dump = persistence
+        .dump_shared_pg(project_name, claim.clone())
+        .await?;
+
+    Ok(dump)
 }
 
 #[instrument(skip_all, fields(shuttle.project.name = %project_name, shuttle.service.name = %service_name))]

@@ -199,6 +199,7 @@ pub fn generate_completions(bin: Binary, shell: Shell, output: Option<PathBuf>) 
     Ok(())
 }
 
+/// Prints a combined manpage by concatenating the main page with each subcommand's page
 pub fn generate_manpage() -> Result<()> {
     let app = ShuttleArgs::command();
     let output = std::io::stdout();

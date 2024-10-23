@@ -214,7 +214,6 @@ pub enum ResourceCommand {
         confirmation: ConfirmationArgs,
     },
     /// Dump a resource
-    #[command(hide = true)]
     Dump {
         /// Type of the resource to dump.
         /// Use the string in the 'Type' column as displayed in the `resource list` command.

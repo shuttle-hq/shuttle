@@ -126,6 +126,15 @@ pub enum Binary {
     Shuttle,
 }
 
+impl Binary {
+    pub fn name(&self) -> String {
+        match self {
+            Self::CargoShuttle => "cargo-shuttle".to_owned(),
+            Self::Shuttle => "shuttle".to_owned(),
+        }
+    }
+}
+
 pub struct Shuttle {
     ctx: RequestContext,
     client: Option<ShuttleApiClient>,
@@ -290,15 +299,14 @@ impl Shuttle {
             }
             Command::Generate(cmd) => match cmd {
                 GenerateCommand::Manpage => generate_manpage(),
-                GenerateCommand::Shell { shell, output } => generate_completions(shell, output),
+                GenerateCommand::Shell { shell, output } => {
+                    generate_completions(self.bin, shell, output)
+                }
             },
             Command::Account => self.account().await,
             Command::Login(login_args) => self.login(login_args, args.offline).await,
             Command::Logout(logout_args) => self.logout(logout_args).await,
-            Command::Feedback => {
-                open_gh_issue();
-                Ok(())
-            }
+            Command::Feedback => open_gh_issue(),
             Command::Run(run_args) => {
                 if self.beta {
                     self.local_run_beta(run_args, args.debug).await

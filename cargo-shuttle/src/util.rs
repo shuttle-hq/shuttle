@@ -20,7 +20,7 @@ use shuttle_common::{
 };
 use tracing::{debug, trace, warn};
 
-use crate::{args::Command, ShuttleArgs};
+use crate::{Binary, ShuttleArgs};
 
 // /// Can be used during testing
 // async fn get_templates_schema() -> Result<TemplatesSchema> {
@@ -188,9 +188,9 @@ impl std::fmt::Display for VersionMismatchError {
 
 impl std::error::Error for VersionMismatchError {}
 
-pub fn generate_completions(shell: Shell, output: Option<PathBuf>) -> Result<()> {
-    let name = env!("CARGO_PKG_NAME");
-    let mut app = Command::command();
+pub fn generate_completions(bin: Binary, shell: Shell, output: Option<PathBuf>) -> Result<()> {
+    let name = bin.name();
+    let mut app = ShuttleArgs::command();
     match output {
         Some(path) => generate(shell, &mut app, name, &mut File::create(path)?),
         None => generate(shell, &mut app, name, &mut stdout()),
@@ -228,9 +228,11 @@ pub fn generate_manpage() -> Result<()> {
     Ok(())
 }
 
-pub fn open_gh_issue() {
+pub fn open_gh_issue() -> Result<()> {
     let _ = webbrowser::open(SHUTTLE_GH_ISSUE_URL);
     eprintln!("If your browser did not open automatically, go to {SHUTTLE_GH_ISSUE_URL}");
+
+    Ok(())
 }
 
 pub async fn update_cargo_shuttle(preview: bool) -> Result<()> {

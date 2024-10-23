@@ -3,12 +3,12 @@ pub mod config;
 mod init;
 mod provisioner_server;
 mod suggestions;
+mod util;
 
 use std::collections::{BTreeMap, HashMap};
 use std::ffi::OsString;
-use std::fmt::Write as FmtWrite;
 use std::fs::{read_to_string, File};
-use std::io::{stdout, Read, Write};
+use std::io::{Read, Write};
 use std::net::{Ipv4Addr, SocketAddr};
 use std::path::{Path, PathBuf};
 use std::process::exit;
@@ -16,16 +16,15 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use anyhow::{anyhow, bail, Context, Result};
+use args::SecretsArgs;
 use chrono::Utc;
 use clap::{parser::ValueSource, CommandFactory, FromArgMatches};
-use clap_complete::{generate, Shell};
-use clap_mangen::Man;
 use crossterm::style::Stylize;
 use dialoguer::{theme::ColorfulTheme, Confirm, Input, Password, Select};
 use flate2::write::GzEncoder;
 use flate2::Compression;
 use futures::{StreamExt, TryFutureExt};
-use git2::{Repository, StatusOptions};
+use git2::Repository;
 use globset::{Glob, GlobSetBuilder};
 use ignore::overrides::OverrideBuilder;
 use ignore::WalkBuilder;
@@ -37,8 +36,8 @@ use shuttle_common::{
     constants::{
         headers::X_CARGO_SHUTTLE_VERSION, API_URL_BETA, API_URL_DEFAULT, DEFAULT_IDLE_MINUTES,
         EXAMPLES_REPO, EXECUTABLE_DIRNAME, RESOURCE_SCHEMA_VERSION, RUNTIME_NAME,
-        SHUTTLE_GH_ISSUE_URL, SHUTTLE_GH_REPO_URL, SHUTTLE_IDLE_DOCS_URL, SHUTTLE_INSTALL_DOCS_URL,
-        SHUTTLE_LOGIN_URL, SHUTTLE_LOGIN_URL_BETA, STORAGE_DIRNAME, TEMPLATES_SCHEMA_VERSION,
+        SHUTTLE_IDLE_DOCS_URL, SHUTTLE_LOGIN_URL, SHUTTLE_LOGIN_URL_BETA, STORAGE_DIRNAME,
+        TEMPLATES_SCHEMA_VERSION,
     },
     deployment::{DeploymentStateBeta, DEPLOYER_END_MESSAGES_BAD, DEPLOYER_END_MESSAGES_GOOD},
     log::LogsRange,
@@ -54,9 +53,7 @@ use shuttle_common::{
         resource::{get_certificates_table_beta, get_resource_tables, get_resource_tables_beta},
     },
     resource::{self, ResourceInput, ShuttleResourceOutput},
-    semvers_are_compatible,
-    templates::TemplatesSchema,
-    ApiKey, DatabaseResource, DbInput, LogItem, LogItemBeta, VersionInfo,
+    semvers_are_compatible, ApiKey, DatabaseResource, DbInput, LogItem, LogItemBeta, VersionInfo,
 };
 use shuttle_proto::{
     provisioner::{provisioner_server::Provisioner, DatabaseRequest},
@@ -72,7 +69,7 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Child;
 use tokio::time::{sleep, Duration};
 use tonic::{Request, Status};
-use tracing::{debug, error, info, trace, warn};
+use tracing::{debug, error, info, trace};
 use tracing_subscriber::{fmt, prelude::*, registry, EnvFilter};
 use uuid::Uuid;
 use zip::write::FileOptions;
@@ -86,6 +83,10 @@ pub use crate::args::{Command, ProjectArgs, RunArgs, ShuttleArgs};
 use crate::config::RequestContext;
 use crate::provisioner_server::beta::{ProvApiState, ProvisionerServerBeta};
 use crate::provisioner_server::LocalProvisioner;
+use crate::util::{
+    check_and_warn_runtime_version, generate_completions, generate_manpage, get_templates_schema,
+    is_dirty, open_gh_issue, update_cargo_shuttle,
+};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -288,13 +289,16 @@ impl Shuttle {
                 .await
             }
             Command::Generate(cmd) => match cmd {
-                GenerateCommand::Manpage => self.generate_manpage(),
-                GenerateCommand::Shell { shell, output } => self.complete(shell, output),
+                GenerateCommand::Manpage => generate_manpage(),
+                GenerateCommand::Shell { shell, output } => generate_completions(shell, output),
             },
             Command::Account => self.account().await,
             Command::Login(login_args) => self.login(login_args, args.offline).await,
             Command::Logout(logout_args) => self.logout(logout_args).await,
-            Command::Feedback => feedback(),
+            Command::Feedback => {
+                open_gh_issue();
+                Ok(())
+            }
             Command::Run(run_args) => {
                 if self.beta {
                     self.local_run_beta(run_args, args.debug).await
@@ -1080,45 +1084,6 @@ impl Shuttle {
         Ok(())
     }
 
-    fn complete(&self, shell: Shell, output: Option<PathBuf>) -> Result<()> {
-        let name = env!("CARGO_PKG_NAME");
-        let mut app = Command::command();
-        match output {
-            Some(path) => generate(shell, &mut app, name, &mut File::create(path)?),
-            None => generate(shell, &mut app, name, &mut stdout()),
-        };
-        Ok(())
-    }
-
-    fn generate_manpage(&self) -> Result<()> {
-        let app = ShuttleArgs::command();
-        let output = std::io::stdout();
-        let mut output_handle = output.lock();
-
-        Man::new(app.clone()).render(&mut output_handle)?;
-
-        for subcommand in app.get_subcommands() {
-            let primary = Man::new(subcommand.clone());
-            primary.render_name_section(&mut output_handle)?;
-            primary.render_synopsis_section(&mut output_handle)?;
-            primary.render_description_section(&mut output_handle)?;
-            primary.render_options_section(&mut output_handle)?;
-            // For example, `generate` has sub-commands `shell` and `manpage`
-            if subcommand.has_subcommands() {
-                primary.render_subcommands_section(&mut output_handle)?;
-                for sb in subcommand.get_subcommands() {
-                    let secondary = Man::new(sb.clone());
-                    secondary.render_name_section(&mut output_handle)?;
-                    secondary.render_synopsis_section(&mut output_handle)?;
-                    secondary.render_description_section(&mut output_handle)?;
-                    secondary.render_options_section(&mut output_handle)?;
-                }
-            }
-        }
-
-        Ok(())
-    }
-
     async fn status(&self) -> Result<()> {
         let client = self.client.as_ref().unwrap();
         let summary = client.get_service(self.ctx.project_name()).await?;
@@ -1555,38 +1520,37 @@ impl Shuttle {
         Ok(secrets)
     }
 
-    async fn check_and_warn_runtime_version(path: &Path) -> Result<()> {
-        if let Err(err) = check_version(path).await {
-            warn!("{}", err);
-            if let Some(mismatch) = err.downcast_ref::<VersionMismatchError>() {
-                println!("Warning: {}.", mismatch);
-                if mismatch.shuttle_runtime > mismatch.cargo_shuttle {
-                    // The runtime is newer than cargo-shuttle so we
-                    // should help the user to update cargo-shuttle.
-                    printdoc! {"
-                        Hint: A newer version of cargo-shuttle is available.
-                              Check out the installation docs for how to update: {SHUTTLE_INSTALL_DOCS_URL}",
-                    };
-                } else {
-                    printdoc! {"
-                        Hint: A newer version of shuttle-runtime is available.
-                              Change its version to {} in Cargo.toml to update it,
-                              or run this command: cargo add shuttle-runtime@{}",
-                        mismatch.cargo_shuttle,
-                        mismatch.cargo_shuttle,
-                    };
-                }
-            } else {
-                return Err(err.context(
-                    format!(
-                        "Failed to verify the version of shuttle-runtime in {}. Is cargo targeting the correct executable?",
-                        path.display()
-                    )
-                ));
-            }
-        }
+    fn get_secrets_beta(
+        args: &SecretsArgs,
+        workspace_root: &Path,
+    ) -> Result<Option<HashMap<String, String>>> {
+        // Look for a secrets file, first in the command args, then in the root of the workspace.
+        let secrets_file = args.secrets.clone().or_else(|| {
+            let secrets_file = workspace_root.join("Secrets.toml");
 
-        Ok(())
+            if secrets_file.exists() && secrets_file.is_file() {
+                Some(secrets_file)
+            } else {
+                None
+            }
+        });
+
+        Ok(if let Some(secrets_file) = secrets_file {
+            trace!("Loading secrets from {}", secrets_file.display());
+            if let Ok(secrets_str) = read_to_string(&secrets_file) {
+                let secrets = toml::from_str::<HashMap<String, String>>(&secrets_str)?;
+
+                trace!(keys = ?secrets.keys(), "available secrets");
+
+                Some(secrets)
+            } else {
+                trace!("No secrets were loaded");
+                None
+            }
+        } else {
+            trace!("No secrets file was found");
+            None
+        })
     }
 
     async fn spin_local_runtime(
@@ -1598,7 +1562,9 @@ impl Shuttle {
 
         trace!(path = ?service.executable_path, "runtime executable");
 
-        Shuttle::check_and_warn_runtime_version(&service.executable_path).await?;
+        if let Some(warning) = check_and_warn_runtime_version(&service.executable_path).await? {
+            eprint!("{}", warning);
+        }
 
         let runtime_executable = service.executable_path.clone();
         let port =
@@ -2068,7 +2034,9 @@ impl Shuttle {
 
         let secrets = Shuttle::get_secrets(&run_args, &service)?;
         Shuttle::find_available_port_beta(&mut run_args);
-        Shuttle::check_and_warn_runtime_version(&service.executable_path).await?;
+        if let Some(warning) = check_and_warn_runtime_version(&service.executable_path).await? {
+            eprint!("{}", warning);
+        }
 
         let runtime_executable = service.executable_path.clone();
         let api_port = portpicker::pick_unused_port()
@@ -2374,34 +2342,7 @@ impl Shuttle {
         let project_name = self.ctx.project_name();
 
         let secrets = if self.beta {
-            // Look for a secrets file, first in the command args, and if it isn't there look
-            // in the root of the crate or workspace.
-            let secrets_file = args.secret_args.secrets.clone().or_else(|| {
-                let secrets_file = manifest_path.parent().unwrap().join("Secrets.toml");
-
-                if secrets_file.exists() && secrets_file.is_file() {
-                    Some(secrets_file)
-                } else {
-                    None
-                }
-            });
-
-            if let Some(secrets_file) = secrets_file {
-                trace!("Loading secrets from {}", secrets_file.display());
-                if let Ok(secrets_str) = read_to_string(&secrets_file) {
-                    let secrets = toml::from_str::<HashMap<String, String>>(&secrets_str)?;
-
-                    trace!(keys = ?secrets.keys(), "available secrets");
-
-                    Some(secrets)
-                } else {
-                    trace!("No secrets were loaded");
-                    None
-                }
-            } else {
-                trace!("No secrets file was found");
-                None
-            }
+            Shuttle::get_secrets_beta(&args.secret_args, working_directory)?
         } else {
             None
         };
@@ -2428,7 +2369,7 @@ impl Shuttle {
             no_test: args.no_test,
             ..Default::default()
         };
-        let mut deployment_req_buildarch_beta = DeploymentRequestBuildArchiveBeta {
+        let mut deployment_req_beta = DeploymentRequestBuildArchiveBeta {
             secrets,
             ..Default::default()
         };
@@ -2467,7 +2408,7 @@ impl Shuttle {
 
             // TODO: determine which (one) binary to build
 
-            deployment_req_buildarch_beta.build_args = Some(BuildArgsBeta::Rust(rust_build_args));
+            deployment_req_beta.build_args = Some(BuildArgsBeta::Rust(rust_build_args));
 
             // TODO: have all of the above be configurable in CLI and Shuttle.toml
         }
@@ -2533,8 +2474,8 @@ impl Shuttle {
 
             eprintln!("Uploading code...");
             let arch = client.upload_archive_beta(pid, archive).await?;
-            deployment_req_buildarch_beta.archive_version_id = arch.archive_version_id;
-            deployment_req_buildarch_beta.build_meta = Some(BuildMetaBeta {
+            deployment_req_beta.archive_version_id = arch.archive_version_id;
+            deployment_req_beta.build_meta = Some(BuildMetaBeta {
                 git_commit_id: deployment_req.git_commit_id,
                 git_commit_msg: deployment_req.git_commit_msg,
                 git_branch: deployment_req.git_branch,
@@ -2545,7 +2486,7 @@ impl Shuttle {
             let deployment = client
                 .deploy_beta(
                     pid,
-                    DeploymentRequestBeta::BuildArchive(deployment_req_buildarch_beta),
+                    DeploymentRequestBeta::BuildArchive(deployment_req_beta),
                 )
                 .await?;
 
@@ -3215,126 +3156,6 @@ impl Shuttle {
     }
 }
 
-// /// Can be used during testing
-// async fn get_templates_schema() -> Result<TemplatesSchema> {
-//     Ok(toml::from_str(include_str!(
-//         "../../examples/templates.toml"
-//     ))?)
-// }
-async fn get_templates_schema() -> Result<TemplatesSchema> {
-    let client = reqwest::Client::new();
-    Ok(toml::from_str(
-        &client
-            .get(shuttle_common::constants::EXAMPLES_TEMPLATES_TOML)
-            .send()
-            .await?
-            .text()
-            .await?,
-    )?)
-}
-
-fn is_dirty(repo: &Repository) -> Result<()> {
-    let mut status_options = StatusOptions::new();
-    status_options.include_untracked(true);
-    let statuses = repo
-        .statuses(Some(&mut status_options))
-        .context("getting status of repository files")?;
-
-    if !statuses.is_empty() {
-        let mut error = format!(
-            "{} files in the working directory contain changes that were not yet committed into git:\n",
-            statuses.len()
-        );
-
-        for status in statuses.iter() {
-            trace!(
-                path = status.path(),
-                status = ?status.status(),
-                "found file with updates"
-            );
-
-            let rel_path = status.path().context("getting path of changed file")?;
-
-            writeln!(error, "{rel_path}").expect("to append error");
-        }
-
-        writeln!(error).expect("to append error");
-        writeln!(error, "To proceed despite this and include the uncommitted changes, pass the `--allow-dirty` flag (alias `--ad`)").expect("to append error");
-
-        bail!(error);
-    }
-
-    Ok(())
-}
-
-async fn check_version(runtime_path: &Path) -> Result<()> {
-    debug!(
-        "Checking version of runtime binary at {}",
-        runtime_path.display()
-    );
-
-    // should always be a valid semver
-    let my_version = semver::Version::from_str(VERSION).unwrap();
-
-    if !runtime_path.try_exists()? {
-        bail!("shuttle-runtime binary not found");
-    }
-
-    // Get runtime version from shuttle-runtime cli
-    // It should print the version and exit immediately, so a timeout is used to not launch servers with non-Shuttle setups
-    let stdout = tokio::time::timeout(Duration::from_millis(3000), async move {
-        tokio::process::Command::new(runtime_path)
-            .arg("--version")
-            .kill_on_drop(true) // if the binary does not halt on its own, not killing it will leak child processes
-            .output()
-            .await
-            .context("Failed to run the shuttle-runtime binary to check its version")
-            .map(|o| o.stdout)
-    })
-    .await
-    .context("Checking the version of shuttle-runtime timed out. Make sure the executable is using #[shuttle-runtime::main].")??;
-
-    // Parse the version, splitting the version from the name and
-    // and pass it to `to_semver()`.
-    let runtime_version = semver::Version::from_str(
-        std::str::from_utf8(&stdout)
-            .context("shuttle-runtime version should be valid utf8")?
-            .split_once(' ')
-            .context("shuttle-runtime version should be in the `name version` format")?
-            .1
-            .trim(),
-    )
-    .context("failed to convert user's runtime version to semver")?;
-
-    if semvers_are_compatible(&my_version, &runtime_version) {
-        Ok(())
-    } else {
-        Err(VersionMismatchError {
-            shuttle_runtime: runtime_version,
-            cargo_shuttle: my_version,
-        })
-        .context("shuttle-runtime and cargo-shuttle have incompatible versions")
-    }
-}
-
-#[derive(Debug)]
-struct VersionMismatchError {
-    shuttle_runtime: semver::Version,
-    cargo_shuttle: semver::Version,
-}
-
-impl std::fmt::Display for VersionMismatchError {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(
-            f,
-            "shuttle-runtime {} and cargo-shuttle {} are incompatible",
-            self.shuttle_runtime, self.cargo_shuttle
-        )
-    }
-}
-
-impl std::error::Error for VersionMismatchError {}
-
 /// Calls async function `f` in a loop with `millis` sleep between iterations,
 /// providing iteration count and reference to update the progress bar.
 /// `f` returns Some with a cleanup function if done.
@@ -3384,50 +3205,6 @@ fn create_spinner() -> ProgressBar {
     );
 
     pb
-}
-
-fn feedback() -> Result<()> {
-    let _ = webbrowser::open(SHUTTLE_GH_ISSUE_URL);
-    eprintln!("If your browser did not open automatically, go to {SHUTTLE_GH_ISSUE_URL}");
-
-    Ok(())
-}
-
-async fn update_cargo_shuttle(preview: bool) -> Result<()> {
-    if preview {
-        let _ = tokio::process::Command::new("cargo")
-            .args(["install", "cargo-shuttle", "--git", SHUTTLE_GH_REPO_URL])
-            .kill_on_drop(true)
-            .spawn()
-            .context("Failed to spawn cargo install process")?
-            .wait()
-            .await
-            .context("Failed to wait on cargo install process")?;
-
-        return Ok(());
-    }
-
-    #[cfg(target_family = "unix")]
-    let _ = tokio::process::Command::new("bash")
-        .args(["-c", "curl -sSfL https://www.shuttle.rs/install | bash"])
-        .kill_on_drop(true)
-        .spawn()
-        .context("Failed to spawn bash update process")?
-        .wait()
-        .await
-        .context("Failed to wait on bash update process")?;
-
-    #[cfg(target_family = "windows")]
-    let _ = tokio::process::Command::new("powershell")
-        .args(["-Command", "iwr https://www.shuttle.rs/install-win | iex"])
-        .kill_on_drop(true)
-        .spawn()
-        .context("Failed to spawn powershell update process")?
-        .wait()
-        .await
-        .context("Failed to wait on powershell update process")?;
-
-    Ok(())
 }
 
 #[cfg(test)]

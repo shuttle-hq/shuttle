@@ -94,7 +94,9 @@ pub struct ProjectUpdateRequestBeta {
     pub compute_tier: Option<ComputeTier>,
 }
 
-#[derive(Debug, Default, Clone, PartialEq, Eq, Display, Serialize, Deserialize, EnumString)]
+#[derive(
+    Debug, Default, Clone, Copy, PartialEq, Eq, Display, Serialize, Deserialize, EnumString,
+)]
 #[serde(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
 #[typeshare::typeshare]

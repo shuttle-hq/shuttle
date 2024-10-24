@@ -42,6 +42,7 @@ pub struct ProjectResponseBeta {
     pub user_id: String,
     pub name: String,
     pub created_at: DateTime<Utc>,
+    pub compute_tier: Option<ComputeTier>,
     /// State of the current deployment if one exists (something has been deployed).
     pub deployment_state: Option<DeploymentStateBeta>,
     /// URIs where running deployments can be reached
@@ -85,9 +86,18 @@ pub struct ProjectListResponseBeta {
     pub projects: Vec<ProjectResponseBeta>,
 }
 
+/// Set wanted field(s) to Some to update those parts of the project
+#[derive(Debug, Default, Deserialize, Serialize, Clone, PartialEq)]
+#[typeshare::typeshare]
+pub struct ProjectUpdateRequestBeta {
+    pub name: Option<String>,
+    pub compute_tier: Option<ComputeTier>,
+}
+
 #[derive(Debug, Default, Clone, PartialEq, Eq, Display, Serialize, Deserialize, EnumString)]
 #[serde(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
+#[typeshare::typeshare]
 pub enum ComputeTier {
     #[default]
     XS,

@@ -9,7 +9,7 @@ use anyhow::{bail, Context};
 use cargo_metadata::MetadataCommand;
 use clap::{
     builder::{OsStringValueParser, PossibleValue, TypedValueParser},
-    Parser, ValueEnum,
+    Args, Parser, Subcommand, ValueEnum,
 };
 use clap_complete::Shell;
 use shuttle_common::constants::{DEFAULT_IDLE_MINUTES, EXAMPLES_REPO};
@@ -46,7 +46,7 @@ pub struct ShuttleArgs {
 }
 
 /// Global args for subcommands that deal with projects
-#[derive(Parser, Clone, Debug)]
+#[derive(Args, Clone, Debug)]
 pub struct ProjectArgs {
     /// Specify the working directory
     #[arg(global = true, long, visible_alias = "wd", default_value = ".", value_parser = OsStringValueParser::new().try_map(parse_path))]
@@ -97,7 +97,7 @@ impl ProjectArgs {
 ///
 /// See the CLI docs (https://docs.shuttle.rs/getting-started/shuttle-commands)
 /// for more information.
-#[derive(Parser)]
+#[derive(Subcommand)]
 pub enum Command {
     /// Generate a Shuttle project from a template
     Init(InitArgs),
@@ -159,7 +159,7 @@ pub enum GenerateCommand {
     Manpage,
 }
 
-#[derive(Parser)]
+#[derive(Args)]
 pub struct TableArgs {
     /// Output tables without borders
     #[arg(long, default_value_t = false)]
@@ -214,7 +214,6 @@ pub enum ResourceCommand {
         confirmation: ConfirmationArgs,
     },
     /// Dump a resource
-    #[command(hide = true)]
     Dump {
         /// Type of the resource to dump.
         /// Use the string in the 'Type' column as displayed in the `resource list` command.
@@ -281,14 +280,14 @@ pub enum ProjectCommand {
     Link,
 }
 
-#[derive(Parser, Debug)]
+#[derive(Args, Debug)]
 pub struct ConfirmationArgs {
     /// Skip confirmations and proceed
     #[arg(long, short, default_value_t = false)]
     pub yes: bool,
 }
 
-#[derive(Parser, Debug)]
+#[derive(Args, Debug)]
 pub struct ProjectStartArgs {
     #[arg(long, default_value_t = DEFAULT_IDLE_MINUTES)]
     /// How long to wait before putting the project in an idle state due to inactivity.
@@ -296,21 +295,21 @@ pub struct ProjectStartArgs {
     pub idle_minutes: u64,
 }
 
-#[derive(Parser, Clone, Debug, Default)]
+#[derive(Args, Clone, Debug, Default)]
 pub struct LoginArgs {
     /// API key for the Shuttle platform
     #[arg(long)]
     pub api_key: Option<String>,
 }
 
-#[derive(Parser, Clone, Debug)]
+#[derive(Args, Clone, Debug)]
 pub struct LogoutArgs {
     /// Reset the API key before logging out
     #[arg(long)]
     pub reset_api_key: bool,
 }
 
-#[derive(Parser, Default)]
+#[derive(Args, Default)]
 pub struct DeployArgs {
     /// WIP: Deploy this Docker image instead of building one
     #[arg(long, short = 'i', hide = true)]
@@ -336,7 +335,7 @@ pub struct DeployArgs {
     pub secret_args: SecretsArgs,
 }
 
-#[derive(Parser, Debug)]
+#[derive(Args, Debug)]
 pub struct RunArgs {
     /// Port to start service on
     #[arg(long, short = 'p', env, default_value = "8000")]
@@ -355,14 +354,14 @@ pub struct RunArgs {
     pub secret_args: SecretsArgs,
 }
 
-#[derive(Parser, Debug, Default)]
+#[derive(Args, Debug, Default)]
 pub struct SecretsArgs {
     /// Use this secrets file instead
     #[arg(long, value_parser = OsStringValueParser::new().try_map(parse_path))]
     pub secrets: Option<PathBuf>,
 }
 
-#[derive(Parser, Clone, Debug, Default)]
+#[derive(Args, Clone, Debug, Default)]
 pub struct InitArgs {
     /// Clone a starter template from Shuttle's official examples
     #[arg(long, short, value_enum, conflicts_with_all = &["from", "subfolder"])]
@@ -470,7 +469,7 @@ impl InitTemplateArg {
     }
 }
 
-#[derive(Parser, Clone, Debug, Default)]
+#[derive(Args, Clone, Debug, Default)]
 pub struct LogsArgs {
     /// Deployment ID to get logs for. Defaults to the current deployment
     pub id: Option<String>,

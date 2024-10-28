@@ -129,7 +129,7 @@ impl Client {
     ) -> Result<ProjectResponseBeta> {
         self.inner
             .put_json(
-                format!("/projects/{}", project_id),
+                format!("/projects/{project_id}"),
                 Some(ProjectUpdateRequestBeta {
                     compute_tier: Some(compute_tier),
                     ..Default::default()

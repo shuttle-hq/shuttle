@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 use shuttle_api_client::ShuttleApiClient;
 use shuttle_common::models::{
     admin::ProjectResponse,

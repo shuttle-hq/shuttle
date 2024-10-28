@@ -295,8 +295,8 @@ impl Shuttle {
             Command::Logout(logout_args) => self.logout(logout_args).await,
             Command::Feedback => feedback(),
             Command::Run(run_args) => {
+                self.ctx.load_local(&args.project_args)?;
                 if self.beta {
-                    self.ctx.load_local(&args.project_args)?;
                     self.local_run_beta(run_args, args.debug).await
                 } else {
                     self.local_run(run_args).await

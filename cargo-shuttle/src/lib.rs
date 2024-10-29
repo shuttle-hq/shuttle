@@ -266,6 +266,7 @@ impl Shuttle {
                 | Command::Status
                 | Command::Logs { .. }
         ) {
+            // Command::Run only uses load_local (below) instead of load_project since it does not target a project in the API
             self.load_project(
                 &args.project_args,
                 matches!(args.cmd, Command::Project(ProjectCommand::Link)),
@@ -703,20 +704,14 @@ impl Shuttle {
                 .as_ref()
                 .expect("to have a project name provided");
 
-            let prompt = if self.beta {
-                format!(
-                    r#"Create an environment for the "{}" project on Shuttle?"#,
-                    name
-                )
-            } else {
-                format!(
-                    r#"Claim the project name "{}" by starting a project container on Shuttle?"#,
-                    name
-                )
-            };
-
             let should_create = Confirm::with_theme(&theme)
-                .with_prompt(prompt)
+                .with_prompt(if self.beta {
+                    format!(r#"Create a project on Shuttle with the name "{name}"?"#)
+                } else {
+                    format!(
+                        r#"Claim the project name "{name}" by starting a project container on Shuttle?"#
+                    )
+                })
                 .default(true)
                 .interact()?;
             if !should_create && !self.beta {

@@ -148,9 +148,9 @@ impl GlobalConfig {
 /// Shuttle.toml schema (User-facing project-local config)
 #[derive(Deserialize, Serialize, Default)]
 pub struct ProjectConfig {
-    // unused on new platform
+    // unused on new platform, but still used for project names in local runs
     pub name: Option<String>,
-    // deprecated name
+    /// Deprecated, now [`ProjectDeployConfig::include`]
     pub assets: Option<Vec<String>>,
     pub deploy: Option<ProjectDeployConfig>,
     pub build: Option<ProjectBuildConfig>,
@@ -161,7 +161,7 @@ pub struct ProjectDeployConfig {
     /// Successor to `assets`.
     /// Patterns of ignored files that should be included in deployments.
     pub include: Option<Vec<String>>,
-    /// set to true to deny deployments with uncommited changes. (can use `--allow-dirty`)
+    /// Set to true to deny deployments with uncommited changes. (use `--allow-dirty` to override)
     pub deny_dirty: Option<bool>,
 }
 /// Builder config

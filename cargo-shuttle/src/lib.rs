@@ -16,7 +16,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use anyhow::{anyhow, bail, Context, Result};
-use args::SecretsArgs;
+use args::{ProjectUpdateCommand, SecretsArgs};
 use chrono::Utc;
 use clap::{parser::ValueSource, CommandFactory, FromArgMatches};
 use crossterm::style::Stylize;
@@ -32,6 +32,7 @@ use indicatif::ProgressBar;
 use indoc::{formatdoc, printdoc};
 use reqwest::header::HeaderMap;
 use shuttle_api_client::ShuttleApiClient;
+use shuttle_common::models::project::ProjectUpdateRequestBeta;
 use shuttle_common::{
     constants::{
         headers::X_CARGO_SHUTTLE_VERSION, API_URL_BETA, API_URL_DEFAULT, DEFAULT_IDLE_MINUTES,
@@ -190,10 +191,12 @@ impl Shuttle {
             Command::Deployment(DeploymentCommand::Stop)
                 | Command::Account
                 | Command::Project(ProjectCommand::Link)
+                | Command::Project(ProjectCommand::Update(..))
         ) {
             bail!("This command is not supported on the OLD platform (shuttle.rs).");
         }
 
+        // commands that differ in behavior in any way between .rs/.dev
         if !matches!(
             args.cmd,
             Command::Feedback | Command::Generate(_) | Command::Upgrade { .. }
@@ -365,6 +368,9 @@ impl Shuttle {
                         self.project_start(idle_minutes).await
                     }
                 }
+                ProjectCommand::Update(cmd) => match cmd {
+                    ProjectUpdateCommand::Name { name } => self.project_rename_beta(name).await,
+                },
                 ProjectCommand::Restart(ProjectStartArgs { idle_minutes }) => {
                     self.project_restart(idle_minutes).await
                 }
@@ -2796,6 +2802,23 @@ impl Shuttle {
         let project = client.create_project_beta(name).await?;
 
         println!("Created project '{}' with id {}", project.name, project.id);
+
+        Ok(())
+    }
+    async fn project_rename_beta(&self, name: String) -> Result<()> {
+        let client = self.client.as_ref().unwrap();
+
+        let project = client
+            .update_project_beta(
+                self.ctx.project_id(),
+                ProjectUpdateRequestBeta {
+                    name: Some(name),
+                    ..Default::default()
+                },
+            )
+            .await?;
+
+        println!("Renamed project {} to {}", project.id, project.name);
 
         Ok(())
     }

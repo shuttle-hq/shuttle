@@ -319,6 +319,15 @@ impl ShuttleApiClient {
         self.get_json("/projects".to_owned()).await
     }
 
+    pub async fn update_project_beta(
+        &self,
+        project: &str,
+        req: project::ProjectUpdateRequestBeta,
+    ) -> Result<project::ProjectResponseBeta> {
+        self.put_json(format!("/projects/{project}"), Some(req))
+            .await
+    }
+
     pub async fn stop_project(&self, project: &str) -> Result<project::Response> {
         let path = format!("/projects/{project}");
 

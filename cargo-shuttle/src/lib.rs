@@ -275,8 +275,8 @@ impl Shuttle {
                 | Command::Clean
                 | Command::Status
                 | Command::Logs { .. }
-                | Command::Run(..)
         ) {
+            // Command::Run only uses load_local (below) instead of load_project since it does not target a project in the API
             self.load_project(
                 &args.project_args,
                 matches!(args.cmd, Command::Project(ProjectCommand::Link)),
@@ -308,6 +308,7 @@ impl Shuttle {
             Command::Logout(logout_args) => self.logout(logout_args).await,
             Command::Feedback => open_gh_issue(),
             Command::Run(run_args) => {
+                self.ctx.load_local(&args.project_args)?;
                 if self.beta {
                     self.local_run_beta(run_args, args.debug).await
                 } else {
@@ -705,24 +706,27 @@ impl Shuttle {
         println!();
 
         // 6. Confirm that the user wants to create the project environment on Shuttle
-        let should_create_environment = if self.beta {
-            false
-        } else if !interactive {
+        let should_create_environment = if !interactive {
             args.create_env
         } else if args.create_env {
             true
         } else {
+            let name = project_args
+                .name_or_id
+                .as_ref()
+                .expect("to have a project name provided");
+
             let should_create = Confirm::with_theme(&theme)
-                .with_prompt(format!(
-                    r#"Claim the project name "{}" by starting a project container on Shuttle?"#,
-                    project_args
-                        .name_or_id
-                        .as_ref()
-                        .expect("to have a project name provided")
-                ))
+                .with_prompt(if self.beta {
+                    format!(r#"Create a project on Shuttle with the name "{name}"?"#)
+                } else {
+                    format!(
+                        r#"Claim the project name "{name}" by starting a project container on Shuttle?"#
+                    )
+                })
                 .default(true)
                 .interact()?;
-            if !should_create {
+            if !should_create && !self.beta {
                 println!(
                     "Note: The project name will not be claimed until \
                     you start the project with `cargo shuttle project start`."
@@ -737,8 +741,10 @@ impl Shuttle {
             // so `load_project` is ran with the correct project path
             project_args.working_directory.clone_from(&path);
 
-            self.load_project(&project_args, false, false).await?;
-            self.project_start(DEFAULT_IDLE_MINUTES).await?;
+            self.load_project(&project_args, true, true).await?;
+            if !self.beta {
+                self.project_start(DEFAULT_IDLE_MINUTES).await?;
+            }
         }
 
         if std::env::current_dir().is_ok_and(|d| d != path) {
@@ -826,7 +832,7 @@ impl Shuttle {
     pub async fn load_project(
         &mut self,
         project_args: &ProjectArgs,
-        link_cmd: bool,
+        do_linking: bool,
         create_missing_beta_project: bool,
     ) -> Result<()> {
         trace!("project arguments: {project_args:?}");
@@ -872,14 +878,14 @@ impl Shuttle {
                     }
                 }
                 // if called from Link command, command-line override is saved to file
-                if link_cmd {
+                if do_linking {
                     eprintln!("Linking to project {}", self.ctx.project_id());
                     self.ctx.save_local_internal()?;
                     return Ok(());
                 }
             }
             // if project id is still not known or an explicit linking is wanted, start the linking prompt
-            if !self.ctx.project_id_found() || link_cmd {
+            if !self.ctx.project_id_found() || do_linking {
                 self.project_link(None).await?;
             }
         }

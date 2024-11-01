@@ -268,9 +268,10 @@ impl Shuttle {
                 | Command::Project(
                     // ProjectCommand::List does not need to know which project we are in
                     ProjectCommand::Start { .. }
+                        | ProjectCommand::Update(..)
+                        | ProjectCommand::Status { .. }
                         | ProjectCommand::Stop { .. }
                         | ProjectCommand::Restart { .. }
-                        | ProjectCommand::Status { .. }
                         | ProjectCommand::Delete { .. }
                         | ProjectCommand::Link
                 )

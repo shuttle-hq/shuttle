@@ -183,6 +183,7 @@ pub enum DeploymentCommand {
         table: TableArgs,
     },
     /// View status of a deployment
+    #[command(visible_alias = "stat")]
     Status {
         /// ID of deployment to get status for
         id: Option<String>,
@@ -254,6 +255,7 @@ pub enum ProjectCommand {
     #[command(subcommand, visible_alias = "upd")]
     Update(ProjectUpdateCommand),
     /// Get the status of this project on Shuttle
+    #[command(visible_alias = "stat")]
     Status {
         /// Follow status of project
         // unused in beta (project has no state to follow)

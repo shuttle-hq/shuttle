@@ -54,10 +54,7 @@ pub async fn device_auth() -> Result<String> {
         }
     });
 
-    let url = &format!(
-        "{}device-auth?callbackUrl=http%3A%2F%2F{}%3A{}%2F",
-        console_url, ip, port,
-    );
+    let url = &format!("{}device-auth?callbackPort={}", console_url, port);
     let _ = webbrowser::open(url);
     println!("Complete login in Shuttle Console to authenticate CLI.");
     println!("If your browser did not automatically open, go to {url}");

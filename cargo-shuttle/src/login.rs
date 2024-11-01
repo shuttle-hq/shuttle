@@ -1,4 +1,5 @@
 use std::convert::Infallible;
+use std::env;
 use std::net::{Ipv4Addr, SocketAddr};
 use std::time::Duration;
 
@@ -21,8 +22,11 @@ use tracing::{debug, trace};
 pub async fn device_auth() -> Result<String> {
     let (tx, mut rx) = mpsc::channel::<String>(8);
 
-    let console_url =
-        std::env::var("SHUTTLE_CONSOLE_URL").unwrap_or(SHUTTLE_CONSOLE_URL.to_owned());
+    // should not have trailing slash
+    let console_url = env::var("SHUTTLE_CONSOLE_URL").unwrap_or(SHUTTLE_CONSOLE_URL.to_owned());
+    if console_url.ends_with('/') {
+        eprintln!("WARNING: Console URL is probably incorrect. Ends with '/': {console_url}");
+    }
 
     let ip = Ipv4Addr::LOCALHOST;
     let port = portpicker::pick_unused_port()
@@ -30,31 +34,36 @@ pub async fn device_auth() -> Result<String> {
     let addr = SocketAddr::from((ip, port));
 
     debug!(%addr, "Starting api key callback server");
+    let console_url_clone = console_url.clone();
     tokio::spawn(async move {
         let listener = TcpListener::bind(addr).await.unwrap();
         let tx = tx;
+        let console_url = console_url;
 
         loop {
             let (stream, addr) = listener.accept().await.unwrap();
             trace!(%addr, "Incoming connection");
             let io = TokioIo::new(stream);
             let tx = tx.clone();
+            let console_url = console_url.clone();
 
             tokio::spawn(async move {
                 if let Err(err) = http1::Builder::new()
                     .serve_connection(
                         io,
-                        service_fn(|req| async { handler(tx.clone(), req).await }),
+                        service_fn(|req| async {
+                            handler(console_url.clone(), tx.clone(), req).await
+                        }),
                     )
                     .await
                 {
-                    eprintln!("Error serving connection: {:?}", err);
+                    eprintln!("[Callback server] Error serving connection: {:?}", err);
                 }
             });
         }
     });
 
-    let url = &format!("{}device-auth?callbackPort={}", console_url, port);
+    let url = &format!("{}/device-auth?callbackPort={}", console_url_clone, port);
     let _ = webbrowser::open(url);
     println!("Complete login in Shuttle Console to authenticate CLI.");
     println!("If your browser did not automatically open, go to {url}");
@@ -70,6 +79,7 @@ pub async fn device_auth() -> Result<String> {
 }
 
 async fn handler(
+    console_url: String,
     tx: mpsc::Sender<String>,
     req: http::Request<body::Incoming>,
 ) -> Result<Response<Full<Bytes>>, Infallible> {
@@ -89,10 +99,7 @@ async fn handler(
             // Console's callback request to localhost goes cross origin.
             // CORS headers needed for it to "see" the result of the request
             // and redirect the user.
-            .header(
-                "Access-Control-Allow-Origin",
-                "*", // TODO?: use console_url
-            )
+            .header("Access-Control-Allow-Origin", console_url)
             .header("Access-Control-Allow-Methods", "POST")
             .body(Full::default())
             .unwrap())

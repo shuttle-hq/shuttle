@@ -17,7 +17,7 @@ pub const API_URL_DEFAULT: &str = API_URL_RS;
 pub const SHUTTLE_STATUS_URL: &str = "https://status.shuttle.rs";
 
 pub const SHUTTLE_LEGACY_NEW_PROJECT: &str = "https://console.shuttle.rs/new-project";
-pub const SHUTTLE_CONSOLE_URL: &str = "https://console.shuttle.dev/";
+pub const SHUTTLE_CONSOLE_URL: &str = "https://console.shuttle.dev";
 
 pub const SHUTTLE_INSTALL_DOCS_URL: &str = "https://docs.shuttle.dev/getting-started/installation";
 pub const SHUTTLE_IDLE_DOCS_URL: &str = "https://docs.shuttle.rs/getting-started/idle-projects";

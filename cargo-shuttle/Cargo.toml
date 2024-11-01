@@ -36,7 +36,11 @@ gix = { version = "0.66.0", default-features = false, features = [
 globset = "0.4.13"
 headers = { workspace = true }
 home = { workspace = true }
+http = "1"
+http-body-util = "0.1"
 hyper = { workspace = true }
+hyper-1 = { package = "hyper", version = "1.0", features = ["full"] }
+hyper-util = { version = "0.1.10", features = ["full"] }
 ignore = "0.4.20"
 indicatif = "0.17.3"
 indoc = "2.0.1"

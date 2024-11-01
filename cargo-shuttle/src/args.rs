@@ -308,6 +308,9 @@ pub struct ProjectStartArgs {
 
 #[derive(Args, Clone, Debug, Default)]
 pub struct LoginArgs {
+    /// Prompt to paste the API key instead of opening browser
+    #[arg(long)]
+    pub input: bool,
     /// API key for the Shuttle platform
     #[arg(long)]
     pub api_key: Option<String>,

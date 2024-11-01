@@ -4,8 +4,8 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Context, Result};
 use serde::{Deserialize, Serialize};
-use shuttle_common::constants::API_URL_BETA;
 use shuttle_common::constants::API_URL_DEFAULT;
+use shuttle_common::constants::API_URL_DEFAULT_BETA;
 use tracing::trace;
 
 use crate::args::ProjectArgs;
@@ -423,7 +423,7 @@ impl RequestContext {
         } else if let Some(api_url) = self.global.as_ref().unwrap().api_url() {
             api_url
         } else if beta {
-            API_URL_BETA.to_string()
+            API_URL_DEFAULT_BETA.to_string()
         } else {
             API_URL_DEFAULT.to_string()
         }

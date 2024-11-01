@@ -1,6 +1,7 @@
 mod args;
 pub mod config;
 mod init;
+mod login;
 mod provisioner_server;
 mod suggestions;
 mod util;
@@ -33,9 +34,9 @@ use reqwest::header::HeaderMap;
 use shuttle_api_client::ShuttleApiClient;
 use shuttle_common::{
     constants::{
-        headers::X_CARGO_SHUTTLE_VERSION, API_URL_BETA, API_URL_DEFAULT, DEFAULT_IDLE_MINUTES,
-        EXAMPLES_REPO, EXECUTABLE_DIRNAME, RESOURCE_SCHEMA_VERSION, RUNTIME_NAME,
-        SHUTTLE_IDLE_DOCS_URL, SHUTTLE_LOGIN_URL, SHUTTLE_LOGIN_URL_BETA, STORAGE_DIRNAME,
+        headers::X_CARGO_SHUTTLE_VERSION, API_URL_DEFAULT, API_URL_DEFAULT_BETA,
+        DEFAULT_IDLE_MINUTES, EXAMPLES_REPO, EXECUTABLE_DIRNAME, RESOURCE_SCHEMA_VERSION,
+        RUNTIME_NAME, SHUTTLE_IDLE_DOCS_URL, SHUTTLE_LEGACY_NEW_PROJECT, STORAGE_DIRNAME,
         TEMPLATES_SCHEMA_VERSION,
     },
     deployment::{DeploymentStateBeta, DEPLOYER_END_MESSAGES_BAD, DEPLOYER_END_MESSAGES_GOOD},
@@ -52,7 +53,7 @@ use shuttle_common::{
         resource::{get_certificates_table_beta, get_resource_tables, get_resource_tables_beta},
     },
     resource::{self, ResourceInput, ShuttleResourceOutput},
-    semvers_are_compatible, ApiKey, DatabaseResource, DbInput, LogItem, LogItemBeta, VersionInfo,
+    semvers_are_compatible, DatabaseResource, DbInput, LogItem, LogItemBeta, VersionInfo,
 };
 use shuttle_proto::{
     provisioner::{provisioner_server::Provisioner, DatabaseRequest},
@@ -206,7 +207,8 @@ impl Shuttle {
             }
         }
         if let Some(ref url) = args.api_url {
-            if (!self.beta && url != API_URL_DEFAULT) || (self.beta && url != API_URL_BETA) {
+            if (!self.beta && url != API_URL_DEFAULT) || (self.beta && url != API_URL_DEFAULT_BETA)
+            {
                 eprintln!(
                     "{}",
                     format!("INFO: Targeting non-default API: {url}").yellow(),
@@ -967,20 +969,29 @@ impl Shuttle {
         let api_key = match login_args.api_key {
             Some(api_key) => api_key,
             None => {
-                if !offline {
-                    let url = if self.beta {
-                        SHUTTLE_LOGIN_URL_BETA
-                    } else {
-                        SHUTTLE_LOGIN_URL
-                    };
-                    let _ = webbrowser::open(url);
-                    println!("If your browser did not automatically open, go to {url}");
-                }
+                if login_args.input || !self.beta {
+                    // manual input requested (always the case on shuttle.rs)
 
-                Password::with_theme(&ColorfulTheme::default())
-                    .with_prompt("API key")
-                    .validate_with(|input: &String| ApiKey::parse(input).map(|_| ()))
-                    .interact()?
+                    if !login_args.input && !self.beta {
+                        // if !beta, open console
+                        let url = SHUTTLE_LEGACY_NEW_PROJECT;
+                        let _ = webbrowser::open(url);
+                        println!("If your browser did not automatically open, go to {url}");
+                    }
+
+                    Password::with_theme(&ColorfulTheme::default())
+                        .with_prompt("API key")
+                        .validate_with(|input: &String| {
+                            if input.is_empty() {
+                                return Err("Empty API key was provided");
+                            }
+                            Ok(())
+                        })
+                        .interact()?
+                } else {
+                    // device auth flow
+                    login::device_auth().await?
+                }
             }
         };
 
@@ -1011,7 +1022,12 @@ impl Shuttle {
                 .await
                 .map_err(suggestions::api_key::reset_api_key_failed)?;
             println!("Successfully reset the API key.");
-            println!(" -> Go to {SHUTTLE_LOGIN_URL} to get a new one.\n");
+            if self.beta {
+                println!(" -> Use `shuttle login` to get a new one.")
+            } else {
+                println!(" -> Go to {SHUTTLE_LEGACY_NEW_PROJECT} to get a new one.");
+            }
+            println!();
         }
         self.ctx.clear_api_key()?;
         println!("Successfully logged out.");

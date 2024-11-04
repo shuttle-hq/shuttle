@@ -194,9 +194,9 @@ impl Shuttle {
             bail!("This command is not supported on the OLD platform (shuttle.rs).");
         }
 
-        // commands that differ in behavior in any way between .rs/.dev
         if !matches!(
             args.cmd,
+            // commands that don't differ in behavior in any way between .rs/.dev
             Command::Feedback | Command::Generate(_) | Command::Upgrade { .. }
         ) {
             if self.beta {

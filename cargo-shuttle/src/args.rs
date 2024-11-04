@@ -145,7 +145,7 @@ pub enum Command {
     },
 }
 
-#[derive(Parser)]
+#[derive(Subcommand)]
 pub enum GenerateCommand {
     /// Generate shell completions
     Shell {
@@ -166,7 +166,7 @@ pub struct TableArgs {
     pub raw: bool,
 }
 
-#[derive(Parser)]
+#[derive(Subcommand)]
 pub enum DeploymentCommand {
     /// List the deployments for a service
     #[command(visible_alias = "ls")]
@@ -183,6 +183,7 @@ pub enum DeploymentCommand {
         table: TableArgs,
     },
     /// View status of a deployment
+    #[command(visible_alias = "stat")]
     Status {
         /// ID of deployment to get status for
         id: Option<String>,
@@ -191,7 +192,7 @@ pub enum DeploymentCommand {
     Stop,
 }
 
-#[derive(Parser)]
+#[derive(Subcommand)]
 pub enum ResourceCommand {
     /// List the resources for a project
     #[command(visible_alias = "ls")]
@@ -222,7 +223,7 @@ pub enum ResourceCommand {
     },
 }
 
-#[derive(Parser)]
+#[derive(Subcommand)]
 pub enum CertificateCommand {
     /// Add an SSL certificate for a custom domain
     Add {
@@ -245,12 +246,16 @@ pub enum CertificateCommand {
     },
 }
 
-#[derive(Parser)]
+#[derive(Subcommand)]
 pub enum ProjectCommand {
-    /// Create an environment for this project on Shuttle
+    /// Create a project on Shuttle
     #[command(visible_alias = "create")]
     Start(ProjectStartArgs),
-    /// Check the status of this project's environment on Shuttle
+    /// Update project config
+    #[command(subcommand, visible_alias = "upd")]
+    Update(ProjectUpdateCommand),
+    /// Get the status of this project on Shuttle
+    #[command(visible_alias = "stat")]
     Status {
         /// Follow status of project
         // unused in beta (project has no state to follow)
@@ -278,6 +283,12 @@ pub enum ProjectCommand {
     Delete(ConfirmationArgs),
     /// Link this workspace to a Shuttle project
     Link,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum ProjectUpdateCommand {
+    /// Rename the project, including its default subdomain
+    Name { name: String },
 }
 
 #[derive(Args, Debug)]

@@ -114,7 +114,7 @@ tracing-subscriber = { version = "0.3.16", default-features = false, features = 
 typeshare = "1.0.3"
 ttl_cache = "0.5.1"
 ulid = "1.0.0"
-url = "2.4.0"
+url = "=2.5.2" # https://github.com/servo/rust-url/issues/992
 uuid = "1.2.2"
 wiremock = "0.6.0"
 zeroize = "1.6.0"

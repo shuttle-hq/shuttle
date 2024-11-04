@@ -16,7 +16,6 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use anyhow::{anyhow, bail, Context, Result};
-use args::SecretsArgs;
 use chrono::Utc;
 use clap::{parser::ValueSource, CommandFactory, FromArgMatches};
 use crossterm::style::Stylize;
@@ -49,7 +48,7 @@ use shuttle_common::{
             CREATE_SERVICE_BODY_LIMIT, GIT_STRINGS_MAX_LENGTH,
         },
         error::ApiError,
-        project,
+        project::{self, ProjectUpdateRequestBeta},
         resource::{get_certificates_table_beta, get_resource_tables, get_resource_tables_beta},
     },
     resource::{self, ResourceInput, ShuttleResourceOutput},
@@ -76,8 +75,8 @@ use zip::write::FileOptions;
 
 use crate::args::{
     CertificateCommand, ConfirmationArgs, DeployArgs, DeploymentCommand, GenerateCommand, InitArgs,
-    LoginArgs, LogoutArgs, LogsArgs, ProjectCommand, ProjectStartArgs, ResourceCommand, TableArgs,
-    TemplateLocation,
+    LoginArgs, LogoutArgs, LogsArgs, ProjectCommand, ProjectStartArgs, ProjectUpdateCommand,
+    ResourceCommand, SecretsArgs, TableArgs, TemplateLocation,
 };
 pub use crate::args::{Command, ProjectArgs, RunArgs, ShuttleArgs};
 use crate::config::RequestContext;
@@ -190,12 +189,14 @@ impl Shuttle {
             Command::Deployment(DeploymentCommand::Stop)
                 | Command::Account
                 | Command::Project(ProjectCommand::Link)
+                | Command::Project(ProjectCommand::Update(..))
         ) {
             bail!("This command is not supported on the OLD platform (shuttle.rs).");
         }
 
         if !matches!(
             args.cmd,
+            // commands that don't differ in behavior in any way between .rs/.dev
             Command::Feedback | Command::Generate(_) | Command::Upgrade { .. }
         ) {
             if self.beta {
@@ -265,9 +266,10 @@ impl Shuttle {
                 | Command::Project(
                     // ProjectCommand::List does not need to know which project we are in
                     ProjectCommand::Start { .. }
+                        | ProjectCommand::Update(..)
+                        | ProjectCommand::Status { .. }
                         | ProjectCommand::Stop { .. }
                         | ProjectCommand::Restart { .. }
-                        | ProjectCommand::Status { .. }
                         | ProjectCommand::Delete { .. }
                         | ProjectCommand::Link
                 )
@@ -366,6 +368,9 @@ impl Shuttle {
                         self.project_start(idle_minutes).await
                     }
                 }
+                ProjectCommand::Update(cmd) => match cmd {
+                    ProjectUpdateCommand::Name { name } => self.project_rename_beta(name).await,
+                },
                 ProjectCommand::Restart(ProjectStartArgs { idle_minutes }) => {
                     self.project_restart(idle_minutes).await
                 }
@@ -2802,6 +2807,23 @@ impl Shuttle {
         let project = client.create_project_beta(name).await?;
 
         println!("Created project '{}' with id {}", project.name, project.id);
+
+        Ok(())
+    }
+    async fn project_rename_beta(&self, name: String) -> Result<()> {
+        let client = self.client.as_ref().unwrap();
+
+        let project = client
+            .update_project_beta(
+                self.ctx.project_id(),
+                ProjectUpdateRequestBeta {
+                    name: Some(name),
+                    ..Default::default()
+                },
+            )
+            .await?;
+
+        println!("Renamed project {} to {}", project.id, project.name);
 
         Ok(())
     }

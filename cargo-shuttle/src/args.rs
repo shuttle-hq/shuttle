@@ -287,7 +287,7 @@ pub enum ProjectCommand {
 
 #[derive(Subcommand, Debug)]
 pub enum ProjectUpdateCommand {
-    /// Rename the project, including it's hosted subdomain
+    /// Rename the project, including its hosted subdomain
     Name { name: String },
 }
 

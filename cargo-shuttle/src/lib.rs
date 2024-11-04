@@ -16,7 +16,6 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use anyhow::{anyhow, bail, Context, Result};
-use args::{ProjectUpdateCommand, SecretsArgs};
 use chrono::Utc;
 use clap::{parser::ValueSource, CommandFactory, FromArgMatches};
 use crossterm::style::Stylize;
@@ -32,7 +31,6 @@ use indicatif::ProgressBar;
 use indoc::{formatdoc, printdoc};
 use reqwest::header::HeaderMap;
 use shuttle_api_client::ShuttleApiClient;
-use shuttle_common::models::project::ProjectUpdateRequestBeta;
 use shuttle_common::{
     constants::{
         headers::X_CARGO_SHUTTLE_VERSION, API_URL_BETA, API_URL_DEFAULT, DEFAULT_IDLE_MINUTES,
@@ -50,7 +48,7 @@ use shuttle_common::{
             CREATE_SERVICE_BODY_LIMIT, GIT_STRINGS_MAX_LENGTH,
         },
         error::ApiError,
-        project,
+        project::{self, ProjectUpdateRequestBeta},
         resource::{get_certificates_table_beta, get_resource_tables, get_resource_tables_beta},
     },
     resource::{self, ResourceInput, ShuttleResourceOutput},
@@ -77,8 +75,8 @@ use zip::write::FileOptions;
 
 use crate::args::{
     CertificateCommand, ConfirmationArgs, DeployArgs, DeploymentCommand, GenerateCommand, InitArgs,
-    LoginArgs, LogoutArgs, LogsArgs, ProjectCommand, ProjectStartArgs, ResourceCommand, TableArgs,
-    TemplateLocation,
+    LoginArgs, LogoutArgs, LogsArgs, ProjectCommand, ProjectStartArgs, ProjectUpdateCommand,
+    ResourceCommand, SecretsArgs, TableArgs, TemplateLocation,
 };
 pub use crate::args::{Command, ProjectArgs, RunArgs, ShuttleArgs};
 use crate::config::RequestContext;

@@ -149,7 +149,7 @@ impl ShuttleApiClient {
         project: &str,
         data: Vec<u8>,
     ) -> Result<UploadArchiveResponseBeta> {
-        let path = format!("/projects/{project}/deployments/archives");
+        let path = format!("/projects/{project}/archives");
 
         let url = format!("{}{}", self.api_url, path);
         let mut builder = self.client.post(url);

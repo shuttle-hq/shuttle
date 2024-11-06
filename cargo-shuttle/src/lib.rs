@@ -1,7 +1,6 @@
 mod args;
 pub mod config;
 mod init;
-mod login;
 mod provisioner_server;
 mod suggestions;
 mod util;
@@ -42,6 +41,7 @@ use shuttle_common::{
     deployment::{DeploymentStateBeta, DEPLOYER_END_MESSAGES_BAD, DEPLOYER_END_MESSAGES_GOOD},
     log::LogsRange,
     models::{
+        auth::{KeyMessage, TokenMessage},
         deployment::{
             deployments_table_beta, get_deployments_table, BuildArgsBeta, BuildArgsRustBeta,
             BuildMetaBeta, DeploymentRequest, DeploymentRequestBeta,
@@ -68,8 +68,9 @@ use tar::Builder;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Child;
 use tokio::time::{sleep, Duration};
+use tokio_tungstenite::tungstenite::Message;
 use tonic::{Request, Status};
-use tracing::{debug, error, info, trace};
+use tracing::{debug, error, info, trace, warn};
 use tracing_subscriber::{fmt, prelude::*, registry, EnvFilter};
 use uuid::Uuid;
 use zip::write::FileOptions;
@@ -989,8 +990,8 @@ impl Shuttle {
                         })
                         .interact()?
                 } else {
-                    // device auth flow
-                    login::device_auth().await?
+                    // device auth flow via Shuttle Console
+                    self.device_auth(login_args.console_url).await?
                 }
             }
         };
@@ -1014,6 +1015,58 @@ impl Shuttle {
         }
 
         Ok(())
+    }
+
+    async fn device_auth(&self, console_url: String) -> Result<String> {
+        let client = self.client.as_ref().unwrap();
+
+        // should not have trailing slash
+        if console_url.ends_with('/') {
+            eprintln!("WARNING: Console URL is probably incorrect. Ends with '/': {console_url}");
+        }
+
+        let mut stream = client.get_device_auth_ws().await?;
+
+        let mut token = None;
+        match stream.next().await {
+            Some(Ok(Message::Text(s))) => {
+                token = Some(serde_json::from_str::<TokenMessage>(&s)?.token);
+            }
+            Some(Ok(_msg)) => {
+                warn!("received unexpected ws message");
+            }
+            Some(Err(err)) => {
+                error!("error receiving ws message: {}", err);
+            }
+            None => {
+                error!("error receiving ws message");
+            }
+        }
+        let Some(token) = token else {
+            bail!("Did not receive device auth token over websocket");
+        };
+
+        let url = &format!("{}/device-auth?token={}", console_url, token);
+        let _ = webbrowser::open(url);
+        println!("Complete login in Shuttle Console to authenticate CLI.");
+        println!("If your browser did not automatically open, go to {url}");
+
+        match stream.next().await {
+            Some(Ok(Message::Text(s))) => {
+                return Ok(serde_json::from_str::<KeyMessage>(&s)?.api_key);
+            }
+            Some(Ok(_msg)) => {
+                warn!("received unexpected ws message");
+            }
+            Some(Err(err)) => {
+                error!("error receiving ws message: {}", err);
+            }
+            None => {
+                error!("error receiving ws message");
+            }
+        }
+
+        bail!("Failed to receive API key over websocket");
     }
 
     async fn logout(&mut self, logout_args: LogoutArgs) -> Result<()> {

@@ -12,7 +12,7 @@ use clap::{
     Args, Parser, Subcommand, ValueEnum,
 };
 use clap_complete::Shell;
-use shuttle_common::constants::{DEFAULT_IDLE_MINUTES, EXAMPLES_REPO};
+use shuttle_common::constants::{DEFAULT_IDLE_MINUTES, EXAMPLES_REPO, SHUTTLE_CONSOLE_URL};
 use shuttle_common::resource;
 
 #[derive(Parser)]
@@ -311,9 +311,12 @@ pub struct LoginArgs {
     /// Prompt to paste the API key instead of opening browser
     #[arg(long)]
     pub input: bool,
-    /// API key for the Shuttle platform
+    /// Explicitly use this Shuttle API key
     #[arg(long)]
     pub api_key: Option<String>,
+    /// URL to the Shuttle Console to use for automatic login
+    #[arg(long, env = "SHUTTLE_CONSOLE_URL", default_value = SHUTTLE_CONSOLE_URL)]
+    pub console_url: String,
 }
 
 #[derive(Args, Clone, Debug)]

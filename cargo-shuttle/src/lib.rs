@@ -22,6 +22,7 @@ use crossterm::style::Stylize;
 use dialoguer::{theme::ColorfulTheme, Confirm, Input, Password, Select};
 use flate2::write::GzEncoder;
 use flate2::Compression;
+use futures::stream::SplitStream;
 use futures::{SinkExt, StreamExt, TryFutureExt};
 use git2::Repository;
 use globset::{Glob, GlobSetBuilder};
@@ -66,9 +67,11 @@ use shuttle_service::{
 use strum::{EnumMessage, VariantArray};
 use tar::Builder;
 use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::net::TcpStream;
 use tokio::process::Child;
 use tokio::time::{sleep, Duration};
 use tokio_tungstenite::tungstenite::Message;
+use tokio_tungstenite::{MaybeTlsStream, WebSocketStream};
 use tonic::{Request, Status};
 use tracing::{debug, error, info, trace, warn};
 use tracing_subscriber::{fmt, prelude::*, registry, EnvFilter};
@@ -1035,36 +1038,43 @@ impl Shuttle {
             }
         });
 
-        let mut token = None;
-        loop {
-            match rx.next().await {
-                Some(Ok(msg)) => match msg {
-                    Message::Text(s) => {
-                        token = Some(serde_json::from_str::<TokenMessage>(&s)?.token);
+        async fn read_ws_until_text(
+            rx: &mut SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>,
+        ) -> Result<Option<String>> {
+            loop {
+                match rx.next().await {
+                    Some(Ok(msg)) => match msg {
+                        Message::Text(s) => {
+                            return Ok(Some(s));
+                        }
+                        Message::Pong(_) => {}
+                        Message::Close(f) => {
+                            error!("received close frame: {f:?}");
+                            break;
+                        }
+                        _ => {
+                            warn!("received unexpected ws message: {msg:?}");
+                        }
+                    },
+                    Some(Err(err)) => {
+                        error!("error receiving ws message: {err}");
                         break;
                     }
-                    Message::Pong(_) => {}
-                    Message::Close(f) => {
-                        error!("received close frame: {f:?}");
+                    None => {
+                        error!("error receiving ws message");
                         break;
                     }
-                    _ => {
-                        warn!("received unexpected ws message: {msg:?}");
-                    }
-                },
-                Some(Err(err)) => {
-                    error!("error receiving ws message: {err}");
-                    break;
-                }
-                None => {
-                    error!("error receiving ws message");
-                    break;
                 }
             }
+
+            Ok(None)
         }
+
+        let token = read_ws_until_text(&mut rx).await?;
         let Some(token) = token else {
             bail!("Did not receive device auth token over websocket");
         };
+        let token = serde_json::from_str::<TokenMessage>(&token)?.token;
 
         let url = &format!("{}/device-auth?token={}", console_url, token);
         let _ = webbrowser::open(url);
@@ -1074,33 +1084,13 @@ impl Shuttle {
         println!("{}", format!("Token: {token}").bold());
         println!();
 
-        loop {
-            match rx.next().await {
-                Some(Ok(msg)) => match msg {
-                    Message::Text(s) => {
-                        return Ok(serde_json::from_str::<KeyMessage>(&s)?.api_key);
-                    }
-                    Message::Pong(_) => {}
-                    Message::Close(f) => {
-                        error!("received close frame: {f:?}");
-                        break;
-                    }
-                    _ => {
-                        warn!("received unexpected ws message: {msg:?}");
-                    }
-                },
-                Some(Err(err)) => {
-                    error!("error receiving ws message: {err}");
-                    break;
-                }
-                None => {
-                    error!("error receiving ws message");
-                    break;
-                }
-            }
-        }
+        let key = read_ws_until_text(&mut rx).await?;
+        let Some(key) = key else {
+            bail!("Failed to receive API key over websocket");
+        };
+        let key = serde_json::from_str::<KeyMessage>(&key)?.api_key;
 
-        bail!("Failed to receive API key over websocket");
+        Ok(key)
     }
 
     async fn logout(&mut self, logout_args: LogoutArgs) -> Result<()> {

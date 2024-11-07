@@ -187,6 +187,7 @@ impl Shuttle {
         } else if matches!(
             args.cmd,
             Command::Deployment(DeploymentCommand::Stop)
+                | Command::Deployment(DeploymentCommand::Redeploy { .. })
                 | Command::Account
                 | Command::Project(ProjectCommand::Link)
                 | Command::Project(ProjectCommand::Update(..))
@@ -331,7 +332,7 @@ impl Shuttle {
                     self.deployments_list(page, limit, table).await
                 }
                 DeploymentCommand::Status { id } => self.deployment_get(id).await,
-                DeploymentCommand::Redeploy { id } => self.deployment_get(id).await,
+                DeploymentCommand::Redeploy { id } => self.deployment_redeploy(id).await,
                 DeploymentCommand::Stop => self.stop_beta().await,
             },
             Command::Stop => self.stop().await,

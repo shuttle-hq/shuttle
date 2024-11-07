@@ -1050,6 +1050,9 @@ impl Shuttle {
         let _ = webbrowser::open(url);
         println!("Complete login in Shuttle Console to authenticate CLI.");
         println!("If your browser did not automatically open, go to {url}");
+        println!("");
+        println!("{}", format!("Token: {token}").bold());
+        println!("");
 
         match stream.next().await {
             Some(Ok(Message::Text(s))) => {

@@ -83,7 +83,9 @@ impl ShuttleApiClient {
     }
 
     pub async fn get_device_auth_ws(&self) -> Result<WebSocketStream<MaybeTlsStream<TcpStream>>> {
-        self.ws_get("/device-auth/ws".to_owned()).await
+        self.ws_get("/device-auth/ws".to_owned())
+            .await
+            .with_context(|| "failed to connect to auth endpoint")
     }
 
     pub async fn check_project_name(&self, project_name: &str) -> Result<bool> {

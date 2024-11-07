@@ -331,6 +331,7 @@ impl Shuttle {
                     self.deployments_list(page, limit, table).await
                 }
                 DeploymentCommand::Status { id } => self.deployment_get(id).await,
+                DeploymentCommand::Redeploy { id } => self.deployment_get(id).await,
                 DeploymentCommand::Stop => self.stop_beta().await,
             },
             Command::Stop => self.stop().await,
@@ -1352,6 +1353,17 @@ impl Shuttle {
 
             println!("{deployment}");
         }
+
+        Ok(())
+    }
+
+    async fn deployment_redeploy(&self, deployment_id: String) -> Result<()> {
+        let client = self.client.as_ref().unwrap();
+
+        let pid = self.ctx.project_id();
+        let deployment = client.redeploy_beta(pid, &deployment_id).await?;
+
+        println!("{}", deployment.to_string_colored());
 
         Ok(())
     }

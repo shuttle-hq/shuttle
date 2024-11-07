@@ -22,7 +22,7 @@ use crossterm::style::Stylize;
 use dialoguer::{theme::ColorfulTheme, Confirm, Input, Password, Select};
 use flate2::write::GzEncoder;
 use flate2::Compression;
-use futures::{StreamExt, TryFutureExt};
+use futures::{SinkExt, StreamExt, TryFutureExt};
 use git2::Repository;
 use globset::{Glob, GlobSetBuilder};
 use ignore::overrides::OverrideBuilder;
@@ -1025,21 +1025,41 @@ impl Shuttle {
             eprintln!("WARNING: Console URL is probably incorrect. Ends with '/': {console_url}");
         }
 
-        let mut stream = client.get_device_auth_ws().await?;
+        let (mut tx, mut rx) = client.get_device_auth_ws().await?.split();
+
+        // keep the socket alive with ping/pong
+        tokio::spawn(async move {
+            loop {
+                tx.send(Message::Ping(Vec::new())).await.unwrap();
+                sleep(Duration::from_secs(20)).await;
+            }
+        });
 
         let mut token = None;
-        match stream.next().await {
-            Some(Ok(Message::Text(s))) => {
-                token = Some(serde_json::from_str::<TokenMessage>(&s)?.token);
-            }
-            Some(Ok(_msg)) => {
-                warn!("received unexpected ws message");
-            }
-            Some(Err(err)) => {
-                error!("error receiving ws message: {}", err);
-            }
-            None => {
-                error!("error receiving ws message");
+        loop {
+            match rx.next().await {
+                Some(Ok(msg)) => match msg {
+                    Message::Text(s) => {
+                        token = Some(serde_json::from_str::<TokenMessage>(&s)?.token);
+                        break;
+                    }
+                    Message::Pong(_) => {}
+                    Message::Close(f) => {
+                        error!("received close frame: {f:?}");
+                        break;
+                    }
+                    _ => {
+                        warn!("received unexpected ws message: {msg:?}");
+                    }
+                },
+                Some(Err(err)) => {
+                    error!("error receiving ws message: {err}");
+                    break;
+                }
+                None => {
+                    error!("error receiving ws message");
+                    break;
+                }
             }
         }
         let Some(token) = token else {
@@ -1054,18 +1074,29 @@ impl Shuttle {
         println!("{}", format!("Token: {token}").bold());
         println!();
 
-        match stream.next().await {
-            Some(Ok(Message::Text(s))) => {
-                return Ok(serde_json::from_str::<KeyMessage>(&s)?.api_key);
-            }
-            Some(Ok(_msg)) => {
-                warn!("received unexpected ws message");
-            }
-            Some(Err(err)) => {
-                error!("error receiving ws message: {}", err);
-            }
-            None => {
-                error!("error receiving ws message");
+        loop {
+            match rx.next().await {
+                Some(Ok(msg)) => match msg {
+                    Message::Text(s) => {
+                        return Ok(serde_json::from_str::<KeyMessage>(&s)?.api_key);
+                    }
+                    Message::Pong(_) => {}
+                    Message::Close(f) => {
+                        error!("received close frame: {f:?}");
+                        break;
+                    }
+                    _ => {
+                        warn!("received unexpected ws message: {msg:?}");
+                    }
+                },
+                Some(Err(err)) => {
+                    error!("error receiving ws message: {err}");
+                    break;
+                }
+                None => {
+                    error!("error receiving ws message");
+                    break;
+                }
             }
         }
 

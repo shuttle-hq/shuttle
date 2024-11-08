@@ -12,4 +12,4 @@ async-trait = "0.1.56"
 bincode = "1.2.1"
 serde = { version = "1", features = ["derive"] }
 shuttle-service = { path = "../../service", version = "0.48.0" }
-thiserror = "1.0.32"
+thiserror = "2"

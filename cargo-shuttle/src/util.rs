@@ -11,7 +11,7 @@ use anyhow::{bail, Context, Result};
 use clap::CommandFactory;
 use clap_complete::{generate, Shell};
 use clap_mangen::Man;
-use futures::{Stream, StreamExt};
+use futures::StreamExt;
 use git2::{Repository, StatusOptions};
 use indoc::writedoc;
 use shuttle_common::{
@@ -277,8 +277,7 @@ pub async fn update_cargo_shuttle(preview: bool) -> Result<()> {
 
 pub async fn read_ws_until_text<T>(rx: &mut T) -> Result<Option<String>>
 where
-    T: StreamExt + std::marker::Unpin,
-    T: Stream<Item = tungstenite::Result<Message>>,
+    T: StreamExt<Item = tungstenite::Result<Message>> + Unpin,
 {
     while let Some(Ok(msg)) = rx.next().await {
         if let Message::Text(s) = msg {

@@ -22,7 +22,6 @@ use crossterm::style::Stylize;
 use dialoguer::{theme::ColorfulTheme, Confirm, Input, Password, Select};
 use flate2::write::GzEncoder;
 use flate2::Compression;
-use futures::stream::SplitStream;
 use futures::{SinkExt, StreamExt, TryFutureExt};
 use git2::Repository;
 use globset::{Glob, GlobSetBuilder};
@@ -67,13 +66,11 @@ use shuttle_service::{
 use strum::{EnumMessage, VariantArray};
 use tar::Builder;
 use tokio::io::{AsyncBufReadExt, BufReader};
-use tokio::net::TcpStream;
 use tokio::process::Child;
 use tokio::time::{sleep, Duration};
 use tokio_tungstenite::tungstenite::Message;
-use tokio_tungstenite::{MaybeTlsStream, WebSocketStream};
 use tonic::{Request, Status};
-use tracing::{debug, error, info, trace, warn};
+use tracing::{debug, error, info, trace};
 use tracing_subscriber::{fmt, prelude::*, registry, EnvFilter};
 use uuid::Uuid;
 use zip::write::FileOptions;
@@ -89,7 +86,7 @@ use crate::provisioner_server::beta::{ProvApiState, ProvisionerServerBeta};
 use crate::provisioner_server::LocalProvisioner;
 use crate::util::{
     check_and_warn_runtime_version, generate_completions, generate_manpage, get_templates_schema,
-    is_dirty, open_gh_issue, update_cargo_shuttle,
+    is_dirty, open_gh_issue, read_ws_until_text, update_cargo_shuttle,
 };
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -1038,38 +1035,6 @@ impl Shuttle {
             }
         });
 
-        async fn read_ws_until_text(
-            rx: &mut SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>,
-        ) -> Result<Option<String>> {
-            loop {
-                match rx.next().await {
-                    Some(Ok(msg)) => match msg {
-                        Message::Text(s) => {
-                            return Ok(Some(s));
-                        }
-                        Message::Pong(_) => {}
-                        Message::Close(f) => {
-                            error!("received close frame: {f:?}");
-                            break;
-                        }
-                        _ => {
-                            warn!("received unexpected ws message: {msg:?}");
-                        }
-                    },
-                    Some(Err(err)) => {
-                        error!("error receiving ws message: {err}");
-                        break;
-                    }
-                    None => {
-                        error!("error receiving ws message");
-                        break;
-                    }
-                }
-            }
-
-            Ok(None)
-        }
-
         let token = read_ws_until_text(&mut rx).await?;
         let Some(token) = token else {
             bail!("Did not receive device auth token over websocket");
@@ -1314,27 +1279,25 @@ impl Shuttle {
                     suggestions::logs::get_logs_failure(err, "Connecting to the logs stream failed")
                 })?;
 
-            while let Some(Ok(msg)) = stream.next().await {
-                if let tokio_tungstenite::tungstenite::Message::Text(line) = msg {
-                    match serde_json::from_str::<shuttle_common::LogItem>(&line) {
-                        Ok(log) => {
-                            if args.raw {
-                                println!("{}", log.get_raw_line())
-                            } else {
-                                println!("{log}")
-                            }
+            while let Ok(Some(s)) = read_ws_until_text(&mut stream).await {
+                match serde_json::from_str::<LogItem>(&s) {
+                    Ok(log) => {
+                        if args.raw {
+                            println!("{}", log.get_raw_line())
+                        } else {
+                            println!("{log}")
                         }
-                        Err(err) => {
-                            debug!(error = %err, "failed to parse message into log item");
+                    }
+                    Err(err) => {
+                        debug!(error = %err, "failed to parse message into log item");
 
-                            let message = if let Ok(err) = serde_json::from_str::<ApiError>(&line) {
-                                err.to_string()
-                            } else {
-                                "failed to parse logs, is your cargo-shuttle outdated?".to_string()
-                            };
+                        let message = if let Ok(err) = serde_json::from_str::<ApiError>(&s) {
+                            err.to_string()
+                        } else {
+                            "failed to parse logs, is your cargo-shuttle outdated?".to_string()
+                        };
 
-                            bail!(message);
-                        }
+                        bail!(message);
                     }
                 }
             }
@@ -2659,46 +2622,44 @@ impl Shuttle {
 
         let mut deployer_version_checked = false;
         let mut runtime_version_checked = false;
-        loop {
-            if let Some(Ok(msg)) = stream.next().await {
-                if let tokio_tungstenite::tungstenite::Message::Text(line) = msg {
-                    let log_item = match serde_json::from_str::<shuttle_common::LogItem>(&line) {
-                        Ok(log_item) => log_item,
-                        Err(err) => {
-                            debug!(error = %err, "failed to parse message into log item");
+        while let Ok(Some(s)) = read_ws_until_text(&mut stream).await {
+            let log_item = match serde_json::from_str::<LogItem>(&s) {
+                Ok(log_item) => log_item,
+                Err(err) => {
+                    debug!(error = %err, "failed to parse message into log item");
 
-                            let message = if let Ok(err) = serde_json::from_str::<ApiError>(&line) {
-                                err.to_string()
-                            } else {
-                                "failed to parse logs, is your cargo-shuttle outdated?".to_string()
-                            };
-
-                            bail!(message);
-                        }
+                    let message = if let Ok(err) = serde_json::from_str::<ApiError>(&s) {
+                        err.to_string()
+                    } else {
+                        "failed to parse logs, is your cargo-shuttle outdated?".to_string()
                     };
 
-                    if args.raw {
-                        println!("{}", log_item.get_raw_line())
-                    } else {
-                        println!("{log_item}")
-                    }
+                    bail!(message);
+                }
+            };
 
-                    // Detect versions of deployer and runtime, and print warnings of outdated.
-                    if !deployer_version_checked
-                        && self.version_info.is_some()
-                        && log_item.line.contains("Deployer version: ")
-                    {
-                        deployer_version_checked = true;
-                        let my_version = &log_item
-                            .line
-                            .split_once("Deployer version: ")
-                            .unwrap()
-                            .1
-                            .parse::<semver::Version>()
-                            .context("parsing deployer version in log stream")?;
-                        let latest_version = &self.version_info.as_ref().unwrap().deployer;
-                        if latest_version > my_version {
-                            self.version_warnings.push(
+            if args.raw {
+                println!("{}", log_item.get_raw_line())
+            } else {
+                println!("{log_item}")
+            }
+
+            // Detect versions of deployer and runtime, and print warnings of outdated.
+            if !deployer_version_checked
+                && self.version_info.is_some()
+                && log_item.line.contains("Deployer version: ")
+            {
+                deployer_version_checked = true;
+                let my_version = &log_item
+                    .line
+                    .split_once("Deployer version: ")
+                    .unwrap()
+                    .1
+                    .parse::<semver::Version>()
+                    .context("parsing deployer version in log stream")?;
+                let latest_version = &self.version_info.as_ref().unwrap().deployer;
+                if latest_version > my_version {
+                    self.version_warnings.push(
                                 formatdoc! {"
                                     Warning:
                                         A newer version of shuttle-deployer is available ({latest_version}).
@@ -2707,28 +2668,28 @@ impl Shuttle {
                                 .yellow()
                                 .to_string(),
                             )
-                        }
-                    }
-                    if !runtime_version_checked
-                        && self.version_info.is_some()
-                        && log_item
-                            .line
-                            .contains("shuttle-runtime executable started (version ")
-                    {
-                        runtime_version_checked = true;
-                        let my_version = &log_item
-                            .line
-                            .split_once("shuttle-runtime executable started (version ")
-                            .unwrap()
-                            .1
-                            .split_once(')')
-                            .unwrap()
-                            .0
-                            .parse::<semver::Version>()
-                            .context("parsing runtime version in log stream")?;
-                        let latest_version = &self.version_info.as_ref().unwrap().runtime;
-                        if latest_version > my_version {
-                            self.version_warnings.push(
+                }
+            }
+            if !runtime_version_checked
+                && self.version_info.is_some()
+                && log_item
+                    .line
+                    .contains("shuttle-runtime executable started (version ")
+            {
+                runtime_version_checked = true;
+                let my_version = &log_item
+                    .line
+                    .split_once("shuttle-runtime executable started (version ")
+                    .unwrap()
+                    .1
+                    .split_once(')')
+                    .unwrap()
+                    .0
+                    .parse::<semver::Version>()
+                    .context("parsing runtime version in log stream")?;
+                let latest_version = &self.version_info.as_ref().unwrap().runtime;
+                if latest_version > my_version {
+                    self.version_warnings.push(
                                 formatdoc! {"
                                     Warning:
                                         A newer version of shuttle-runtime is available ({latest_version}).
@@ -2737,45 +2698,29 @@ impl Shuttle {
                                 .yellow()
                                 .to_string(),
                             )
-                        }
-                    }
-
-                    // Determine when to stop listening to the log stream
-                    if DEPLOYER_END_MESSAGES_BAD
-                        .iter()
-                        .any(|m| log_item.line.contains(m))
-                    {
-                        println!();
-                        println!("{}", "Deployment crashed".red());
-                        println!();
-                        println!("Run the following for more details");
-                        println!();
-                        println!("cargo shuttle logs {}", &deployment.id);
-
-                        bail!("");
-                    }
-                    if DEPLOYER_END_MESSAGES_GOOD
-                        .iter()
-                        .any(|m| log_item.line.contains(m))
-                    {
-                        debug!("received end message, breaking deployment stream");
-                        break;
-                    }
                 }
-            } else {
-                eprintln!("--- Reconnecting websockets logging ---");
-                // A wait time short enough for not much state to have changed, long enough that
-                // the terminal isn't completely spammed
-                sleep(Duration::from_millis(100)).await;
-                stream = client
-                    .get_logs_ws(project_name, &deployment.id.to_string(), LogsRange::All)
-                    .await
-                    .map_err(|err| {
-                        suggestions::deploy::deployment_setup_failure(
-                            err,
-                            "Connecting to the deployment logs failed",
-                        )
-                    })?;
+            }
+
+            // Determine when to stop listening to the log stream
+            if DEPLOYER_END_MESSAGES_BAD
+                .iter()
+                .any(|m| log_item.line.contains(m))
+            {
+                println!();
+                println!("{}", "Deployment crashed".red());
+                println!();
+                println!("Run the following for more details");
+                println!();
+                println!("cargo shuttle logs {}", &deployment.id);
+
+                bail!("");
+            }
+            if DEPLOYER_END_MESSAGES_GOOD
+                .iter()
+                .any(|m| log_item.line.contains(m))
+            {
+                debug!("received end message, breaking deployment stream");
+                break;
             }
         }
 

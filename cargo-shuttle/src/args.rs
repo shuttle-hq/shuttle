@@ -311,8 +311,8 @@ pub struct ProjectStartArgs {
 #[command(next_help_heading = "Login options")]
 pub struct LoginArgs {
     /// Prompt to paste the API key instead of opening the browser
-    #[arg(long, conflicts_with = "api_key")]
-    pub input: bool,
+    #[arg(long, conflicts_with = "api_key", alias = "input")]
+    pub prompt: bool,
     /// Log in with this Shuttle API key
     #[arg(long)]
     pub api_key: Option<String>,

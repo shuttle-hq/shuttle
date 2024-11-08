@@ -970,10 +970,10 @@ impl Shuttle {
         let api_key = match login_args.api_key {
             Some(api_key) => api_key,
             None => {
-                if login_args.input || !self.beta {
+                if login_args.prompt || !self.beta {
                     // manual input requested (always the case on shuttle.rs)
 
-                    if !login_args.input && !self.beta {
+                    if !login_args.prompt && !self.beta {
                         // if !beta, open console
                         let url = SHUTTLE_LEGACY_NEW_PROJECT;
                         let _ = webbrowser::open(url);

@@ -189,6 +189,7 @@ impl Shuttle {
         } else if matches!(
             args.cmd,
             Command::Deployment(DeploymentCommand::Stop)
+                | Command::Deployment(DeploymentCommand::Redeploy { .. })
                 | Command::Account
                 | Command::Project(ProjectCommand::Link)
                 | Command::Project(ProjectCommand::Update(..))
@@ -334,6 +335,7 @@ impl Shuttle {
                     self.deployments_list(page, limit, table).await
                 }
                 DeploymentCommand::Status { id } => self.deployment_get(id).await,
+                DeploymentCommand::Redeploy { id } => self.deployment_redeploy(id).await,
                 DeploymentCommand::Stop => self.stop_beta().await,
             },
             Command::Stop => self.stop().await,
@@ -1412,6 +1414,19 @@ impl Shuttle {
         Ok(())
     }
 
+    async fn deployment_redeploy(&self, deployment_id: String) -> Result<()> {
+        let client = self.client.as_ref().unwrap();
+
+        let pid = self.ctx.project_id();
+        let deployment = client.redeploy_beta(pid, &deployment_id).await?;
+
+        // TODO?: Make it print logs on fail
+        self.track_deployment_status_beta(pid, &deployment.id)
+            .await?;
+
+        Ok(())
+    }
+
     async fn resources_list(&self, table_args: TableArgs, show_secrets: bool) -> Result<()> {
         let client = self.client.as_ref().unwrap();
         let resources = client
@@ -2425,16 +2440,17 @@ impl Shuttle {
         // Beta: Image deployment mode
         if self.beta {
             if let Some(image) = args.image {
+                let pid = self.ctx.project_id();
                 let deployment_req_image_beta = DeploymentRequestImageBeta { image, secrets };
 
                 let deployment = client
-                    .deploy_beta(
-                        self.ctx.project_id(),
-                        DeploymentRequestBeta::Image(deployment_req_image_beta),
-                    )
+                    .deploy_beta(pid, DeploymentRequestBeta::Image(deployment_req_image_beta))
                     .await?;
 
-                println!("{}", deployment.to_string_colored());
+                // TODO?: Make it print logs on fail
+                self.track_deployment_status_beta(pid, &deployment.id)
+                    .await?;
+
                 return Ok(());
             }
         }
@@ -2570,36 +2586,22 @@ impl Shuttle {
                 return Ok(());
             }
 
-            let id = &deployment.id;
-            wait_with_spinner(2000, |_, pb| async move {
-                let deployment = client.get_deployment_beta(pid, id).await?;
-
-                let state = deployment.state.clone();
-                pb.set_message(deployment.to_string_summary_colored());
-                let cleanup = move || {
-                    println!("{}", deployment.to_string_colored());
-                };
-                match state {
-                    DeploymentStateBeta::Pending
-                    | DeploymentStateBeta::Building
-                    | DeploymentStateBeta::InProgress => Ok(None),
-                    DeploymentStateBeta::Running => Ok(Some(cleanup)),
-                    DeploymentStateBeta::Stopped
-                    | DeploymentStateBeta::Stopping
-                    | DeploymentStateBeta::Unknown => Ok(Some(cleanup)),
-                    DeploymentStateBeta::Failed => {
-                        for log in client.get_deployment_logs_beta(pid, id).await?.logs {
-                            if args.raw {
-                                println!("{}", log.line);
-                            } else {
-                                println!("{log}");
-                            }
-                        }
-                        Ok(Some(cleanup))
+            if self
+                .track_deployment_status_beta(pid, &deployment.id)
+                .await?
+            {
+                for log in client
+                    .get_deployment_logs_beta(pid, &deployment.id)
+                    .await?
+                    .logs
+                {
+                    if args.raw {
+                        println!("{}", log.line);
+                    } else {
+                        println!("{log}");
                     }
                 }
-            })
-            .await?;
+            }
 
             return Ok(());
         }
@@ -2783,6 +2785,35 @@ impl Shuttle {
         println!("{resources}{service}");
 
         Ok(())
+    }
+
+    /// Returns true if the deployment failed
+    async fn track_deployment_status_beta(&self, pid: &str, id: &str) -> Result<bool> {
+        let client = self.client.as_ref().unwrap();
+        let failed = wait_with_spinner(2000, |_, pb| async move {
+            let deployment = client.get_deployment_beta(pid, id).await?;
+
+            let state = deployment.state.clone();
+            pb.set_message(deployment.to_string_summary_colored());
+            let failed = state == DeploymentStateBeta::Failed;
+            let cleanup = move || {
+                println!("{}", deployment.to_string_colored());
+                failed
+            };
+            match state {
+                DeploymentStateBeta::Pending
+                | DeploymentStateBeta::Building
+                | DeploymentStateBeta::InProgress => Ok(None),
+                DeploymentStateBeta::Running
+                | DeploymentStateBeta::Stopped
+                | DeploymentStateBeta::Stopping
+                | DeploymentStateBeta::Unknown
+                | DeploymentStateBeta::Failed => Ok(Some(cleanup)),
+            }
+        })
+        .await?;
+
+        Ok(failed)
     }
 
     async fn project_start(&self, idle_minutes: u64) -> Result<()> {

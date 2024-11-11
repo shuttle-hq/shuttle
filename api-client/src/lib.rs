@@ -170,6 +170,16 @@ impl ShuttleApiClient {
             .await
     }
 
+    pub async fn redeploy_beta(
+        &self,
+        project: &str,
+        deployment_id: &str,
+    ) -> Result<deployment::DeploymentResponseBeta> {
+        let path = format!("/projects/{project}/deployments/{deployment_id}/redeploy");
+
+        self.post_json(path, Option::<()>::None).await
+    }
+
     pub async fn stop_service(&self, project: &str) -> Result<service::Summary> {
         let path = format!("/projects/{project}/services/{project}");
 

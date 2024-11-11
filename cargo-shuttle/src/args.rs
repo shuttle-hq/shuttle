@@ -189,6 +189,12 @@ pub enum DeploymentCommand {
         /// ID of deployment to get status for
         id: Option<String>,
     },
+    /// Redeploy a previous deployment (if possible)
+    #[command(visible_alias = "re")]
+    Redeploy {
+        /// ID of deployment to redeploy
+        id: String,
+    },
     /// Stop running deployment(s)
     Stop,
 }

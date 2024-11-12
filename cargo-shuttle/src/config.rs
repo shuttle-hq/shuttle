@@ -577,7 +577,7 @@ mod tests {
 
         let local_config = RequestContext::get_local_config(&project_args).unwrap();
 
-        assert_eq!(unwrap_project_name(&local_config), "hello-world-axum-app");
+        assert_eq!(unwrap_project_name(&local_config), "hello-world");
     }
 
     #[test]

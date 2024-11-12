@@ -569,7 +569,7 @@ mod tests {
     }
 
     #[test]
-    fn get_local_config_finds_name_in_shuttle_toml() {
+    fn get_local_config_finds_name_in_cargo_toml() {
         let project_args = ProjectArgs {
             working_directory: path_from_workspace_root("examples/axum/hello-world/"),
             name_or_id: None,

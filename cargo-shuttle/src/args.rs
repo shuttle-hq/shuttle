@@ -190,7 +190,7 @@ pub enum DeploymentCommand {
         id: Option<String>,
     },
     /// Redeploy a previous deployment (if possible)
-    #[command(visible_alias = "re")]
+    #[command(visible_alias = "re", hide = true)]
     Redeploy {
         /// ID of deployment to redeploy
         id: String,

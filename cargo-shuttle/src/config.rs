@@ -569,7 +569,7 @@ mod tests {
     }
 
     #[test]
-    fn get_local_config_finds_name_in_shuttle_toml() {
+    fn get_local_config_finds_name_in_cargo_toml() {
         let project_args = ProjectArgs {
             working_directory: path_from_workspace_root("examples/axum/hello-world/"),
             name_or_id: None,
@@ -577,7 +577,7 @@ mod tests {
 
         let local_config = RequestContext::get_local_config(&project_args).unwrap();
 
-        assert_eq!(unwrap_project_name(&local_config), "hello-world-axum-app");
+        assert_eq!(unwrap_project_name(&local_config), "hello-world");
     }
 
     #[test]

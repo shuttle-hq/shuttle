@@ -136,7 +136,7 @@ commands:
       - run:
           name: Install cargo-audit
           environment:
-            VERSION: "v0.20.1"
+            VERSION: "v0.21.0"
           command: |
             curl -L https://github.com/rustsec/rustsec/releases/download/cargo-audit/$VERSION/cargo-audit-x86_64-unknown-linux-musl-$VERSION.tgz \
               | tar -xOz cargo-audit-x86_64-unknown-linux-musl-$VERSION/cargo-audit \

@@ -2447,6 +2447,11 @@ impl Shuttle {
                     .deploy_beta(pid, DeploymentRequestBeta::Image(deployment_req_image_beta))
                     .await?;
 
+                if args.no_follow {
+                    println!("{}", deployment.to_string_colored());
+                    return Ok(());
+                }
+
                 // TODO?: Make it print logs on fail
                 self.track_deployment_status_beta(pid, &deployment.id)
                     .await?;

@@ -22,7 +22,7 @@ use crossterm::style::Stylize;
 use dialoguer::{theme::ColorfulTheme, Confirm, Input, Password, Select};
 use flate2::write::GzEncoder;
 use flate2::Compression;
-use futures::{StreamExt, TryFutureExt};
+use futures::{SinkExt, StreamExt, TryFutureExt};
 use git2::Repository;
 use globset::{Glob, GlobSetBuilder};
 use ignore::overrides::OverrideBuilder;
@@ -33,14 +33,15 @@ use reqwest::header::HeaderMap;
 use shuttle_api_client::ShuttleApiClient;
 use shuttle_common::{
     constants::{
-        headers::X_CARGO_SHUTTLE_VERSION, API_URL_BETA, API_URL_DEFAULT, DEFAULT_IDLE_MINUTES,
-        EXAMPLES_REPO, EXECUTABLE_DIRNAME, RESOURCE_SCHEMA_VERSION, RUNTIME_NAME,
-        SHUTTLE_IDLE_DOCS_URL, SHUTTLE_LOGIN_URL, SHUTTLE_LOGIN_URL_BETA, STORAGE_DIRNAME,
+        headers::X_CARGO_SHUTTLE_VERSION, API_URL_DEFAULT, API_URL_DEFAULT_BETA,
+        DEFAULT_IDLE_MINUTES, EXAMPLES_REPO, EXECUTABLE_DIRNAME, RESOURCE_SCHEMA_VERSION,
+        RUNTIME_NAME, SHUTTLE_IDLE_DOCS_URL, SHUTTLE_LEGACY_NEW_PROJECT, STORAGE_DIRNAME,
         TEMPLATES_SCHEMA_VERSION,
     },
     deployment::{DeploymentStateBeta, DEPLOYER_END_MESSAGES_BAD, DEPLOYER_END_MESSAGES_GOOD},
     log::LogsRange,
     models::{
+        auth::{KeyMessage, TokenMessage},
         deployment::{
             deployments_table_beta, get_deployments_table, BuildArgsBeta, BuildArgsRustBeta,
             BuildMetaBeta, DeploymentRequest, DeploymentRequestBeta,
@@ -52,7 +53,7 @@ use shuttle_common::{
         resource::{get_certificates_table_beta, get_resource_tables, get_resource_tables_beta},
     },
     resource::{self, ResourceInput, ShuttleResourceOutput},
-    semvers_are_compatible, ApiKey, DatabaseResource, DbInput, LogItem, LogItemBeta, VersionInfo,
+    semvers_are_compatible, DatabaseResource, DbInput, LogItem, LogItemBeta, VersionInfo,
 };
 use shuttle_proto::{
     provisioner::{provisioner_server::Provisioner, DatabaseRequest},
@@ -67,6 +68,7 @@ use tar::Builder;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Child;
 use tokio::time::{sleep, Duration};
+use tokio_tungstenite::tungstenite::Message;
 use tonic::{Request, Status};
 use tracing::{debug, error, info, trace};
 use tracing_subscriber::{fmt, prelude::*, registry, EnvFilter};
@@ -84,7 +86,7 @@ use crate::provisioner_server::beta::{ProvApiState, ProvisionerServerBeta};
 use crate::provisioner_server::LocalProvisioner;
 use crate::util::{
     check_and_warn_runtime_version, generate_completions, generate_manpage, get_templates_schema,
-    is_dirty, open_gh_issue, update_cargo_shuttle,
+    is_dirty, open_gh_issue, read_ws_until_text, update_cargo_shuttle,
 };
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -187,6 +189,7 @@ impl Shuttle {
         } else if matches!(
             args.cmd,
             Command::Deployment(DeploymentCommand::Stop)
+                | Command::Deployment(DeploymentCommand::Redeploy { .. })
                 | Command::Account
                 | Command::Project(ProjectCommand::Link)
                 | Command::Project(ProjectCommand::Update(..))
@@ -206,7 +209,8 @@ impl Shuttle {
             }
         }
         if let Some(ref url) = args.api_url {
-            if (!self.beta && url != API_URL_DEFAULT) || (self.beta && url != API_URL_BETA) {
+            if (!self.beta && url != API_URL_DEFAULT) || (self.beta && url != API_URL_DEFAULT_BETA)
+            {
                 eprintln!(
                     "{}",
                     format!("INFO: Targeting non-default API: {url}").yellow(),
@@ -331,6 +335,7 @@ impl Shuttle {
                     self.deployments_list(page, limit, table).await
                 }
                 DeploymentCommand::Status { id } => self.deployment_get(id).await,
+                DeploymentCommand::Redeploy { id } => self.deployment_redeploy(id).await,
                 DeploymentCommand::Stop => self.stop_beta().await,
             },
             Command::Stop => self.stop().await,
@@ -967,20 +972,29 @@ impl Shuttle {
         let api_key = match login_args.api_key {
             Some(api_key) => api_key,
             None => {
-                if !offline {
-                    let url = if self.beta {
-                        SHUTTLE_LOGIN_URL_BETA
-                    } else {
-                        SHUTTLE_LOGIN_URL
-                    };
-                    let _ = webbrowser::open(url);
-                    println!("If your browser did not automatically open, go to {url}");
-                }
+                if login_args.prompt || !self.beta {
+                    // manual input requested (always the case on shuttle.rs)
 
-                Password::with_theme(&ColorfulTheme::default())
-                    .with_prompt("API key")
-                    .validate_with(|input: &String| ApiKey::parse(input).map(|_| ()))
-                    .interact()?
+                    if !login_args.prompt && !self.beta {
+                        // if !beta, open console
+                        let url = SHUTTLE_LEGACY_NEW_PROJECT;
+                        let _ = webbrowser::open(url);
+                        println!("If your browser did not automatically open, go to {url}");
+                    }
+
+                    Password::with_theme(&ColorfulTheme::default())
+                        .with_prompt("API key")
+                        .validate_with(|input: &String| {
+                            if input.is_empty() {
+                                return Err("Empty API key was provided");
+                            }
+                            Ok(())
+                        })
+                        .interact()?
+                } else {
+                    // device auth flow via Shuttle Console
+                    self.device_auth(login_args.console_url).await?
+                }
             }
         };
 
@@ -1005,13 +1019,59 @@ impl Shuttle {
         Ok(())
     }
 
+    async fn device_auth(&self, console_url: String) -> Result<String> {
+        let client = self.client.as_ref().unwrap();
+
+        // should not have trailing slash
+        if console_url.ends_with('/') {
+            eprintln!("WARNING: Console URL is probably incorrect. Ends with '/': {console_url}");
+        }
+
+        let (mut tx, mut rx) = client.get_device_auth_ws().await?.split();
+
+        // keep the socket alive with ping/pong
+        tokio::spawn(async move {
+            loop {
+                tx.send(Message::Ping(Vec::new())).await.unwrap();
+                sleep(Duration::from_secs(20)).await;
+            }
+        });
+
+        let token = read_ws_until_text(&mut rx).await?;
+        let Some(token) = token else {
+            bail!("Did not receive device auth token over websocket");
+        };
+        let token = serde_json::from_str::<TokenMessage>(&token)?.token;
+
+        let url = &format!("{}/device-auth?token={}", console_url, token);
+        let _ = webbrowser::open(url);
+        println!("Complete login in Shuttle Console to authenticate CLI.");
+        println!("If your browser did not automatically open, go to {url}");
+        println!();
+        println!("{}", format!("Token: {token}").bold());
+        println!();
+
+        let key = read_ws_until_text(&mut rx).await?;
+        let Some(key) = key else {
+            bail!("Failed to receive API key over websocket");
+        };
+        let key = serde_json::from_str::<KeyMessage>(&key)?.api_key;
+
+        Ok(key)
+    }
+
     async fn logout(&mut self, logout_args: LogoutArgs) -> Result<()> {
         if logout_args.reset_api_key {
             self.reset_api_key()
                 .await
                 .map_err(suggestions::api_key::reset_api_key_failed)?;
             println!("Successfully reset the API key.");
-            println!(" -> Go to {SHUTTLE_LOGIN_URL} to get a new one.\n");
+            if self.beta {
+                println!(" -> Use `shuttle login` to get a new one.")
+            } else {
+                println!(" -> Go to {SHUTTLE_LEGACY_NEW_PROJECT} to get a new one.");
+            }
+            println!();
         }
         self.ctx.clear_api_key()?;
         println!("Successfully logged out.");
@@ -1221,27 +1281,25 @@ impl Shuttle {
                     suggestions::logs::get_logs_failure(err, "Connecting to the logs stream failed")
                 })?;
 
-            while let Some(Ok(msg)) = stream.next().await {
-                if let tokio_tungstenite::tungstenite::Message::Text(line) = msg {
-                    match serde_json::from_str::<shuttle_common::LogItem>(&line) {
-                        Ok(log) => {
-                            if args.raw {
-                                println!("{}", log.get_raw_line())
-                            } else {
-                                println!("{log}")
-                            }
+            while let Ok(Some(s)) = read_ws_until_text(&mut stream).await {
+                match serde_json::from_str::<LogItem>(&s) {
+                    Ok(log) => {
+                        if args.raw {
+                            println!("{}", log.get_raw_line())
+                        } else {
+                            println!("{log}")
                         }
-                        Err(err) => {
-                            debug!(error = %err, "failed to parse message into log item");
+                    }
+                    Err(err) => {
+                        debug!(error = %err, "failed to parse message into log item");
 
-                            let message = if let Ok(err) = serde_json::from_str::<ApiError>(&line) {
-                                err.to_string()
-                            } else {
-                                "failed to parse logs, is your cargo-shuttle outdated?".to_string()
-                            };
+                        let message = if let Ok(err) = serde_json::from_str::<ApiError>(&s) {
+                            err.to_string()
+                        } else {
+                            "failed to parse logs, is your cargo-shuttle outdated?".to_string()
+                        };
 
-                            bail!(message);
-                        }
+                        bail!(message);
                     }
                 }
             }
@@ -1352,6 +1410,19 @@ impl Shuttle {
 
             println!("{deployment}");
         }
+
+        Ok(())
+    }
+
+    async fn deployment_redeploy(&self, deployment_id: String) -> Result<()> {
+        let client = self.client.as_ref().unwrap();
+
+        let pid = self.ctx.project_id();
+        let deployment = client.redeploy_beta(pid, &deployment_id).await?;
+
+        // TODO?: Make it print logs on fail
+        self.track_deployment_status_beta(pid, &deployment.id)
+            .await?;
 
         Ok(())
     }
@@ -2369,16 +2440,17 @@ impl Shuttle {
         // Beta: Image deployment mode
         if self.beta {
             if let Some(image) = args.image {
+                let pid = self.ctx.project_id();
                 let deployment_req_image_beta = DeploymentRequestImageBeta { image, secrets };
 
                 let deployment = client
-                    .deploy_beta(
-                        self.ctx.project_id(),
-                        DeploymentRequestBeta::Image(deployment_req_image_beta),
-                    )
+                    .deploy_beta(pid, DeploymentRequestBeta::Image(deployment_req_image_beta))
                     .await?;
 
-                println!("{}", deployment.to_string_colored());
+                // TODO?: Make it print logs on fail
+                self.track_deployment_status_beta(pid, &deployment.id)
+                    .await?;
+
                 return Ok(());
             }
         }
@@ -2514,36 +2586,22 @@ impl Shuttle {
                 return Ok(());
             }
 
-            let id = &deployment.id;
-            wait_with_spinner(2000, |_, pb| async move {
-                let deployment = client.get_deployment_beta(pid, id).await?;
-
-                let state = deployment.state.clone();
-                pb.set_message(deployment.to_string_summary_colored());
-                let cleanup = move || {
-                    println!("{}", deployment.to_string_colored());
-                };
-                match state {
-                    DeploymentStateBeta::Pending
-                    | DeploymentStateBeta::Building
-                    | DeploymentStateBeta::InProgress => Ok(None),
-                    DeploymentStateBeta::Running => Ok(Some(cleanup)),
-                    DeploymentStateBeta::Stopped
-                    | DeploymentStateBeta::Stopping
-                    | DeploymentStateBeta::Unknown => Ok(Some(cleanup)),
-                    DeploymentStateBeta::Failed => {
-                        for log in client.get_deployment_logs_beta(pid, id).await?.logs {
-                            if args.raw {
-                                println!("{}", log.line);
-                            } else {
-                                println!("{log}");
-                            }
-                        }
-                        Ok(Some(cleanup))
+            if self
+                .track_deployment_status_beta(pid, &deployment.id)
+                .await?
+            {
+                for log in client
+                    .get_deployment_logs_beta(pid, &deployment.id)
+                    .await?
+                    .logs
+                {
+                    if args.raw {
+                        println!("{}", log.line);
+                    } else {
+                        println!("{log}");
                     }
                 }
-            })
-            .await?;
+            }
 
             return Ok(());
         }
@@ -2566,46 +2624,44 @@ impl Shuttle {
 
         let mut deployer_version_checked = false;
         let mut runtime_version_checked = false;
-        loop {
-            if let Some(Ok(msg)) = stream.next().await {
-                if let tokio_tungstenite::tungstenite::Message::Text(line) = msg {
-                    let log_item = match serde_json::from_str::<shuttle_common::LogItem>(&line) {
-                        Ok(log_item) => log_item,
-                        Err(err) => {
-                            debug!(error = %err, "failed to parse message into log item");
+        while let Ok(Some(s)) = read_ws_until_text(&mut stream).await {
+            let log_item = match serde_json::from_str::<LogItem>(&s) {
+                Ok(log_item) => log_item,
+                Err(err) => {
+                    debug!(error = %err, "failed to parse message into log item");
 
-                            let message = if let Ok(err) = serde_json::from_str::<ApiError>(&line) {
-                                err.to_string()
-                            } else {
-                                "failed to parse logs, is your cargo-shuttle outdated?".to_string()
-                            };
-
-                            bail!(message);
-                        }
+                    let message = if let Ok(err) = serde_json::from_str::<ApiError>(&s) {
+                        err.to_string()
+                    } else {
+                        "failed to parse logs, is your cargo-shuttle outdated?".to_string()
                     };
 
-                    if args.raw {
-                        println!("{}", log_item.get_raw_line())
-                    } else {
-                        println!("{log_item}")
-                    }
+                    bail!(message);
+                }
+            };
 
-                    // Detect versions of deployer and runtime, and print warnings of outdated.
-                    if !deployer_version_checked
-                        && self.version_info.is_some()
-                        && log_item.line.contains("Deployer version: ")
-                    {
-                        deployer_version_checked = true;
-                        let my_version = &log_item
-                            .line
-                            .split_once("Deployer version: ")
-                            .unwrap()
-                            .1
-                            .parse::<semver::Version>()
-                            .context("parsing deployer version in log stream")?;
-                        let latest_version = &self.version_info.as_ref().unwrap().deployer;
-                        if latest_version > my_version {
-                            self.version_warnings.push(
+            if args.raw {
+                println!("{}", log_item.get_raw_line())
+            } else {
+                println!("{log_item}")
+            }
+
+            // Detect versions of deployer and runtime, and print warnings of outdated.
+            if !deployer_version_checked
+                && self.version_info.is_some()
+                && log_item.line.contains("Deployer version: ")
+            {
+                deployer_version_checked = true;
+                let my_version = &log_item
+                    .line
+                    .split_once("Deployer version: ")
+                    .unwrap()
+                    .1
+                    .parse::<semver::Version>()
+                    .context("parsing deployer version in log stream")?;
+                let latest_version = &self.version_info.as_ref().unwrap().deployer;
+                if latest_version > my_version {
+                    self.version_warnings.push(
                                 formatdoc! {"
                                     Warning:
                                         A newer version of shuttle-deployer is available ({latest_version}).
@@ -2614,28 +2670,28 @@ impl Shuttle {
                                 .yellow()
                                 .to_string(),
                             )
-                        }
-                    }
-                    if !runtime_version_checked
-                        && self.version_info.is_some()
-                        && log_item
-                            .line
-                            .contains("shuttle-runtime executable started (version ")
-                    {
-                        runtime_version_checked = true;
-                        let my_version = &log_item
-                            .line
-                            .split_once("shuttle-runtime executable started (version ")
-                            .unwrap()
-                            .1
-                            .split_once(')')
-                            .unwrap()
-                            .0
-                            .parse::<semver::Version>()
-                            .context("parsing runtime version in log stream")?;
-                        let latest_version = &self.version_info.as_ref().unwrap().runtime;
-                        if latest_version > my_version {
-                            self.version_warnings.push(
+                }
+            }
+            if !runtime_version_checked
+                && self.version_info.is_some()
+                && log_item
+                    .line
+                    .contains("shuttle-runtime executable started (version ")
+            {
+                runtime_version_checked = true;
+                let my_version = &log_item
+                    .line
+                    .split_once("shuttle-runtime executable started (version ")
+                    .unwrap()
+                    .1
+                    .split_once(')')
+                    .unwrap()
+                    .0
+                    .parse::<semver::Version>()
+                    .context("parsing runtime version in log stream")?;
+                let latest_version = &self.version_info.as_ref().unwrap().runtime;
+                if latest_version > my_version {
+                    self.version_warnings.push(
                                 formatdoc! {"
                                     Warning:
                                         A newer version of shuttle-runtime is available ({latest_version}).
@@ -2644,45 +2700,29 @@ impl Shuttle {
                                 .yellow()
                                 .to_string(),
                             )
-                        }
-                    }
-
-                    // Determine when to stop listening to the log stream
-                    if DEPLOYER_END_MESSAGES_BAD
-                        .iter()
-                        .any(|m| log_item.line.contains(m))
-                    {
-                        println!();
-                        println!("{}", "Deployment crashed".red());
-                        println!();
-                        println!("Run the following for more details");
-                        println!();
-                        println!("cargo shuttle logs {}", &deployment.id);
-
-                        bail!("");
-                    }
-                    if DEPLOYER_END_MESSAGES_GOOD
-                        .iter()
-                        .any(|m| log_item.line.contains(m))
-                    {
-                        debug!("received end message, breaking deployment stream");
-                        break;
-                    }
                 }
-            } else {
-                eprintln!("--- Reconnecting websockets logging ---");
-                // A wait time short enough for not much state to have changed, long enough that
-                // the terminal isn't completely spammed
-                sleep(Duration::from_millis(100)).await;
-                stream = client
-                    .get_logs_ws(project_name, &deployment.id.to_string(), LogsRange::All)
-                    .await
-                    .map_err(|err| {
-                        suggestions::deploy::deployment_setup_failure(
-                            err,
-                            "Connecting to the deployment logs failed",
-                        )
-                    })?;
+            }
+
+            // Determine when to stop listening to the log stream
+            if DEPLOYER_END_MESSAGES_BAD
+                .iter()
+                .any(|m| log_item.line.contains(m))
+            {
+                println!();
+                println!("{}", "Deployment crashed".red());
+                println!();
+                println!("Run the following for more details");
+                println!();
+                println!("cargo shuttle logs {}", &deployment.id);
+
+                bail!("");
+            }
+            if DEPLOYER_END_MESSAGES_GOOD
+                .iter()
+                .any(|m| log_item.line.contains(m))
+            {
+                debug!("received end message, breaking deployment stream");
+                break;
             }
         }
 
@@ -2745,6 +2785,35 @@ impl Shuttle {
         println!("{resources}{service}");
 
         Ok(())
+    }
+
+    /// Returns true if the deployment failed
+    async fn track_deployment_status_beta(&self, pid: &str, id: &str) -> Result<bool> {
+        let client = self.client.as_ref().unwrap();
+        let failed = wait_with_spinner(2000, |_, pb| async move {
+            let deployment = client.get_deployment_beta(pid, id).await?;
+
+            let state = deployment.state.clone();
+            pb.set_message(deployment.to_string_summary_colored());
+            let failed = state == DeploymentStateBeta::Failed;
+            let cleanup = move || {
+                println!("{}", deployment.to_string_colored());
+                failed
+            };
+            match state {
+                DeploymentStateBeta::Pending
+                | DeploymentStateBeta::Building
+                | DeploymentStateBeta::InProgress => Ok(None),
+                DeploymentStateBeta::Running
+                | DeploymentStateBeta::Stopped
+                | DeploymentStateBeta::Stopping
+                | DeploymentStateBeta::Unknown
+                | DeploymentStateBeta::Failed => Ok(Some(cleanup)),
+            }
+        })
+        .await?;
+
+        Ok(failed)
     }
 
     async fn project_start(&self, idle_minutes: u64) -> Result<()> {

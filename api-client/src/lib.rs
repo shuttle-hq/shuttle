@@ -82,6 +82,12 @@ impl ShuttleApiClient {
             .context("parsing API version info")
     }
 
+    pub async fn get_device_auth_ws(&self) -> Result<WebSocketStream<MaybeTlsStream<TcpStream>>> {
+        self.ws_get("/device-auth/ws".to_owned())
+            .await
+            .with_context(|| "failed to connect to auth endpoint")
+    }
+
     pub async fn check_project_name(&self, project_name: &str) -> Result<bool> {
         let url = format!("{}/projects/name/{project_name}", self.api_url);
 
@@ -162,6 +168,16 @@ impl ShuttleApiClient {
             .context("failed to upload archive")?
             .to_json()
             .await
+    }
+
+    pub async fn redeploy_beta(
+        &self,
+        project: &str,
+        deployment_id: &str,
+    ) -> Result<deployment::DeploymentResponseBeta> {
+        let path = format!("/projects/{project}/deployments/{deployment_id}/redeploy");
+
+        self.post_json(path, Option::<()>::None).await
     }
 
     pub async fn stop_service(&self, project: &str) -> Result<service::Summary> {
@@ -483,14 +499,17 @@ impl ShuttleApiClient {
     pub async fn ws_get(&self, path: String) -> Result<WebSocketStream<MaybeTlsStream<TcpStream>>> {
         let ws_url = self.api_url.clone().replace("http", "ws");
         let url = format!("{ws_url}{path}");
-        let mut request = url.into_client_request()?;
+        let mut req = url.into_client_request()?;
+
+        #[cfg(feature = "tracing")]
+        debug!("WS Request: {} {}", req.method(), req.uri());
 
         if let Some(ref api_key) = self.api_key {
             let auth_header = Authorization::bearer(api_key.as_ref())?;
-            request.headers_mut().typed_insert(auth_header);
+            req.headers_mut().typed_insert(auth_header);
         }
 
-        let (stream, _) = connect_async(request).await.with_context(|| {
+        let (stream, _) = connect_async(req).await.with_context(|| {
             #[cfg(feature = "tracing")]
             error!("failed to connect to websocket");
             "could not connect to websocket"

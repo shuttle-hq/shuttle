@@ -11,6 +11,7 @@ use anyhow::{bail, Context, Result};
 use clap::CommandFactory;
 use clap_complete::{generate, Shell};
 use clap_mangen::Man;
+use futures::StreamExt;
 use git2::{Repository, StatusOptions};
 use indoc::writedoc;
 use shuttle_common::{
@@ -18,6 +19,7 @@ use shuttle_common::{
     semvers_are_compatible,
     templates::TemplatesSchema,
 };
+use tokio_tungstenite::tungstenite::{self, Message};
 use tracing::{debug, trace, warn};
 
 use crate::{Binary, ShuttleArgs};
@@ -271,4 +273,17 @@ pub async fn update_cargo_shuttle(preview: bool) -> Result<()> {
         .context("Failed to wait on powershell update process")?;
 
     Ok(())
+}
+
+pub async fn read_ws_until_text<T>(rx: &mut T) -> Result<Option<String>>
+where
+    T: StreamExt<Item = tungstenite::Result<Message>> + Unpin,
+{
+    while let Some(Ok(msg)) = rx.next().await {
+        if let Message::Text(s) = msg {
+            return Ok(Some(s));
+        }
+    }
+
+    Ok(None)
 }

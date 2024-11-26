@@ -5675,6 +5675,8 @@ dependencies = [
  "permit-pdp-client-rs",
  "pin-project",
  "portpicker",
+ "proptest",
+ "rand 0.8.5",
  "reqwest 0.11.27",
  "ring 0.17.8",
  "rustrict",
@@ -5699,6 +5701,7 @@ dependencies = [
  "ttl_cache",
  "uuid",
  "wiremock",
+ "zeroize",
 ]
 
 [[package]]
@@ -5737,7 +5740,6 @@ dependencies = [
  "opentelemetry-http 0.10.0",
  "pin-project",
  "proptest",
- "rand 0.8.5",
  "reqwest 0.11.27",
  "semver 1.0.23",
  "serde",

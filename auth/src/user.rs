@@ -8,14 +8,14 @@ use axum::{
     TypedHeader,
 };
 use chrono::{DateTime, Utc};
-use shuttle_backends::{client::PermissionsDal, headers::XShuttleAdminSecret};
+use shuttle_backends::{client::PermissionsDal, headers::XShuttleAdminSecret, key::ApiKey};
 use shuttle_common::{
     limits::Limits,
     models::{
         self,
         user::{AccountTier, UserId},
     },
-    ApiKey, Secret,
+    Secret,
 };
 use sqlx::{postgres::PgRow, query, FromRow, PgPool, Row};
 use stripe::{SubscriptionId, SubscriptionStatus};

@@ -7,11 +7,14 @@ mod user;
 use anyhow::Result;
 use args::{CopyPermitEnvArgs, StartArgs, SyncArgs};
 use http::StatusCode;
-use shuttle_backends::client::{
-    permit::{self, Error, ResponseContent},
-    PermissionsDal,
+use shuttle_backends::{
+    client::{
+        permit::{self, Error, ResponseContent},
+        PermissionsDal,
+    },
+    key::ApiKey,
 };
-use shuttle_common::{models::user::AccountTier, ApiKey};
+use shuttle_common::models::user::AccountTier;
 use sqlx::{query, PgPool};
 use tracing::info;
 pub use user::User;

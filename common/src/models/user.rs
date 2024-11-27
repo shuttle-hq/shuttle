@@ -4,12 +4,13 @@ use chrono::{DateTime, Utc};
 use crossterm::style::Stylize;
 use serde::{Deserialize, Serialize};
 use strum::{Display, EnumString};
+use utoipa::ToSchema;
 
 /// In normal cases, a string with the format `user_<ULID>`.
 /// This is a soft rule and the string can be something different.
 pub type UserId = String;
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Serialize, Debug, ToSchema)]
 #[typeshare::typeshare]
 pub struct UserResponse {
     pub name: String,
@@ -42,7 +43,18 @@ impl UserResponse {
 }
 
 #[derive(
-    Clone, Copy, Debug, Default, Deserialize, Serialize, Eq, PartialEq, Ord, PartialOrd, EnumString,
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    Deserialize,
+    Serialize,
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    EnumString,
+    ToSchema,
 )]
 #[serde(rename_all = "lowercase")]
 #[cfg_attr(feature = "display", derive(strum::Display))]
@@ -65,7 +77,7 @@ pub enum AccountTier {
     Deployer,
 }
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Serialize, Debug, ToSchema)]
 #[typeshare::typeshare]
 pub struct Subscription {
     pub id: String,
@@ -75,7 +87,7 @@ pub struct Subscription {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, ToSchema)]
 #[typeshare::typeshare]
 pub struct SubscriptionRequest {
     pub id: String,
@@ -83,7 +95,7 @@ pub struct SubscriptionRequest {
     pub quantity: i32,
 }
 
-#[derive(Clone, Debug, EnumString, Display, Deserialize, Serialize, Eq, PartialEq)]
+#[derive(Clone, Debug, EnumString, Display, Deserialize, Serialize, Eq, PartialEq, ToSchema)]
 #[serde(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
 #[typeshare::typeshare]

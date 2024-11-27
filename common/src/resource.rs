@@ -3,6 +3,7 @@ use std::{fmt::Display, str::FromStr};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use thiserror::Error;
+use utoipa::ToSchema;
 
 use crate::{constants::RESOURCE_SCHEMA_VERSION, database};
 
@@ -48,7 +49,7 @@ impl From<ProvisionResourceRequest> for ProvisionResourceRequestBeta {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, ToSchema)]
 #[typeshare::typeshare]
 pub struct ProvisionResourceRequestBeta {
     /// The type of this resource
@@ -76,7 +77,7 @@ pub enum ResourceInputBeta {
 
 /// The resource state represents the stage of the provisioning process the resource is in.
 #[derive(
-    Debug, Clone, PartialEq, Eq, strum::Display, strum::EnumString, Serialize, Deserialize,
+    Debug, Clone, PartialEq, Eq, strum::Display, strum::EnumString, Serialize, Deserialize, ToSchema,
 )]
 #[serde(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
@@ -101,7 +102,7 @@ pub struct ShuttleResourceOutput<T> {
     pub custom: Value,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
 #[typeshare::typeshare]
 pub struct ResourceResponseBeta {
     pub r#type: ResourceTypeBeta,
@@ -112,7 +113,7 @@ pub struct ResourceResponseBeta {
     pub output: Value,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 #[typeshare::typeshare]
 pub struct ResourceListResponseBeta {
     pub resources: Vec<ResourceResponseBeta>,
@@ -156,7 +157,16 @@ pub enum Type {
 }
 
 #[derive(
-    Clone, Copy, Debug, strum::EnumString, strum::Display, Deserialize, Serialize, Eq, PartialEq,
+    Clone,
+    Copy,
+    Debug,
+    strum::EnumString,
+    strum::Display,
+    Deserialize,
+    Serialize,
+    Eq,
+    PartialEq,
+    ToSchema,
 )]
 #[typeshare::typeshare]
 // is a flat enum instead of nested enum to allow typeshare

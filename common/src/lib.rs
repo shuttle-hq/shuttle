@@ -37,6 +37,7 @@ use zeroize::Zeroize;
 #[cfg_attr(feature = "persist", derive(PartialEq, Eq, Hash, sqlx::Type))]
 #[cfg_attr(feature = "persist", serde(transparent))]
 #[cfg_attr(feature = "persist", sqlx(transparent))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 pub struct ApiKey(String);
 
 impl Zeroize for ApiKey {

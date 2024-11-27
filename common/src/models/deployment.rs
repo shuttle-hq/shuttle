@@ -8,6 +8,7 @@ use strum::{Display, EnumString};
 use crossterm::style::Stylize;
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Display, Serialize, EnumString)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[serde(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
 #[strum(ascii_case_insensitive)]
@@ -65,12 +66,14 @@ impl DeploymentState {
 }
 
 #[derive(Deserialize, Serialize)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub struct DeploymentListResponse {
     pub deployments: Vec<DeploymentResponse>,
 }
 
 #[derive(Deserialize, Serialize)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub struct DeploymentResponse {
     pub id: String,
@@ -105,6 +108,7 @@ impl DeploymentResponse {
 }
 
 #[derive(Deserialize, Serialize)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub struct UploadArchiveResponse {
     /// The S3 object version ID of the uploaded object
@@ -112,6 +116,7 @@ pub struct UploadArchiveResponse {
 }
 
 #[derive(Deserialize, Serialize)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[serde(tag = "type", content = "content")]
 #[typeshare::typeshare]
 pub enum DeploymentRequest {
@@ -123,6 +128,7 @@ pub enum DeploymentRequest {
 }
 
 #[derive(Default, Deserialize, Serialize)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub struct DeploymentRequestBuildArchive {
     /// The S3 object version ID of the archive to use
@@ -135,6 +141,7 @@ pub struct DeploymentRequestBuildArchive {
 }
 
 #[derive(Deserialize, Serialize, Default)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[serde(tag = "type", content = "content")]
 #[typeshare::typeshare]
 pub enum BuildArgs {
@@ -144,6 +151,7 @@ pub enum BuildArgs {
 }
 
 #[derive(Deserialize, Serialize)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub struct BuildArgsRust {
     /// Version of shuttle-runtime used by this crate
@@ -183,6 +191,7 @@ impl Default for BuildArgsRust {
 pub const GIT_STRINGS_MAX_LENGTH: usize = 80;
 
 #[derive(Default, Deserialize, Serialize)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub struct BuildMeta {
     pub git_commit_id: Option<String>,
@@ -209,6 +218,7 @@ impl std::fmt::Display for BuildMeta {
 }
 
 #[derive(Default, Deserialize, Serialize)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub struct DeploymentRequestImage {
     pub image: String,

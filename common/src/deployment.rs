@@ -3,6 +3,7 @@ use std::{path::PathBuf, str::FromStr};
 use crossterm::style::Stylize;
 use serde::{Deserialize, Serialize};
 use strum::{Display, EnumString};
+use utoipa::ToSchema;
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Display, Serialize, EnumString)]
 #[serde(rename_all = "lowercase")]
@@ -20,7 +21,7 @@ pub enum State {
     Unknown,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Display, Serialize, EnumString)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Display, Serialize, EnumString, ToSchema)]
 #[serde(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
 #[strum(ascii_case_insensitive)]

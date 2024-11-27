@@ -13,6 +13,7 @@ use crossterm::style::Stylize;
 use serde::{Deserialize, Serialize};
 use strum::Display;
 use strum::EnumString;
+use utoipa::ToSchema;
 
 use crate::deployment::DeploymentStateBeta;
 
@@ -28,13 +29,13 @@ pub struct Response {
     pub is_admin: bool,
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, ToSchema)]
 #[typeshare::typeshare]
 pub struct ProjectCreateRequestBeta {
     pub name: String,
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, ToSchema)]
 #[typeshare::typeshare]
 pub struct ProjectResponseBeta {
     pub id: String,
@@ -80,14 +81,14 @@ impl ProjectResponseBeta {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, ToSchema)]
 #[typeshare::typeshare]
 pub struct ProjectListResponseBeta {
     pub projects: Vec<ProjectResponseBeta>,
 }
 
 /// Set wanted field(s) to Some to update those parts of the project
-#[derive(Debug, Default, Deserialize, Serialize, Clone, PartialEq)]
+#[derive(Debug, Default, Deserialize, Serialize, Clone, PartialEq, ToSchema)]
 #[typeshare::typeshare]
 pub struct ProjectUpdateRequestBeta {
     pub name: Option<String>,
@@ -95,7 +96,17 @@ pub struct ProjectUpdateRequestBeta {
 }
 
 #[derive(
-    Debug, Default, Clone, Copy, PartialEq, Eq, Display, Serialize, Deserialize, EnumString,
+    Debug,
+    Default,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Display,
+    Serialize,
+    Deserialize,
+    EnumString,
+    ToSchema,
 )]
 #[serde(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]

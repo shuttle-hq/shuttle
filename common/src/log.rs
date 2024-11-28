@@ -9,7 +9,6 @@ use serde::{Deserialize, Serialize};
 use strum::EnumString;
 use tracing::{field::Visit, span, warn, Event, Level, Metadata, Subscriber};
 use tracing_subscriber::Layer;
-use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::tracing::JsonVisitor;
@@ -57,7 +56,8 @@ pub struct LogItem {
     pub line: String,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, ToSchema)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub struct LogItemBeta {
     pub timestamp: DateTime<Utc>,
@@ -93,7 +93,8 @@ impl std::fmt::Display for LogItemBeta {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub struct LogsResponseBeta {
     pub logs: Vec<LogItemBeta>,

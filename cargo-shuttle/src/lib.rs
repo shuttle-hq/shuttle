@@ -1030,9 +1030,12 @@ impl Shuttle {
         let (mut tx, mut rx) = client.get_device_auth_ws().await?.split();
 
         // keep the socket alive with ping/pong
-        tokio::spawn(async move {
+        let pinger = tokio::spawn(async move {
             loop {
-                tx.send(Message::Ping(Vec::new())).await.unwrap();
+                if let Err(e) = tx.send(Message::Ping(Vec::new())).await {
+                    error!(error = %e, "Error when pinging websocket");
+                    break;
+                };
                 sleep(Duration::from_secs(20)).await;
             }
         });
@@ -1056,6 +1059,8 @@ impl Shuttle {
             bail!("Failed to receive API key over websocket");
         };
         let key = serde_json::from_str::<KeyMessage>(&key)?.api_key;
+
+        pinger.abort();
 
         Ok(key)
     }

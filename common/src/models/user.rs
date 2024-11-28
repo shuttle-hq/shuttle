@@ -4,13 +4,13 @@ use chrono::{DateTime, Utc};
 use crossterm::style::Stylize;
 use serde::{Deserialize, Serialize};
 use strum::{Display, EnumString};
-use utoipa::ToSchema;
 
 /// In normal cases, a string with the format `user_<ULID>`.
 /// This is a soft rule and the string can be something different.
 pub type UserId = String;
 
-#[derive(Deserialize, Serialize, Debug, ToSchema)]
+#[derive(Deserialize, Serialize, Debug)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub struct UserResponse {
     pub name: String,
@@ -43,24 +43,14 @@ impl UserResponse {
 }
 
 #[derive(
-    Clone,
-    Copy,
-    Debug,
-    Default,
-    Deserialize,
-    Serialize,
-    Eq,
-    PartialEq,
-    Ord,
-    PartialOrd,
-    EnumString,
-    ToSchema,
+    Clone, Copy, Debug, Default, Deserialize, Serialize, Eq, PartialEq, Ord, PartialOrd, EnumString,
 )]
 #[serde(rename_all = "lowercase")]
 #[cfg_attr(feature = "display", derive(strum::Display))]
 #[cfg_attr(feature = "display", strum(serialize_all = "lowercase"))]
 #[cfg_attr(feature = "persist", derive(sqlx::Type))]
 #[cfg_attr(feature = "persist", sqlx(rename_all = "lowercase"))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub enum AccountTier {
     #[default]
@@ -77,7 +67,8 @@ pub enum AccountTier {
     Deployer,
 }
 
-#[derive(Deserialize, Serialize, Debug, ToSchema)]
+#[derive(Deserialize, Serialize, Debug)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub struct Subscription {
     pub id: String,
@@ -87,7 +78,8 @@ pub struct Subscription {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Deserialize, Debug, ToSchema)]
+#[derive(Deserialize, Debug)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub struct SubscriptionRequest {
     pub id: String,
@@ -95,7 +87,8 @@ pub struct SubscriptionRequest {
     pub quantity: i32,
 }
 
-#[derive(Clone, Debug, EnumString, Display, Deserialize, Serialize, Eq, PartialEq, ToSchema)]
+#[derive(Clone, Debug, EnumString, Display, Deserialize, Serialize, Eq, PartialEq)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[serde(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
 #[typeshare::typeshare]

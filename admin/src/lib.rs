@@ -124,29 +124,33 @@ pub async fn run(args: Args) {
         Command::Gc {
             days,
             stop_deployments,
+            limit,
         } => {
             let project_ids = client.gc_free_tier(days).await.unwrap();
-            gc(client, project_ids, stop_deployments).await;
+            gc(client, project_ids, stop_deployments, limit).await;
         }
         Command::GcShuttlings {
             minutes,
             stop_deployments,
+            limit,
         } => {
             let project_ids = client.gc_shuttlings(minutes).await.unwrap();
-            gc(client, project_ids, stop_deployments).await;
+            gc(client, project_ids, stop_deployments, limit).await;
         }
     };
 }
 
-async fn gc(client: Client, project_ids: Vec<String>, stop_deployments: bool) {
+async fn gc(client: Client, mut project_ids: Vec<String>, stop_deployments: bool, limit: u32) {
     if !stop_deployments {
-        for pid in project_ids {
+        for pid in &project_ids {
             println!("{pid}");
         }
+        eprintln!("({} projects)", project_ids.len());
         return;
     }
 
-    println!(
+    project_ids.truncate(limit as usize);
+    eprintln!(
         "Starting GC of {} projects in 5 seconds...",
         project_ids.len()
     );

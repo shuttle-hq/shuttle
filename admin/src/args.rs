@@ -66,6 +66,9 @@ pub enum Command {
         /// loop and stop the returned projects instead of printing them
         #[arg(long)]
         stop_deployments: bool,
+        /// limit how many projects to stop
+        #[arg(long, default_value_t = 100)]
+        limit: u32,
     },
     /// Garbage collect shuttlings projects
     GcShuttlings {
@@ -74,6 +77,9 @@ pub enum Command {
         /// loop and stop the returned projects instead of printing them
         #[arg(long)]
         stop_deployments: bool,
+        /// limit how many projects to stop
+        #[arg(long, default_value_t = 100)]
+        limit: u32,
     },
 }
 

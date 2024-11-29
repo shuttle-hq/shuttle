@@ -483,8 +483,6 @@ impl Shuttle {
             println!();
         } else if args.login_args.api_key.is_some() {
             self.login(args.login_args.clone(), offline).await?;
-        } else if args.create_env {
-            bail!("Tried to login to create a Shuttle environment, but no API key was set.")
         }
 
         // 2. Ask for project name or validate the given one

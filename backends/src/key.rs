@@ -22,11 +22,11 @@ impl ApiKey {
         let mut errors = vec![];
         if !key.chars().all(char::is_alphanumeric) {
             errors.push("The API key should consist of only alphanumeric characters.");
-        };
+        }
 
         if key.len() != 16 {
             errors.push("The API key should be exactly 16 characters in length.");
-        };
+        }
 
         if !errors.is_empty() {
             let message = errors.join("\n");

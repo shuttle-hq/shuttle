@@ -117,7 +117,7 @@ pub async fn init(pool: PgPool, args: InitArgs, tier: AccountTier) -> Result<()>
 
     query("INSERT INTO users (account_name, key, account_tier, user_id) VALUES ($1, $2, $3, $4)")
         .bind("")
-        .bind(&key)
+        .bind(key.as_ref())
         .bind(tier.to_string())
         .bind(&args.user_id)
         .execute(&pool)

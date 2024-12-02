@@ -23,7 +23,6 @@ jsonwebtoken = { workspace = true, optional = true }
 opentelemetry = { workspace = true, optional = true }
 opentelemetry-http = { workspace = true, optional = true }
 pin-project = { workspace = true, optional = true }
-rand = { workspace = true, optional = true }
 reqwest = { workspace = true, optional = true }
 semver = { workspace = true }
 serde = { workspace = true, features = ["derive", "std"] }
@@ -68,12 +67,8 @@ extract_propagation = [
     "tracing-opentelemetry",
 ]
 models = ["async-trait", "reqwest", "service"]
-persist = ["sqlx", "rand"]
 sqlx = ["dep:sqlx", "sqlx/sqlite", "sqlx/postgres"]
 service = ["chrono/serde", "display", "tracing", "tracing-subscriber", "uuid"]
 test-utils = ["wiremock"]
 tonic = ["dep:tonic"]
 tracing = ["dep:tracing"]
-
-[dev-dependencies]
-proptest = "1.1.0"

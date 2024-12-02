@@ -391,7 +391,12 @@ impl FromRow<'_, PgRow> for User {
         Ok(User {
             name: row.try_get("account_name").unwrap(),
             id: row.try_get("user_id").unwrap(),
-            key: Secret::new(ApiKey::parse(row.try_get("key").unwrap()).unwrap()),
+            key: Secret::new(ApiKey::parse(row.try_get("key").unwrap()).map_err(|err| {
+                sqlx::Error::ColumnDecode {
+                    index: "key".to_string(),
+                    source: Box::new(std::io::Error::new(ErrorKind::Other, err.to_string())),
+                }
+            })?),
             account_tier: AccountTier::from_str(row.try_get("account_tier").unwrap()).map_err(
                 |err| sqlx::Error::ColumnDecode {
                     index: "account_tier".to_string(),

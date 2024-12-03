@@ -6,7 +6,7 @@ license.workspace = true
 repository.workspace = true
 description = "Common library for the shuttle platform (https://www.shuttle.rs/)"
 # Base MSRV for the Shuttle crates. If some other crate has a higher MSRV, set it in that crate.
-rust-version = "1.78"
+rust-version = "1.81"
 
 [dependencies]
 anyhow = { workspace = true }
@@ -39,6 +39,7 @@ tracing-subscriber = { workspace = true, optional = true }
 typeshare = { workspace = true }
 url = { workspace = true, features = ["serde"] }
 uuid = { workspace = true, features = ["v4", "serde"], optional = true }
+utoipa = { version = "5", features = ["chrono"] }
 zeroize = { workspace = true }
 wiremock = { workspace = true, optional = true }
 
@@ -74,6 +75,7 @@ service = ["chrono/serde", "display", "tracing", "tracing-subscriber", "uuid"]
 test-utils = ["wiremock"]
 tonic = ["dep:tonic"]
 tracing = ["dep:tracing"]
+utoipa = ["dep:utoipa"]
 
 [dev-dependencies]
 proptest = "1.1.0"

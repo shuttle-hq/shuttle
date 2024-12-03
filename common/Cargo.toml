@@ -75,6 +75,7 @@ service = ["chrono/serde", "display", "tracing", "tracing-subscriber", "uuid"]
 test-utils = ["wiremock"]
 tonic = ["dep:tonic"]
 tracing = ["dep:tracing"]
+utoipa = ["dep:utoipa"]
 
 [dev-dependencies]
 proptest = "1.1.0"

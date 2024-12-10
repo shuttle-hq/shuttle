@@ -21,6 +21,7 @@ pub enum State {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Display, Serialize, EnumString)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[serde(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
 #[strum(ascii_case_insensitive)]

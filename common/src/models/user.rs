@@ -10,6 +10,7 @@ use strum::{Display, EnumString};
 pub type UserId = String;
 
 #[derive(Deserialize, Serialize, Debug)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub struct UserResponse {
     pub name: String,
@@ -49,6 +50,7 @@ impl UserResponse {
 #[cfg_attr(feature = "display", strum(serialize_all = "lowercase"))]
 #[cfg_attr(feature = "persist", derive(sqlx::Type))]
 #[cfg_attr(feature = "persist", sqlx(rename_all = "lowercase"))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub enum AccountTier {
     #[default]
@@ -66,6 +68,7 @@ pub enum AccountTier {
 }
 
 #[derive(Deserialize, Serialize, Debug)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub struct Subscription {
     pub id: String,
@@ -76,6 +79,7 @@ pub struct Subscription {
 }
 
 #[derive(Deserialize, Debug)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub struct SubscriptionRequest {
     pub id: String,
@@ -84,6 +88,7 @@ pub struct SubscriptionRequest {
 }
 
 #[derive(Clone, Debug, EnumString, Display, Deserialize, Serialize, Eq, PartialEq)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[serde(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
 #[typeshare::typeshare]

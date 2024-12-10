@@ -49,6 +49,7 @@ impl From<ProvisionResourceRequest> for ProvisionResourceRequestBeta {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub struct ProvisionResourceRequestBeta {
     /// The type of this resource
@@ -78,6 +79,7 @@ pub enum ResourceInputBeta {
 #[derive(
     Debug, Clone, PartialEq, Eq, strum::Display, strum::EnumString, Serialize, Deserialize,
 )]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[serde(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
 #[typeshare::typeshare]
@@ -102,6 +104,7 @@ pub struct ShuttleResourceOutput<T> {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub struct ResourceResponseBeta {
     pub r#type: ResourceTypeBeta,
@@ -113,6 +116,7 @@ pub struct ResourceResponseBeta {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub struct ResourceListResponseBeta {
     pub resources: Vec<ResourceResponseBeta>,
@@ -158,6 +162,7 @@ pub enum Type {
 #[derive(
     Clone, Copy, Debug, strum::EnumString, strum::Display, Deserialize, Serialize, Eq, PartialEq,
 )]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 // is a flat enum instead of nested enum to allow typeshare
 pub enum ResourceTypeBeta {

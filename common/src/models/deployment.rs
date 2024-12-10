@@ -30,12 +30,14 @@ pub struct Response {
 }
 
 #[derive(Deserialize, Serialize)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub struct DeploymentListResponseBeta {
     pub deployments: Vec<DeploymentResponseBeta>,
 }
 
 #[derive(Deserialize, Serialize)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub struct DeploymentResponseBeta {
     pub id: String,
@@ -268,6 +270,7 @@ pub fn get_deployments_table(
 }
 
 #[derive(Deserialize, Serialize)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub struct UploadArchiveResponseBeta {
     /// The S3 object version ID of the uploaded object
@@ -286,6 +289,7 @@ pub struct DeploymentRequest {
 }
 
 #[derive(Deserialize, Serialize)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[serde(tag = "type", content = "content")]
 #[typeshare::typeshare]
 pub enum DeploymentRequestBeta {
@@ -297,6 +301,7 @@ pub enum DeploymentRequestBeta {
 }
 
 #[derive(Default, Deserialize, Serialize)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub struct DeploymentRequestBuildArchiveBeta {
     /// The S3 object version ID of the archive to use
@@ -309,6 +314,7 @@ pub struct DeploymentRequestBuildArchiveBeta {
 }
 
 #[derive(Deserialize, Serialize, Default)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[serde(tag = "type", content = "content")]
 #[typeshare::typeshare]
 pub enum BuildArgsBeta {
@@ -318,6 +324,7 @@ pub enum BuildArgsBeta {
 }
 
 #[derive(Deserialize, Serialize)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub struct BuildArgsRustBeta {
     /// Version of shuttle-runtime used by this crate
@@ -354,6 +361,7 @@ impl Default for BuildArgsRustBeta {
 }
 
 #[derive(Default, Deserialize, Serialize)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub struct BuildMetaBeta {
     pub git_commit_id: Option<String>,
@@ -379,6 +387,7 @@ impl std::fmt::Display for BuildMetaBeta {
 }
 
 #[derive(Default, Deserialize, Serialize)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub struct DeploymentRequestImageBeta {
     pub image: String,

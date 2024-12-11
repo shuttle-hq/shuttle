@@ -96,7 +96,7 @@ impl IntoResource<diesel_async::AsyncPgConnection> for OutputWrapper {
     async fn into_resource(self) -> Result<diesel_async::AsyncPgConnection, Error> {
         use diesel_async::{AsyncConnection, AsyncPgConnection};
 
-        let connection_string: String = self.into_resource().await.unwrap();
+        let connection_string: String = self.into_resource().await?;
 
         Ok(AsyncPgConnection::establish(&connection_string)
             .await
@@ -110,7 +110,7 @@ impl IntoResource<diesel_bb8::Pool<diesel_async::AsyncPgConnection>> for OutputW
     async fn into_resource(
         self,
     ) -> Result<diesel_bb8::Pool<diesel_async::AsyncPgConnection>, Error> {
-        let connection_string: String = self.into_resource().await.unwrap();
+        let connection_string: String = self.into_resource().await?;
 
         Ok(diesel_bb8::Pool::builder()
             .min_idle(Some(MIN_CONNECTIONS))
@@ -127,7 +127,7 @@ impl IntoResource<diesel_deadpool::Pool<diesel_async::AsyncPgConnection>> for Ou
     async fn into_resource(
         self,
     ) -> Result<diesel_deadpool::Pool<diesel_async::AsyncPgConnection>, Error> {
-        let connection_string: String = self.into_resource().await.unwrap();
+        let connection_string: String = self.into_resource().await?;
 
         Ok(
             diesel_deadpool::Pool::builder(AsyncDieselConnectionManager::new(connection_string))

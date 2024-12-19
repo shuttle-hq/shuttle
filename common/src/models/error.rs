@@ -273,7 +273,7 @@ impl From<ProjectNotFound> for ApiError {
 }
 
 #[derive(Debug, Error)]
-#[error("{0}. See https://docs.shuttle.dev/platform-update/platform-update for more information and steps to upgrade.")]
+#[error("{0} See https://docs.shuttle.dev/platform-update/platform-update for more information and steps to upgrade.")]
 pub struct Deprecated(pub String);
 
 impl From<Deprecated> for ApiError {

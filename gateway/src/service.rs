@@ -722,7 +722,7 @@ impl GatewayService {
                 Err(Error::OwnProjectAlreadyExists(message))
             }
         } else if can_create_project {
-            // Project creation is deprecated on the legacy platform as of the 12th of December
+            // Project creation is deprecated on the legacy platform as of the 19th of December
             // 2024.
             Err(Deprecated(
                 "New project creation on the shuttle.rs platform is deprecated.".to_string(),

@@ -418,11 +418,7 @@ async fn delete_project(
 }
 
 #[instrument(skip_all, fields(shuttle.project.name = %scoped_user.scope))]
-async fn override_create_service(
-    _state: State<RouterState>,
-    scoped_user: ScopedUser,
-    _req: Request<Body>,
-) -> Result<Response<Body>, ApiError> {
+async fn override_create_service(scoped_user: ScopedUser) -> Result<Response<Body>, ApiError> {
     // Creating new deployments on the shuttle.rs platform is deprecated as of the first of January
     // 2024.
     return Err(Deprecated(

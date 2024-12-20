@@ -1001,7 +1001,6 @@ pub(crate) struct RouterState {
     pub service: Arc<GatewayService>,
     pub sender: Sender<BoxedTask>,
     pub running_builds: Arc<Mutex<TtlCache<Uuid, ()>>>,
-    pub posthog_client: async_posthog::Client,
 }
 
 #[derive(Default)]
@@ -1009,7 +1008,6 @@ pub struct ApiBuilder {
     router: Router<RouterState>,
     service: Option<Arc<GatewayService>>,
     sender: Option<Sender<BoxedTask>>,
-    posthog_client: Option<async_posthog::Client>,
     bind: Option<SocketAddr>,
 }
 
@@ -1058,11 +1056,6 @@ impl ApiBuilder {
 
     pub fn with_sender(mut self, sender: Sender<BoxedTask>) -> Self {
         self.sender = Some(sender);
-        self
-    }
-
-    pub fn with_posthog_client(mut self, posthog_client: async_posthog::Client) -> Self {
-        self.posthog_client = Some(posthog_client);
         self
     }
 
@@ -1209,7 +1202,6 @@ impl ApiBuilder {
     pub fn into_router(self) -> Router {
         let service = self.service.expect("a GatewayService is required");
         let sender = self.sender.expect("a task Sender is required");
-        let posthog_client = self.posthog_client.expect("a task Sender is required");
 
         // Allow about 4 cores per build, but use at most 75% (* 3 / 4) of all cores and at least 1 core
         // Assumes each builder (deployer) is assigned 4 cores
@@ -1220,7 +1212,6 @@ impl ApiBuilder {
         self.router.with_state(RouterState {
             service,
             sender,
-            posthog_client,
             running_builds,
         })
     }

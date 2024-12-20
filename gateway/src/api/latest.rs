@@ -28,8 +28,8 @@ use shuttle_backends::request_span;
 use shuttle_backends::ClaimExt;
 use shuttle_common::claims::{Claim, Scope, EXP_MINUTES};
 use shuttle_common::models::error::{
-    ApiError, InvalidCustomDomain, InvalidTeamName, ProjectCorrupted, ProjectHasBuildingDeployment,
-    ProjectHasResources, ProjectHasRunningDeployment,
+    ApiError, Deprecated, InvalidCustomDomain, InvalidTeamName, ProjectCorrupted,
+    ProjectHasBuildingDeployment, ProjectHasResources, ProjectHasRunningDeployment,
 };
 use shuttle_common::models::{admin::ProjectResponse, project, stats};
 use shuttle_common::models::{service, team};
@@ -40,7 +40,7 @@ use tokio::sync::mpsc::Sender;
 use tokio::sync::{Mutex, MutexGuard};
 use tower::ServiceBuilder;
 use tower_http::cors::{AllowOrigin, CorsLayer};
-use tracing::{debug, error, field, info, instrument, trace, warn, Span};
+use tracing::{debug, field, info, instrument, trace, warn, Span};
 use ttl_cache::TtlCache;
 use ulid::Ulid;
 use uuid::Uuid;
@@ -419,24 +419,16 @@ async fn delete_project(
 
 #[instrument(skip_all, fields(shuttle.project.name = %scoped_user.scope))]
 async fn override_create_service(
-    state: State<RouterState>,
+    _state: State<RouterState>,
     scoped_user: ScopedUser,
-    req: Request<Body>,
+    _req: Request<Body>,
 ) -> Result<Response<Body>, ApiError> {
-    let user_id = scoped_user.claim.sub.clone();
-    let posthog_client = state.posthog_client.clone();
-    tokio::spawn(async move {
-        let event = async_posthog::Event::new("shuttle_api_start_deployment", &user_id);
-
-        if let Err(err) = posthog_client.capture(event).await {
-            error!(
-                error = &err as &dyn std::error::Error,
-                "failed to send event to posthog"
-            )
-        };
-    });
-
-    route_project(state, scoped_user, req).await
+    // Creating new deployments on the shuttle.rs platform is deprecated as of the first of January
+    // 2024.
+    return Err(Deprecated(
+        "Creating new deployments on the shuttle.rs platform has been deprecated.".to_string(),
+    )
+    .into());
 }
 
 #[instrument(skip_all, fields(shuttle.project.name = %scoped_user.scope))]

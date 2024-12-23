@@ -29,12 +29,14 @@ pub struct Response {
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub struct ProjectCreateRequestBeta {
     pub name: String,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub struct ProjectResponseBeta {
     pub id: String,
@@ -81,6 +83,7 @@ impl ProjectResponseBeta {
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub struct ProjectListResponseBeta {
     pub projects: Vec<ProjectResponseBeta>,
@@ -88,6 +91,7 @@ pub struct ProjectListResponseBeta {
 
 /// Set wanted field(s) to Some to update those parts of the project
 #[derive(Debug, Default, Deserialize, Serialize, Clone, PartialEq)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub struct ProjectUpdateRequestBeta {
     pub name: Option<String>,
@@ -97,6 +101,7 @@ pub struct ProjectUpdateRequestBeta {
 #[derive(
     Debug, Default, Clone, Copy, PartialEq, Eq, Display, Serialize, Deserialize, EnumString,
 )]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[serde(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
 #[typeshare::typeshare]

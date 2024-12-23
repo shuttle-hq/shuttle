@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize, Serialize, Debug)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub struct AddCertificateRequest {
     #[serde(alias = "domain")]
@@ -15,6 +16,7 @@ pub struct DeleteCertificateRequest {
 }
 
 #[derive(Deserialize, Serialize, Debug)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub struct CertificateResponse {
     pub id: String,
@@ -24,6 +26,7 @@ pub struct CertificateResponse {
 }
 
 #[derive(Deserialize, Serialize, Debug)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub struct CertificateListResponse {
     pub certificates: Vec<CertificateResponse>,

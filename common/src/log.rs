@@ -57,6 +57,7 @@ pub struct LogItem {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub struct LogItemBeta {
     pub timestamp: DateTime<Utc>,
@@ -93,6 +94,7 @@ impl std::fmt::Display for LogItemBeta {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub struct LogsResponseBeta {
     pub logs: Vec<LogItemBeta>,

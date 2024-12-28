@@ -213,7 +213,6 @@ mod tests {
         body::Body, extract::Path, http::Request, http::StatusCode, middleware::from_extractor,
         response::IntoResponse, routing::get, Router,
     };
-    use hyper::body;
     use tower::ServiceExt;
     use tracing::field;
     use tracing_fluent_assertions::{AssertionRegistry, AssertionsLayer};
@@ -269,7 +268,10 @@ mod tests {
 
             assert_eq!(response.status(), StatusCode::OK);
 
-            let body = body::to_bytes(response.into_body()).await.unwrap();
+            let body = hyper::body::HttpBody::collect(response.into_body())
+                .await
+                .unwrap()
+                .to_bytes();
 
             assert_eq!(&body[..], b"hello");
             request_span.assert();
@@ -315,7 +317,10 @@ mod tests {
 
             assert_eq!(response.status(), StatusCode::OK);
 
-            let body = body::to_bytes(response.into_body()).await.unwrap();
+            let body = hyper::body::HttpBody::collect(response.into_body())
+                .await
+                .unwrap()
+                .to_bytes();
 
             assert_eq!(&body[..], b"hello ferries");
             request_span.assert();

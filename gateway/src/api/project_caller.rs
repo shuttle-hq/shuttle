@@ -135,7 +135,9 @@ impl ProjectCaller {
         match res.status() {
             StatusCode::NOT_FOUND => Ok(None),
             StatusCode::OK => {
-                let body_bytes = hyper::body::to_bytes(res.into_body()).await?;
+                let body_bytes = hyper::body::HttpBody::collect(res.into_body())
+                    .await?
+                    .to_bytes();
 
                 let body = serde_json::from_slice(&body_bytes)?;
 

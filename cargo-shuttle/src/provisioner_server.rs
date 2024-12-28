@@ -509,7 +509,6 @@ pub mod beta {
 
     use anyhow::{bail, Context, Result};
     use hyper::{
-        body,
         service::{make_service_fn, service_fn},
         Body, Method, Request as HyperRequest, Response, Server,
     };
@@ -565,7 +564,12 @@ pub mod beta {
         let uri = req.uri().clone();
         debug!("Received {method} {uri}");
 
-        let body = body::to_bytes(req.into_body()).await?.to_vec();
+        let body = hyper::body::HttpBody::collect(req.into_body())
+            .await
+            .unwrap()
+            .to_bytes()
+            .to_vec();
+
         let res = match provision(state, method, uri.to_string().as_str(), body).await {
             Ok(bytes) => Response::new(Body::from(bytes)),
             Err(e) => {

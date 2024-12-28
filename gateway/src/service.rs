@@ -1255,9 +1255,11 @@ impl GatewayContext {
         let resp = timeout(IS_HEALTHY_TIMEOUT, AUTH_CLIENT.request(req)).await;
 
         if let Ok(Ok(resp)) = resp {
-            let body = hyper::body::to_bytes(resp.into_body())
+            let body = hyper::body::HttpBody::collect(resp.into_body())
                 .await
-                .unwrap_or_default();
+                .unwrap_or_default()
+                .to_bytes();
+
             let convert: serde_json::Value = serde_json::from_slice(&body).unwrap_or_default();
 
             trace!(?convert, "got jwt response");

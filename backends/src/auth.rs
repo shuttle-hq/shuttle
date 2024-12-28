@@ -152,7 +152,7 @@ impl PublicKeyFn for AuthPublicKey {
             });
 
             let res = client.request(request.body(Body::empty())?).await?;
-            let buf = body::to_bytes(res).await?;
+            let buf = body::HttpBody::collect(res).await?.to_bytes();
 
             trace!("inserting public key from auth service into cache");
             self.cache_manager.insert(
@@ -637,7 +637,10 @@ mod tests {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::OK);
-        let body = body::to_bytes(response.into_body()).await.unwrap();
+        let body = body::HttpBody::collect(response.into_body())
+            .await
+            .unwrap()
+            .to_bytes();
 
         assert_eq!(&body[..], b"Hello, ferries");
     }

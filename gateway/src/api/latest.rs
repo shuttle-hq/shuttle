@@ -458,7 +458,10 @@ async fn override_get_delete_service(
         .unwrap_or_default() // use project name if domain lookup fails
         .map(|c| format!("https://{}", c.fqdn))
         .unwrap_or_else(|| format!("https://{project_name}.{public}"));
-    let body = hyper::body::to_bytes(res.body_mut()).await.unwrap();
+    let body = hyper::body::HttpBody::collect(res.body_mut())
+        .await
+        .unwrap()
+        .to_bytes();
     let mut json: service::Summary =
         serde_json::from_slice(body.as_bytes()).expect("valid service response from deployer");
     json.uri = uri;
@@ -1253,7 +1256,6 @@ pub mod tests {
     use axum::http::Request;
     use futures::TryFutureExt;
     use http::Method;
-    use hyper::body::to_bytes;
     use hyper::StatusCode;
     use serde_json::Value;
     use shuttle_backends::test_utils::gateway::PermissionsMock;
@@ -1840,7 +1842,10 @@ pub mod tests {
         router.call(create_project).await.unwrap();
 
         let resp = router.call(get_status()).await.unwrap();
-        let body = to_bytes(resp.into_body()).await.unwrap();
+        let body = hyper::body::HttpBody::collect(resp.into_body())
+            .await
+            .unwrap()
+            .to_bytes();
 
         // The status check response will be a JSON array of objects.
         let resp: Value = serde_json::from_slice(&body).unwrap();
@@ -1852,7 +1857,10 @@ pub mod tests {
         done_recv.await.unwrap();
 
         let resp = router.call(get_status()).await.unwrap();
-        let body = to_bytes(resp.into_body()).await.unwrap();
+        let body = hyper::body::HttpBody::collect(resp.into_body())
+            .await
+            .unwrap()
+            .to_bytes();
 
         let resp: Value = serde_json::from_slice(&body).unwrap();
 
@@ -1862,7 +1870,10 @@ pub mod tests {
         let _ = worker.await;
 
         let resp = router.call(get_status()).await.unwrap();
-        let body = to_bytes(resp.into_body()).await.unwrap();
+        let body = hyper::body::HttpBody::collect(resp.into_body())
+            .await
+            .unwrap()
+            .to_bytes();
 
         let resp: Value = serde_json::from_slice(&body).unwrap();
 

@@ -38,12 +38,14 @@ async fn hello_world(mut stream: impl net::stream::Socket + net::Stream + Unpin)
             .unwrap_or_else(|_| "???".to_owned())
     );
 
+    const TEXT: &str = "Hello, Shuttle!";
+
     let resp = [
         "HTTP/1.1 200 OK",
         "Content-Type: text/plain",
-        format!("Content-Length: {}", SRC.len()).as_str(),
+        format!("Content-Length: {}", TEXT.len()).as_str(),
         "",
-        SRC,
+        TEXT,
         "",
     ]
     .join("\r\n");
@@ -58,7 +60,7 @@ async fn hello_world(mut stream: impl net::stream::Socket + net::Stream + Unpin)
 
 #[shuttle_runtime::main]
 async fn main() -> Result<impl shuttle_rama::ShuttleService, shuttle_rama::ShuttleError> {
-    Ok(shuttle_rama::RamaService::trasnport(
+    Ok(shuttle_rama::RamaService::transport(
         service_fn(hello_world),
     ))
 }

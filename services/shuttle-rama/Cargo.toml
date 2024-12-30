@@ -7,8 +7,6 @@ description = "Service implementation to run a rama server on shuttle"
 repository = "https://github.com/shuttle-hq/shuttle"
 keywords = ["shuttle-service", "rama"]
 
-[workspace]
-
 [dependencies]
 rama = { version = "0.2.0-alpha.4", features = ["tcp", "http-full"] }
 shuttle-runtime = { path = "../../runtime", version = "0.49.0", default-features = false }

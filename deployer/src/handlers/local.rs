@@ -44,7 +44,10 @@ pub async fn set_jwt_bearer<B>(
             .await
             .expect("failed to proxy request to auth service");
 
-        let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
+        let body = hyper::body::HttpBody::collect(response.into_body())
+            .await
+            .unwrap()
+            .to_bytes();
         let convert: Value = serde_json::from_slice(&body)
             .expect("failed to deserialize body as JSON, did you login?");
 

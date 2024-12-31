@@ -97,7 +97,11 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
-        let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
+        let body = hyper::body::HttpBody::collect(response.into_body())
+            .await
+            .unwrap()
+            .to_bytes();
+
         assert_eq!(&body[..], b"test123");
 
         let response = app
@@ -105,7 +109,11 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-        let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
+        let body = hyper::body::HttpBody::collect(response.into_body())
+            .await
+            .unwrap()
+            .to_bytes();
+
         assert!(&body[..].starts_with(br#"{"message":"Invalid project name"#));
 
         let response = app
@@ -113,7 +121,10 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
-        let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
+        let body = hyper::body::HttpBody::collect(response.into_body())
+            .await
+            .unwrap()
+            .to_bytes();
         assert_eq!(&body[..], b"test123 123");
 
         let response = app
@@ -121,7 +132,10 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-        let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
+        let body = hyper::body::HttpBody::collect(response.into_body())
+            .await
+            .unwrap()
+            .to_bytes();
         assert!(&body[..].starts_with(br#"{"message":"Invalid URL"#));
     }
 }

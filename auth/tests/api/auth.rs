@@ -15,7 +15,11 @@ mod needs_docker {
         let response = app.post_user("test-user-basic", "basic").await;
         assert_eq!(response.status(), StatusCode::OK);
         // Extract the API key from the response so we can use it in a future request.
-        let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
+        let body = hyper::body::HttpBody::collect(response.into_body())
+            .await
+            .unwrap()
+            .to_bytes();
+
         let user: Value = serde_json::from_slice(&body).unwrap();
         let basic_user_key = user["key"].as_str().unwrap();
 

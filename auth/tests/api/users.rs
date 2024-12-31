@@ -46,7 +46,10 @@ mod needs_docker {
 
         assert_eq!(response.status(), StatusCode::OK);
 
-        let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
+        let body = hyper::body::HttpBody::collect(response.into_body())
+            .await
+            .unwrap()
+            .to_bytes();
         let user: user::UserResponse = serde_json::from_slice(&body).unwrap();
         let user_id1 = user.id.clone();
 
@@ -60,7 +63,10 @@ mod needs_docker {
 
         assert_eq!(response.status(), StatusCode::OK);
 
-        let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
+        let body = hyper::body::HttpBody::collect(response.into_body())
+            .await
+            .unwrap()
+            .to_bytes();
         let user: user::UserResponse = serde_json::from_slice(&body).unwrap();
         let user_id2 = user.id.clone();
 
@@ -88,7 +94,11 @@ mod needs_docker {
 
         assert_eq!(response.status(), StatusCode::OK);
 
-        let post_body = hyper::body::to_bytes(response.into_body()).await.unwrap();
+        let post_body = hyper::body::HttpBody::collect(response.into_body())
+            .await
+            .unwrap()
+            .to_bytes();
+
         let user: user::UserResponse = serde_json::from_slice(&post_body).unwrap();
         let user_id = user.id;
 
@@ -123,7 +133,10 @@ mod needs_docker {
 
         assert_eq!(response.status(), StatusCode::OK);
 
-        let get_body = hyper::body::to_bytes(response.into_body()).await.unwrap();
+        let get_body = hyper::body::HttpBody::collect(response.into_body())
+            .await
+            .unwrap()
+            .to_bytes();
 
         assert_eq!(post_body, get_body);
     }
@@ -137,7 +150,10 @@ mod needs_docker {
 
         assert_eq!(response.status(), StatusCode::OK);
 
-        let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
+        let body = hyper::body::HttpBody::collect(response.into_body())
+            .await
+            .unwrap()
+            .to_bytes();
         let user: user::UserResponse = serde_json::from_slice(&body).unwrap();
         let user_id = &user.id;
 
@@ -160,7 +176,10 @@ mod needs_docker {
             .await;
 
         assert_eq!(response.status(), StatusCode::OK);
-        let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
+        let body = hyper::body::HttpBody::collect(response.into_body())
+            .await
+            .unwrap()
+            .to_bytes();
         let pro_user: user::UserResponse = serde_json::from_slice(&body).unwrap();
 
         assert_eq!(user.name, pro_user.name);
@@ -187,7 +206,10 @@ mod needs_docker {
         // POST user first so one exists in the database.
         let response = app.post_user("test-user", "basic").await;
         assert_eq!(response.status(), StatusCode::OK);
-        let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
+        let body = hyper::body::HttpBody::collect(response.into_body())
+            .await
+            .unwrap()
+            .to_bytes();
         let user: user::UserResponse = serde_json::from_slice(&body).unwrap();
         let user_id = &user.id;
 
@@ -214,7 +236,10 @@ mod needs_docker {
 
         assert_eq!(response.status(), StatusCode::OK);
 
-        let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
+        let body = hyper::body::HttpBody::collect(response.into_body())
+            .await
+            .unwrap()
+            .to_bytes();
         let actual_user: user::UserResponse = serde_json::from_slice(&body).unwrap();
 
         assert_eq!(actual_user.account_tier, AccountTier::PendingPaymentPro);
@@ -238,7 +263,10 @@ mod needs_docker {
         assert_eq!(response.status(), StatusCode::OK);
 
         // Extract the API key from the response so we can use it in a future request.
-        let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
+        let body = hyper::body::HttpBody::collect(response.into_body())
+            .await
+            .unwrap()
+            .to_bytes();
         let user: user::UserResponse = serde_json::from_slice(&body).unwrap();
         let user_id = &user.id;
         let basic_user_key = &user.key;
@@ -330,7 +358,10 @@ mod needs_docker {
         // Create user with basic tier
         let response = app.post_user("test-user", "basic").await;
         assert_eq!(response.status(), StatusCode::OK);
-        let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
+        let body = hyper::body::HttpBody::collect(response.into_body())
+            .await
+            .unwrap()
+            .to_bytes();
         let user: user::UserResponse = serde_json::from_slice(&body).unwrap();
         let user_id = &user.id;
 
@@ -364,7 +395,11 @@ mod needs_docker {
 
         assert_eq!(response.status(), StatusCode::OK);
 
-        let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
+        let body = hyper::body::HttpBody::collect(response.into_body())
+            .await
+            .unwrap()
+            .to_bytes();
+
         let user: user::UserResponse = serde_json::from_slice(&body).unwrap();
         assert_eq!(user.account_tier, AccountTier::CancelledPro);
 
@@ -379,7 +414,11 @@ mod needs_docker {
             .await;
         assert_eq!(response.status(), StatusCode::OK);
 
-        let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
+        let body = hyper::body::HttpBody::collect(response.into_body())
+            .await
+            .unwrap()
+            .to_bytes();
+
         let user: user::UserResponse = serde_json::from_slice(&body).unwrap();
 
         assert_eq!(user.account_tier, AccountTier::Basic);

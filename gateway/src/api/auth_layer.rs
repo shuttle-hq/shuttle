@@ -232,11 +232,13 @@ where
                             return Ok(Response::from_parts(parts, body));
                         }
 
-                        let body = match hyper::body::to_bytes(token_response.into_body()).await {
-                            Ok(body) => body,
-                            Err(error) => {
+                        let body = match hyper::body::HttpBody::collect(token_response.into_body())
+                            .await
+                        {
+                            Ok(aggregated_body) => aggregated_body.to_bytes(),
+                            Err(err) => {
                                 error!(
-                                    error = &error as &dyn std::error::Error,
+                                    error = &err as &dyn std::error::Error,
                                     "failed to get response body"
                                 );
 

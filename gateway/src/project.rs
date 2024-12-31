@@ -1560,7 +1560,9 @@ impl Service {
         let resp = timeout(IS_HEALTHY_TIMEOUT, CLIENT.request(req)).await??;
 
         if resp.status() == 200 {
-            let body = hyper::body::to_bytes(resp.into_body()).await?;
+            let body = hyper::body::HttpBody::collect(resp.into_body())
+                .await?
+                .to_bytes();
 
             let service: service::Summary = serde_json::from_slice(&body)?;
 

@@ -807,7 +807,11 @@ pub mod tests {
                     .unwrap();
 
                 assert_eq!(resp.status(), StatusCode::OK);
-                let body = hyper::body::to_bytes(resp.into_body()).await.unwrap();
+                let body = hyper::body::HttpBody::collect(resp.into_body())
+                    .await
+                    .unwrap()
+                    .to_bytes();
+
                 let project: project::Response = serde_json::from_slice(&body).unwrap();
 
                 if project.state == state {
@@ -958,7 +962,11 @@ pub mod tests {
                     .unwrap();
 
                 assert_eq!(resp.status(), StatusCode::OK);
-                let body = hyper::body::to_bytes(resp.into_body()).await.unwrap();
+                let body = hyper::body::HttpBody::collect(resp.into_body())
+                    .await
+                    .unwrap()
+                    .to_bytes();
+
                 let service: service::Summary = serde_json::from_slice(&body).unwrap();
 
                 if service.deployment.is_some() {

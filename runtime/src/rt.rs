@@ -180,8 +180,7 @@ pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + S
                 .await
             {
                 Ok(res) => {
-                    // TODO: revert from info
-                    info!("Got response {:?}", res);
+                    trace!("Got response {:?}", res);
                     match res.state {
                         ResourceState::Provisioning | ResourceState::Authorizing => {
                             tokio::time::sleep(tokio::time::Duration::from_millis(2000)).await;
@@ -221,7 +220,6 @@ pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + S
     // RESOURCE INIT PHASE
     //
 
-    tracing::info!("resources: {:?}", resources);
     let service = match runner.run(resources).await {
         Ok(s) => s,
         Err(e) => {

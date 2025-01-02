@@ -221,6 +221,7 @@ pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + S
     // RESOURCE INIT PHASE
     //
 
+    tracing::info!("resources: {:?}", resources);
     let service = match runner.run(resources).await {
         Ok(s) => s,
         Err(e) => {

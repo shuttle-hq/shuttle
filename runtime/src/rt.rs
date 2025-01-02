@@ -180,7 +180,8 @@ pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + S
                 .await
             {
                 Ok(res) => {
-                    trace!("Got response {:?}", res);
+                    // TODO: revert from info
+                    info!("Got response {:?}", res);
                     match res.state {
                         ResourceState::Provisioning | ResourceState::Authorizing => {
                             tokio::time::sleep(tokio::time::Duration::from_millis(2000)).await;

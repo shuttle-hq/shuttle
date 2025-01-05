@@ -1,0 +1,5 @@
+[build]
+# Needs to be the default directory as this assumption is used by the tests.
+# Specifically `path_from_workspace_root` https://github.com/shuttle-hq/shuttle/blob/9925f4eb27cc66d6b5675e6d4e3b318becfdbd4f/cargo-shuttle/src/lib.rs#L3335
+target-dir = "target"
+ 

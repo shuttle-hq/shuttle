@@ -1,7 +1,7 @@
 ## Shuttle service integration for the Rama framework
 
 Rama is still in early development and for now the latest
-alpha release is used, `0.2.0-alpha.4`.
+alpha release is used, `0.2.0-alpha.5`.
 
 ### Examples
 

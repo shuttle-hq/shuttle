@@ -59,7 +59,7 @@ impl FromStr for Type {
 }
 
 impl TryFrom<ResourceTypeBeta> for Type {
-    type Error = Box<dyn std::error::Error + Send + Sync>;
+    type Error = String;
 
     fn try_from(value: ResourceTypeBeta) -> Result<Self, Self::Error> {
         match value {
@@ -67,7 +67,9 @@ impl TryFrom<ResourceTypeBeta> for Type {
             ResourceTypeBeta::DatabaseAwsRdsPostgres => Ok(Self::AwsRds(AwsRdsEngine::Postgres)),
             ResourceTypeBeta::DatabaseAwsRdsMysql => Ok(Self::AwsRds(AwsRdsEngine::MySql)),
             ResourceTypeBeta::DatabaseAwsRdsMariaDB => Ok(Self::AwsRds(AwsRdsEngine::MariaDB)),
-            other => Err(format!("{other} is not a database resource").into()),
+            other => Err(format!(
+                "{other} is not a valid database resource on the shuttle.dev platform"
+            )),
         }
     }
 }

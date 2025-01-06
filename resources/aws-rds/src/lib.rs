@@ -4,8 +4,9 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use shuttle_service::{
     database,
-    resource::{ProvisionResourceRequest, ShuttleResourceOutput, Type}, Environment,
-    DatabaseResource, DbInput, Error, IntoResource, ResourceFactory, ResourceInputBuilder,
+    resource::{ProvisionResourceRequest, ShuttleResourceOutput, Type},
+    DatabaseResource, DbInput, Environment, Error, IntoResource, ResourceFactory,
+    ResourceInputBuilder,
 };
 
 #[cfg(any(feature = "diesel-async-bb8", feature = "diesel-async-deadpool"))]
@@ -86,7 +87,7 @@ macro_rules! aws_engine {
                                 serde_json::to_value(&self.0).unwrap(),
                                 serde_json::Value::Null,
                             )),
-                        }, 
+                        },
                     })
                 }
             }

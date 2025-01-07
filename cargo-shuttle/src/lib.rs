@@ -253,6 +253,7 @@ impl Shuttle {
                     )]))
                     .unwrap(),
                 ),
+                None,
             );
             self.client = Some(client);
             if !args.offline && !self.beta {

@@ -13,7 +13,7 @@ pub struct Client {
 impl Client {
     pub fn new(api_url: String, api_key: String) -> Self {
         Self {
-            inner: ShuttleApiClient::new(api_url, Some(api_key), None),
+            inner: ShuttleApiClient::new(api_url, Some(api_key), None, Some(120)),
         }
     }
 

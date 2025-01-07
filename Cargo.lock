@@ -224,19 +224,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "async-posthog"
-version = "0.2.3"
-source = "git+https://github.com/shuttle-hq/posthog-rs?branch=main#f20f60de7eb786ea80d7a276073fecdfc697bc61"
-dependencies = [
- "posthog-core",
- "reqwest 0.12.9",
- "serde",
- "serde_json",
- "thiserror 1.0.67",
- "tokio",
-]
-
-[[package]]
 name = "async-stream"
 version = "0.3.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4307,17 +4294,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "posthog-core"
-version = "0.1.0"
-source = "git+https://github.com/shuttle-hq/posthog-rs?branch=main#f20f60de7eb786ea80d7a276073fecdfc697bc61"
-dependencies = [
- "chrono",
- "serde",
- "serde_json",
- "thiserror 1.0.67",
-]
-
-[[package]]
 name = "powerfmt"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5715,7 +5691,6 @@ name = "shuttle-gateway"
 version = "0.49.0"
 dependencies = [
  "anyhow",
- "async-posthog",
  "async-trait",
  "axum",
  "axum-server",

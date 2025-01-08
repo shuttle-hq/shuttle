@@ -34,4 +34,4 @@ sqlx = ["dep:sqlx", "sqlx/runtime-tokio", "sqlx/tls-rustls"]
 sqlx-native-tls = ["dep:sqlx", "sqlx/runtime-tokio", "sqlx/tls-native-tls"]
 
 # OpenDAL backed by Postgres
-opendal = ["dep:opendal", "opendal/services-postgresql", "postgres", "sqlx"]
+opendal-postgres = ["dep:opendal", "opendal/services-postgresql", "postgres", "sqlx"]

@@ -9,7 +9,7 @@ keywords = ["shuttle-service", "opendal"]
 
 [dependencies]
 async-trait = "0.1.56"
-opendal = "0.50"
+opendal = "0.51"
 serde = { version = "1", features = ["derive"] }
 shuttle-service = { path = "../../service", version = "0.50.0" }
 

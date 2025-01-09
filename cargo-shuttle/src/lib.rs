@@ -3199,9 +3199,13 @@ impl Shuttle {
         let mut archive_files = BTreeMap::new();
         for path in entries {
             // It's not possible to add a directory to an archive
-            // and symlinks == chaos
-            if path.is_dir() || path.is_symlink() {
-                trace!("Skipping {:?}", path);
+            if path.is_dir() {
+                trace!("Skipping {:?}: is a directory", path);
+                continue;
+            }
+            // symlinks == chaos
+            if path.is_symlink() {
+                trace!("Skipping {:?}: is a symlink", path);
                 continue;
             }
 

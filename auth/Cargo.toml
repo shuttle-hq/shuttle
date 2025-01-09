@@ -8,7 +8,7 @@ publish = false
 
 [dependencies]
 shuttle-backends = { workspace = true }
-shuttle-common = { workspace = true, features = ["models", "persist"] }
+shuttle-common = { workspace = true, features = ["models"] }
 
 anyhow = { workspace = true }
 async-stripe = { version = "0.25.1", default-features = false, features = ["checkout", "runtime-tokio-hyper-rustls"] }

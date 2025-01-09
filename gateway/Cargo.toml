@@ -7,7 +7,7 @@ publish = false
 
 [dependencies]
 shuttle-backends = { workspace = true, features = ["sqlx"] }
-shuttle-common = { workspace = true, features = ["models", "persist"] }
+shuttle-common = { workspace = true, features = ["models"] }
 shuttle-proto = { workspace = true, features = ["provisioner-client"] }
 
 async-trait = { workspace = true }

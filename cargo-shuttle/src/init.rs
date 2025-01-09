@@ -281,7 +281,7 @@ pub fn create_or_update_ignore_file(path: &Path) -> Result<()> {
         if !contents.lines().any(|l| l == rule) {
             // ensure new ignore rules are placed on a new line
             if !contents.ends_with('\n') {
-                writeln!(&mut contents, "")?;
+                writeln!(&mut contents)?;
             }
             writeln!(&mut contents, "{rule}")?;
         }

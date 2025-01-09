@@ -190,6 +190,7 @@ impl IntoResource<opendal::Operator> for OutputWrapper {
 /// Alternative Operator wrapper that provides methods for serializing (and deserializing) data
 /// as JSON before being stored in the operator's backend.
 #[cfg(feature = "opendal-postgres")]
+#[derive(Clone, Debug)]
 pub struct SerdeJsonOperator(pub opendal::Operator);
 #[cfg(feature = "opendal-postgres")]
 impl SerdeJsonOperator {

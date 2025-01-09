@@ -186,3 +186,41 @@ impl IntoResource<opendal::Operator> for OutputWrapper {
         Ok(op)
     }
 }
+
+/// Alternative Operator wrapper that provides methods for serializing (and deserializing) data
+/// as JSON before being stored in the operator's backend.
+#[cfg(feature = "opendal-postgres")]
+#[derive(Clone, Debug)]
+pub struct SerdeJsonOperator(pub opendal::Operator);
+#[cfg(feature = "opendal-postgres")]
+impl SerdeJsonOperator {
+    pub async fn read_serialized<T: serde::de::DeserializeOwned>(
+        &self,
+        key: &str,
+    ) -> Result<T, opendal::Error> {
+        let bytes = self.0.read(key).await?;
+
+        serde_json::from_slice(&bytes.to_vec()).map_err(|e| {
+            opendal::Error::new(opendal::ErrorKind::Unexpected, "deserialization error")
+                .set_source(e)
+        })
+    }
+    pub async fn write_serialized<T: serde::Serialize>(
+        &self,
+        key: &str,
+        value: &T,
+    ) -> Result<(), opendal::Error> {
+        let b = serde_json::to_vec(value).map_err(|e| {
+            opendal::Error::new(opendal::ErrorKind::Unexpected, "serialization error").set_source(e)
+        })?;
+
+        self.0.write(key, b).await
+    }
+}
+#[cfg(feature = "opendal-postgres")]
+#[async_trait]
+impl IntoResource<SerdeJsonOperator> for OutputWrapper {
+    async fn into_resource(self) -> Result<SerdeJsonOperator, Error> {
+        Ok(SerdeJsonOperator(self.into_resource().await?))
+    }
+}

@@ -153,7 +153,7 @@ impl IntoResource<sqlx::PgPool> for OutputWrapper {
     }
 }
 
-#[cfg(feature = "opendal")]
+#[cfg(feature = "opendal-postgres")]
 #[async_trait]
 impl IntoResource<opendal::Operator> for OutputWrapper {
     async fn into_resource(self) -> Result<opendal::Operator, Error> {

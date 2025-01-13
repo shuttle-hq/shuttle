@@ -2,6 +2,8 @@
 use shuttle_runtime::{CustomError, Error};
 use std::net::SocketAddr;
 
+pub use serenity;
+
 #[cfg(feature = "serenity")]
 use serenity::Client;
 #[cfg(feature = "serenity-0-11")]

@@ -3,6 +3,11 @@ use shuttle_runtime::{CustomError, Error};
 use std::net::SocketAddr;
 
 #[cfg(feature = "axum")]
+pub use axum;
+#[cfg(feature = "axum-0-7")]
+pub use axum_0_7 as axum;
+
+#[cfg(feature = "axum")]
 use axum::Router;
 #[cfg(feature = "axum-0-7")]
 use axum_0_7::Router;

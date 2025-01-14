@@ -48,7 +48,12 @@ impl Args {
     }
 }
 
-pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + Send + 'static) {
+pub async fn start(
+    loader: impl Loader + Send + 'static,
+    runner: impl Runner + Send + 'static,
+    #[cfg_attr(not(feature = "setup-tracing"), allow(unused_variables))] project_name: &'static str,
+    project_version: &'static str,
+) {
     // `--version` overrides any other arguments. Used by cargo-shuttle to check compatibility on local runs.
     if std::env::args().any(|arg| arg == "--version") {
         println!("{}", crate::VERSION_STRING);
@@ -70,32 +75,17 @@ pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + S
 
     // this is handled after arg parsing to not interfere with --version above
     #[cfg(feature = "setup-tracing")]
-    {
-        use tracing_subscriber::{fmt, prelude::*, registry, EnvFilter};
-        registry()
-            .with(fmt::layer().without_time())
-            .with(
-                // let user override RUST_LOG in local run if they want to
-                EnvFilter::try_from_default_env()
-                    // otherwise use our default
-                    .or_else(|_| {
-                        EnvFilter::try_new(if args.beta {
-                            "info"
-                        } else {
-                            "info,shuttle=trace"
-                        })
-                    })
-                    .unwrap(),
-            )
-            .init();
+    let _guard = crate::trace::init_tracing_subscriber(project_name, project_version);
 
-        if args.beta {
-            tracing::warn!(
-                "Default tracing subscriber initialized (https://docs.shuttle.dev/docs/logs)"
-            );
-        } else {
-            tracing::warn!("Default tracing subscriber initialized (https://docs.shuttle.rs/configuration/logs)");
-        }
+    #[cfg(feature = "setup-tracing")]
+    if args.beta {
+        eprintln!(
+            "INFO - Default tracing subscriber initialized (https://docs.shuttle.dev/docs/logs)"
+        );
+    } else {
+        eprintln!(
+            "INFO - Default tracing subscriber initialized (https://docs.shuttle.rs/configuration/logs)"
+        );
     }
 
     if args.beta {

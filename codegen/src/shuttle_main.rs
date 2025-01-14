@@ -12,7 +12,7 @@ pub(crate) fn tokens(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut user_main_fn = parse_macro_input!(item as ItemFn);
     let loader_runner = LoaderAndRunner::from_item_fn(&mut user_main_fn);
 
-    quote! {
+    Into::into(quote! {
         fn main() {
             // manual expansion of #[tokio::main]
             ::shuttle_runtime::tokio::runtime::Builder::new_multi_thread()
@@ -20,15 +20,19 @@ pub(crate) fn tokens(_attr: TokenStream, item: TokenStream) -> TokenStream {
                 .build()
                 .unwrap()
                 .block_on(async {
-                    ::shuttle_runtime::__internals::start(__loader, __runner).await;
-                })
+                    ::shuttle_runtime::__internals::start(
+                        __loader,
+                        __runner,
+                        env!("CARGO_CRATE_NAME"),
+                        env!("CARGO_PKG_VERSION"),
+                ).await;
+            })
         }
 
         #loader_runner
 
         #user_main_fn
-    }
-    .into()
+    })
 }
 
 struct LoaderAndRunner {
@@ -358,7 +362,7 @@ mod tests {
         assert_eq!(actual.fn_inputs, expected_inputs);
 
         // Make sure attributes was removed from input
-        if let syn::FnArg::Typed(param) = input.sig.inputs.first().unwrap() {
+        if let FnArg::Typed(param) = input.sig.inputs.first().unwrap() {
             assert!(
                 param.attrs.is_empty(),
                 "some attributes were not removed: {:?}",

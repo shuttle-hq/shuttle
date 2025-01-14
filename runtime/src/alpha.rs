@@ -118,7 +118,7 @@ where
                 }
             },
             Err(error) => {
-                if error.is_panic() {
+                return if error.is_panic() {
                     let panic = error.into_panic();
                     let msg = match panic.downcast_ref::<String>() {
                         Some(msg) => msg.to_string(),
@@ -128,18 +128,18 @@ where
                         },
                     };
                     println!("loading service panicked: {msg}");
-                    return Ok(Response::new(LoadResponse {
+                    Ok(Response::new(LoadResponse {
                         success: false,
                         message: msg,
                         resources: vec![],
-                    }));
+                    }))
                 } else {
                     println!("loading service crashed: {error:#}");
-                    return Ok(Response::new(LoadResponse {
+                    Ok(Response::new(LoadResponse {
                         success: false,
                         message: error.to_string(),
                         resources: vec![],
-                    }));
+                    }))
                 }
             }
         };
@@ -214,7 +214,7 @@ where
 
         println!("Starting on {service_address}");
 
-        let (kill_tx, kill_rx) = tokio::sync::oneshot::channel();
+        let (kill_tx, kill_rx) = oneshot::channel();
         *self.kill_tx.lock().unwrap() = Some(kill_tx);
 
         let handle = tokio::runtime::Handle::current();
@@ -296,7 +296,7 @@ where
         } else {
             println!("failed to stop deployment");
 
-            Ok(tonic::Response::new(StopResponse { success: false }))
+            Ok(Response::new(StopResponse { success: false }))
         }
     }
 
@@ -324,7 +324,7 @@ where
         Ok(Response::new(ReceiverStream::new(rx)))
     }
 
-    async fn version(&self, _requset: Request<Ping>) -> Result<Response<VersionInfo>, Status> {
+    async fn version(&self, _request: Request<Ping>) -> Result<Response<VersionInfo>, Status> {
         Ok(Response::new(VersionInfo {
             version: crate::VERSION_STRING.to_owned(),
         }))

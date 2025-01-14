@@ -5,7 +5,7 @@ pub mod config;
 use tracing::trace;
 
 use crate::{
-    args::{AcmeCommand, Args, Command, StatsCommand},
+    args::{Args, Command},
     client::Client,
     config::get_api_key,
 };
@@ -17,75 +17,8 @@ pub async fn run(args: Args) {
     let client = Client::new(args.api_url.clone(), api_key, args.client_timeout);
 
     match args.command {
-        Command::Revive => {
-            let s = client.revive().await.expect("revive to succeed");
-            println!("{s}");
-        }
-        Command::Destroy => {
-            let s = client.destroy().await.expect("destroy to succeed");
-            println!("{s}");
-        }
-        Command::Acme(AcmeCommand::CreateAccount { email, acme_server }) => {
-            let account = client
-                .acme_account_create(&email, acme_server)
-                .await
-                .expect("to create ACME account");
-
-            println!("Details of ACME account are as follow. Keep this safe as it will be needed to create certificates in the future");
-            println!("{}", serde_json::to_string_pretty(&account).unwrap());
-        }
-        Command::Acme(AcmeCommand::Request {
-            fqdn,
-            project,
-            credentials,
-        }) => {
-            let s = client
-                .acme_request_certificate(&fqdn, &project, &credentials)
-                .await
-                .expect("to get a certificate challenge response");
-            println!("{s}");
-        }
-        Command::Acme(AcmeCommand::RenewCustomDomain {
-            fqdn,
-            project,
-            credentials,
-        }) => {
-            let s = client
-                .acme_renew_custom_domain_certificate(&fqdn, &project, &credentials)
-                .await
-                .expect("to get a certificate challenge response");
-            println!("{s}");
-        }
-        Command::Acme(AcmeCommand::RenewGateway { credentials }) => {
-            let s = client
-                .acme_renew_gateway_certificate(&credentials)
-                .await
-                .expect("to get a certificate challenge response");
-            println!("{s}");
-        }
-        Command::Stats(StatsCommand::Load { clear }) => {
-            let resp = if clear {
-                client.clear_load().await.expect("to delete load stats")
-            } else {
-                client.get_load().await.expect("to get load stats")
-            };
-
-            let has_capacity = if resp.has_capacity { "a" } else { "no" };
-
-            println!(
-                "Currently {} builds are running and there is {} capacity for new builds",
-                resp.builds_count, has_capacity
-            )
-        }
-        Command::ChangeProjectOwner {
-            project_name,
-            new_user_id,
-        } => {
-            client
-                .change_project_owner(&project_name, &new_user_id)
-                .await
-                .unwrap();
-            println!("Changed project owner: {project_name} -> {new_user_id}")
+        Command::ChangeProjectOwner { .. } => {
+            unimplemented!();
         }
         Command::SetBetaAccess { user_id } => {
             client.set_beta_access(&user_id, true).await.unwrap();

@@ -101,27 +101,6 @@ if ! git diff --exit-code common/types.ts; then
 fi
 '''
 
-[tasks.proto]
-# To generate: cargo make proto
-# To validate: cargo make proto validate
-# Requires `protoc` to be installed
-install_crate = { crate_name = "proto-gen", binary = "proto-gen", test_arg = "-V", version = "0.2.7" }
-script = '''
-OP="generate"
-if [ "$1" = "validate" ]; then
-    OP="validate"
-fi
-proto-gen \
-    --generate-transport --build-client --build-server --format \
-    $OP \
-    -d proto \
-    -o proto/src/generated \
-    -f proto/logger.proto \
-    -f proto/provisioner.proto \
-    -f proto/resource-recorder.proto \
-    -f proto/runtime.proto
-'''
-
 [tasks.changelog]
 # Provide the version to generate for
 # Example: cargo make changelog 0.37.0

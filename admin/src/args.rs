@@ -22,24 +22,10 @@ pub struct Args {
 
 #[derive(Subcommand, Debug)]
 pub enum Command {
-    /// Try to revive projects in the crashed state
-    Revive,
-
-    /// Destroy all the current running projects
-    Destroy,
-
-    /// Manage custom domains
-    #[command(subcommand)]
-    Acme(AcmeCommand),
-
     ChangeProjectOwner {
         project_name: String,
         new_user_id: UserId,
     },
-
-    /// Viewing and managing stats
-    #[command(subcommand)]
-    Stats(StatsCommand),
 
     UpdateCompute {
         /// Project to update
@@ -81,72 +67,6 @@ pub enum Command {
         /// limit how many projects to stop
         #[arg(long, default_value_t = 100)]
         limit: u32,
-    },
-}
-
-#[derive(Subcommand, Debug)]
-pub enum AcmeCommand {
-    /// Create a new ACME account. Should only be needed once
-    CreateAccount {
-        /// Email for managing all certificates
-        #[arg(long)]
-        email: String,
-
-        /// Acme server to create account on. Gateway will default to LetsEncrypt
-        #[arg(long)]
-        acme_server: Option<String>,
-    },
-
-    /// Request a certificate for a FQDN
-    Request {
-        /// Fqdn to request certificate for
-        #[arg(long)]
-        fqdn: String,
-
-        /// Project to request certificate for
-        #[arg(long)]
-        project: String,
-
-        /// Path to acme credentials file
-        /// This should have been created with `acme create-account`
-        #[arg(long, value_parser = load_credentials)]
-        credentials: serde_json::Value,
-    },
-
-    /// Renew the certificate for a FQDN
-    RenewCustomDomain {
-        /// Fqdn to renew the certificate for
-        #[arg(long)]
-        fqdn: String,
-
-        /// Project to renew the certificate for
-        #[arg(long)]
-        project: String,
-
-        /// Path to acme credentials file
-        /// This should have been created with `acme create-account`
-        #[arg(long, value_parser = load_credentials)]
-        credentials: serde_json::Value,
-    },
-
-    /// Renew the certificate for the shuttle gateway.
-    /// Note: this step should be completed manually in terms
-    /// of DNS-01 challenge completion.
-    RenewGateway {
-        /// Path to acme credentials file
-        /// This should have been created with `acme create-account`
-        #[arg(long, value_parser = load_credentials)]
-        credentials: serde_json::Value,
-    },
-}
-
-#[derive(Subcommand, Debug)]
-pub enum StatsCommand {
-    /// View load stats
-    Load {
-        /// Clear the loads counter
-        #[arg(long)]
-        clear: bool,
     },
 }
 

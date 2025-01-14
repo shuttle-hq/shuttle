@@ -18,8 +18,6 @@ pub use crate::error::{CustomError, Error};
 #[cfg(feature = "builder")]
 pub mod builder;
 pub mod error;
-#[cfg(feature = "runner")]
-pub mod runner;
 
 /// Allows implementing plugins for the Shuttle main function.
 ///

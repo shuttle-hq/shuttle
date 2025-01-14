@@ -3,18 +3,10 @@ resolver = "2"
 members = [
   "admin",
   "api-client",
-  "auth",
-  "backends",
   "cargo-shuttle",
   "codegen",
   "common",
   "common-tests",
-  "deployer",
-  "gateway",
-  "logger",
-  "proto",
-  "provisioner",
-  "resource-recorder",
   "runtime",
   "service",
 ]
@@ -30,14 +22,11 @@ edition = "2021"
 license = "Apache-2.0"
 repository = "https://github.com/shuttle-hq/shuttle"
 
-# https://doc.rust-lang.org/cargo/reference/workspaces.html#the-workspacedependencies-table
 [workspace.dependencies]
 shuttle-api-client = { path = "api-client", version = "0.51.0", default-features = false }
-shuttle-backends = { path = "backends", version = "0.51.0" }
 shuttle-codegen = { path = "codegen", version = "0.51.0" }
 shuttle-common = { path = "common", version = "0.51.0" }
 shuttle-common-tests = { path = "common-tests", version = "0.51.0" }
-shuttle-proto = { path = "proto", version = "0.51.0" }
 shuttle-service = { path = "service", version = "0.51.0" }
 
 anyhow = "1.0.66"

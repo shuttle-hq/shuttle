@@ -2,7 +2,6 @@ pub mod args;
 pub mod client;
 pub mod config;
 
-use shuttle_backends::project_name::ProjectName;
 use tracing::trace;
 
 use crate::{
@@ -63,17 +62,6 @@ pub async fn run(args: Args) {
                 .await
                 .expect("to get a certificate challenge response");
             println!("{s}");
-        }
-        Command::ProjectNames => {
-            let projects = client
-                .get_projects()
-                .await
-                .expect("to get list of projects");
-            for p in projects {
-                if !ProjectName::is_valid(&p.project_name) {
-                    println!("{}", p.project_name);
-                }
-            }
         }
         Command::Stats(StatsCommand::Load { clear }) => {
             let resp = if clear {

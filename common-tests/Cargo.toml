@@ -9,18 +9,7 @@ publish = false
 [dependencies]
 cargo-shuttle = { path = "../cargo-shuttle" }
 shuttle-common = { workspace = true, features = ["models"] }
-shuttle-proto = { workspace = true, features = [
-    "logger-client",
-    "resource-recorder-client",
-    "provisioner-client",
-] }
 
-hyper = { workspace = true }
 portpicker = { workspace = true }
 reqwest = { workspace = true }
-serde = { workspace = true }
 tokio = { workspace = true }
-tokio-stream = { workspace = true }
-tonic = { workspace = true }
-tower = { workspace = true }
-uuid = { workspace = true }

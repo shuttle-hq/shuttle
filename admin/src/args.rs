@@ -32,9 +32,6 @@ pub enum Command {
     #[command(subcommand)]
     Acme(AcmeCommand),
 
-    /// Manage project names
-    ProjectNames,
-
     ChangeProjectOwner {
         project_name: String,
         new_user_id: UserId,

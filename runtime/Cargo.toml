@@ -13,7 +13,6 @@ doctest = false
 shuttle-api-client = { workspace = true }
 shuttle-codegen = { workspace = true }
 shuttle-common = { workspace = true, features = ["extract_propagation"] }
-shuttle-proto = { workspace = true, features = ["runtime"] }
 shuttle-service = { workspace = true }
 
 anyhow = { workspace = true }
@@ -32,7 +31,6 @@ tracing-subscriber = { workspace = true, optional = true }
 [dev-dependencies]
 portpicker = { workspace = true }
 shuttle-service = { workspace = true, features = ["builder", "runner"] }
-shuttle-proto = { workspace = true, features = ["provisioner"] }
 uuid = { workspace = true }
 
 [features]

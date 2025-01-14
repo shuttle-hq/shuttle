@@ -19,7 +19,6 @@ shuttle-common = { workspace = true, features = [
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 cargo_metadata = { workspace = true, optional = true }
-dunce = { workspace = true, optional = true }
 serde = { workspace = true, features = ["derive"] }
 strfmt = { workspace = true }
 thiserror = { workspace = true }
@@ -42,4 +41,3 @@ builder = [
     "toml",
     "tracing",
 ]
-runner = ["tokio/process", "dunce"]

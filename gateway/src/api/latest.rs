@@ -433,7 +433,7 @@ async fn override_create_service(
         route_project(state, scoped_user, req).await
     } else {
         Err(Deprecated(
-            "Creating new deployments on the shuttle.rs platform has been deprecated. https://docs.shuttle.dev/platform-update/platform-update".to_string(),
+            "Creating new deployments on the shuttle.rs platform has been deprecated.".to_string(),
         ))?
     }
 }

@@ -12,7 +12,7 @@ mod plugins;
 mod rt;
 mod start;
 
-#[cfg(feature = "setup-tracing")]
+#[cfg(feature = "setup-telemetry")]
 mod trace;
 
 // Public API

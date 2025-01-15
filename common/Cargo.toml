@@ -27,10 +27,8 @@ reqwest = { workspace = true, optional = true }
 semver = { workspace = true }
 serde = { workspace = true, features = ["derive", "std"] }
 serde_json = { workspace = true }
-sqlx = { workspace = true, optional = true }
 strum = { workspace = true, features = ["derive"] }
 thiserror = { workspace = true }
-tonic = { workspace = true, optional = true }
 tower = { workspace = true, optional = true }
 tracing = { workspace = true, features = ["std"], optional = true }
 tracing-opentelemetry = { workspace = true, optional = true }
@@ -39,7 +37,6 @@ typeshare = { workspace = true }
 url = { workspace = true, features = ["serde"] }
 uuid = { workspace = true, features = ["v4", "serde"], optional = true }
 zeroize = { workspace = true }
-wiremock = { workspace = true, optional = true }
 
 [dev-dependencies]
 proptest = "1.1.0"
@@ -70,10 +67,7 @@ extract_propagation = [
     "tracing-opentelemetry",
 ]
 models = ["async-trait", "reqwest", "service"]
-sqlx = ["dep:sqlx", "sqlx/sqlite", "sqlx/postgres"]
 service = ["chrono/serde", "display", "tracing", "tracing-subscriber", "uuid"]
-test-utils = ["wiremock"]
-tonic = ["dep:tonic"]
 tracing = ["dep:tracing"]
 
 [package.metadata.docs.rs]

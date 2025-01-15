@@ -8,22 +8,6 @@ use strum::{Display, EnumString};
 #[serde(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
 #[strum(ascii_case_insensitive)]
-pub enum State {
-    Queued,
-    Building,
-    Built,
-    Loading,
-    Running,
-    Completed,
-    Stopped,
-    Crashed,
-    Unknown,
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Display, Serialize, EnumString)]
-#[serde(rename_all = "lowercase")]
-#[strum(serialize_all = "lowercase")]
-#[strum(ascii_case_insensitive)]
 #[typeshare::typeshare]
 pub enum DeploymentStateBeta {
     Pending,
@@ -83,23 +67,6 @@ pub enum Environment {
     Deployment,
 }
 
-pub const DEPLOYER_END_MSG_STARTUP_ERR: &str = "Service startup encountered an error";
-pub const DEPLOYER_END_MSG_BUILD_ERR: &str = "Service build encountered an error";
-pub const DEPLOYER_END_MSG_CRASHED: &str = "Service encountered an error and crashed";
-pub const DEPLOYER_END_MSG_STOPPED: &str = "Service was stopped by the user"; // don't include this in end messages so that logs are not stopped too early
-pub const DEPLOYER_END_MSG_COMPLETED: &str = "Service finished running all on its own";
-// There is a typo in this message, but it is matched on in cargo-shuttle, so we leave it for now.
-pub const DEPLOYER_RUNTIME_START_RESPONSE: &str = "Runtime started successully";
-pub const DEPLOYER_RUNTIME_START_FAILED: &str = "Runtime did not start successfully";
-
-pub const DEPLOYER_END_MESSAGES_BAD: &[&str] = &[
-    DEPLOYER_END_MSG_STARTUP_ERR,
-    DEPLOYER_END_MSG_BUILD_ERR,
-    DEPLOYER_END_MSG_CRASHED,
-];
-pub const DEPLOYER_END_MESSAGES_GOOD: &[&str] =
-    &[DEPLOYER_END_MSG_COMPLETED, DEPLOYER_RUNTIME_START_RESPONSE];
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -107,9 +74,18 @@ mod tests {
 
     #[test]
     fn test_state_deser() {
-        assert_eq!(State::Queued, State::from_str("Queued").unwrap());
-        assert_eq!(State::Unknown, State::from_str("unKnown").unwrap());
-        assert_eq!(State::Built, State::from_str("built").unwrap());
+        assert_eq!(
+            DeploymentStateBeta::Building,
+            DeploymentStateBeta::from_str("Building").unwrap()
+        );
+        assert_eq!(
+            DeploymentStateBeta::Building,
+            DeploymentStateBeta::from_str("BuilDing").unwrap()
+        );
+        assert_eq!(
+            DeploymentStateBeta::Building,
+            DeploymentStateBeta::from_str("building").unwrap()
+        );
     }
 
     #[test]

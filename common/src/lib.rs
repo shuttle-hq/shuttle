@@ -1,21 +1,13 @@
 #[cfg(feature = "service")]
 pub mod certificate;
-#[cfg(feature = "claims")]
-pub mod claims;
 pub mod constants;
 pub mod database;
 #[cfg(feature = "service")]
 pub mod deployment;
 #[cfg(feature = "service")]
 pub type DeploymentId = uuid::Uuid;
-#[cfg(feature = "extract_propagation")]
-pub mod extract_propagation;
-#[cfg(feature = "claims")]
-pub mod limits;
 #[cfg(feature = "service")]
 pub mod log;
-#[cfg(feature = "service")]
-pub use log::LogItem;
 #[cfg(feature = "service")]
 pub use log::LogItemBeta;
 #[cfg(feature = "models")]
@@ -24,8 +16,6 @@ pub mod resource;
 pub mod secrets;
 pub use secrets::{Secret, SecretStore};
 pub mod templates;
-#[cfg(feature = "tracing")]
-pub mod tracing;
 
 use std::fmt::Debug;
 

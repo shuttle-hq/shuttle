@@ -22,16 +22,8 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 strfmt = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
-tokio-util = { workspace = true }
-tokio-stream = { workspace = true }
-tonic = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true, optional = true }
-
-[dev-dependencies]
-portpicker = { workspace = true }
-shuttle-service = { workspace = true, features = ["builder", "runner"] }
-uuid = { workspace = true }
 
 [features]
 default = ["setup-tracing"]

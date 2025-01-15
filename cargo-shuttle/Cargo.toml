@@ -74,5 +74,3 @@ zip = "2.2.0"
 [dev-dependencies]
 assert_cmd = "2.0.6"
 rexpect = "0.6.0"
-# Publication of this crate will fail if this is changed to a workspace dependency
-shuttle-common-tests = { path = "../common-tests" }

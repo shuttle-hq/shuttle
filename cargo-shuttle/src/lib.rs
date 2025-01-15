@@ -11,7 +11,6 @@ use std::fs::{read_to_string, File};
 use std::io::{Read, Write};
 use std::net::{Ipv4Addr, SocketAddr};
 use std::path::{Path, PathBuf};
-use std::str::FromStr;
 use std::sync::Arc;
 
 use anyhow::{anyhow, bail, Context, Result};
@@ -32,27 +31,23 @@ use reqwest::header::HeaderMap;
 use shuttle_api_client::ShuttleApiClient;
 use shuttle_common::{
     constants::{
-        headers::X_CARGO_SHUTTLE_VERSION, API_URL_DEFAULT, API_URL_DEFAULT_BETA,
-        DEFAULT_IDLE_MINUTES, EXAMPLES_REPO, EXECUTABLE_DIRNAME, RUNTIME_NAME,
-        SHUTTLE_IDLE_DOCS_URL, SHUTTLE_LEGACY_NEW_PROJECT, STORAGE_DIRNAME,
-        TEMPLATES_SCHEMA_VERSION,
+        headers::X_CARGO_SHUTTLE_VERSION, API_URL_DEFAULT, API_URL_DEFAULT_BETA, EXAMPLES_REPO,
+        EXECUTABLE_DIRNAME, RUNTIME_NAME, SHUTTLE_IDLE_DOCS_URL, SHUTTLE_LEGACY_NEW_PROJECT,
+        STORAGE_DIRNAME, TEMPLATES_SCHEMA_VERSION,
     },
-    deployment::{DeploymentStateBeta, DEPLOYER_END_MESSAGES_BAD, DEPLOYER_END_MESSAGES_GOOD},
-    log::LogsRange,
+    deployment::DeploymentStateBeta,
     models::{
         auth::{KeyMessage, TokenMessage},
         deployment::{
-            deployments_table_beta, get_deployments_table, BuildArgsBeta, BuildArgsRustBeta,
-            BuildMetaBeta, DeploymentRequest, DeploymentRequestBeta,
-            DeploymentRequestBuildArchiveBeta, DeploymentRequestImageBeta, DeploymentResponseBeta,
-            CREATE_SERVICE_BODY_LIMIT, GIT_STRINGS_MAX_LENGTH,
+            deployments_table_beta, BuildArgsBeta, BuildArgsRustBeta, BuildMetaBeta,
+            DeploymentRequestBeta, DeploymentRequestBuildArchiveBeta, DeploymentRequestImageBeta,
+            DeploymentResponseBeta, GIT_STRINGS_MAX_LENGTH,
         },
         error::ApiError,
         project::{self, ProjectUpdateRequestBeta},
-        resource::{get_certificates_table_beta, get_resource_tables, get_resource_tables_beta},
+        resource::{get_certificates_table_beta, get_resource_tables_beta},
     },
-    resource::{self},
-    semvers_are_compatible, LogItem, LogItemBeta, VersionInfo,
+    resource, LogItemBeta, VersionInfo,
 };
 use shuttle_service::{
     builder::{async_cargo_metadata, build_workspace, find_shuttle_packages, BuiltService},
@@ -65,7 +60,6 @@ use tokio::time::{sleep, Duration};
 use tokio_tungstenite::tungstenite::Message;
 use tracing::{debug, error, info, trace};
 use tracing_subscriber::{fmt, prelude::*, registry, EnvFilter};
-use uuid::Uuid;
 use zip::write::FileOptions;
 
 use crate::args::{
@@ -248,9 +242,6 @@ impl Shuttle {
                 None,
             );
             self.client = Some(client);
-            if !args.offline && !self.beta {
-                self.check_api_versions().await?;
-            }
         }
 
         // All commands that need to know which project is being handled
@@ -311,14 +302,7 @@ impl Shuttle {
                 self.local_run_beta(run_args, args.debug).await
             }
             Command::Deploy(deploy_args) => self.deploy(deploy_args).await,
-            Command::Status => self.status().await,
-            Command::Logs(logs_args) => {
-                if self.beta {
-                    self.logs_beta(logs_args).await
-                } else {
-                    self.logs(logs_args).await
-                }
-            }
+            Command::Logs(logs_args) => self.logs_beta(logs_args).await,
             Command::Deployment(cmd) => match cmd {
                 DeploymentCommand::List { page, limit, table } => {
                     self.deployments_list(page, limit, table).await
@@ -327,19 +311,11 @@ impl Shuttle {
                 DeploymentCommand::Redeploy { id } => self.deployment_redeploy(id).await,
                 DeploymentCommand::Stop => self.stop_beta().await,
             },
-            Command::Stop => self.stop().await,
-            Command::Clean => self.clean().await,
             Command::Resource(cmd) => match cmd {
                 ResourceCommand::List {
                     table,
                     show_secrets,
-                } => {
-                    if self.beta {
-                        self.resources_list_beta(table, show_secrets).await
-                    } else {
-                        self.resources_list(table, show_secrets).await
-                    }
-                }
+                } => self.resources_list_beta(table, show_secrets).await,
                 ResourceCommand::Delete {
                     resource_type,
                     confirmation: ConfirmationArgs { yes },
@@ -356,36 +332,25 @@ impl Shuttle {
             },
             Command::Project(cmd) => match cmd {
                 ProjectCommand::Start(ProjectStartArgs { idle_minutes }) => {
-                    if self.beta {
-                        self.project_create_beta().await
-                    } else {
-                        self.project_start(idle_minutes).await
-                    }
+                    self.project_create_beta().await
                 }
                 ProjectCommand::Update(cmd) => match cmd {
                     ProjectUpdateCommand::Name { name } => self.project_rename_beta(name).await,
                 },
-                ProjectCommand::Restart(ProjectStartArgs { idle_minutes }) => {
-                    self.project_restart(idle_minutes).await
-                }
-                ProjectCommand::Status { follow } => {
-                    if self.beta {
-                        self.project_status_beta().await
-                    } else {
-                        self.project_status(follow).await
-                    }
-                }
+                ProjectCommand::Status { follow } => self.project_status_beta().await,
                 ProjectCommand::List { table, .. } => self.projects_list(table).await,
-                ProjectCommand::Stop => self.project_stop().await,
                 ProjectCommand::Delete(ConfirmationArgs { yes }) => {
-                    if self.beta {
-                        self.project_delete_beta(yes).await
-                    } else {
-                        self.project_delete(yes).await
-                    }
+                    self.project_delete_beta(yes).await
                 }
                 ProjectCommand::Link => Ok(()), // logic is done in `load_local`
+                ProjectCommand::Restart(ProjectStartArgs { idle_minutes }) => {
+                    unimplemented!()
+                }
+                ProjectCommand::Stop => unimplemented!(),
             },
+            Command::Status => unimplemented!(),
+            Command::Stop => unimplemented!(),
+            Command::Clean => unimplemented!(),
             Command::Upgrade { preview } => update_cargo_shuttle(preview).await,
         };
 
@@ -394,52 +359,6 @@ impl Shuttle {
         }
 
         res
-    }
-
-    async fn check_api_versions(&mut self) -> Result<()> {
-        let client = self.client.as_ref().unwrap();
-        debug!("Checking API versions");
-        if let Ok(versions) = client.get_api_versions().await {
-            debug!("Got API versions: {versions:?}");
-            self.version_info = Some(versions);
-
-            // check cargo-shuttle version
-            // should always be a valid semver
-            let my_version = &semver::Version::from_str(VERSION).unwrap();
-            let latest_version = &self.version_info.as_ref().unwrap().cargo_shuttle;
-            if my_version != latest_version {
-                let newer_version_exists = my_version < latest_version;
-                let string = if semvers_are_compatible(my_version, latest_version) {
-                    newer_version_exists.then(|| {
-                        format!("Info: A newer version of cargo-shuttle exists ({latest_version}).")
-                    })
-                    // Having a newer but compatible version does not show warning
-                } else {
-                    newer_version_exists.then(||
-                        formatdoc! {"
-                            Warning:
-                                A newer version of cargo-shuttle exists ({latest_version}).
-                                It is recommended to upgrade.
-                                Refer to the upgrading docs: https://docs.shuttle.rs/configuration/shuttle-versions#upgrading-shuttle-version"
-                        }
-                    ).or_else(||
-                        Some(formatdoc! {"
-                            Warning:
-                                Your version of cargo-shuttle ({my_version}) is newer than what the API expects ({latest_version}).
-                                This means a new release is likely underway!
-                                Unexpected behavior can occur until the API is updated."
-                        })
-                    )
-                };
-                if let Some(s) = string {
-                    self.version_warnings.push(s.yellow().to_string());
-                }
-            }
-        } else {
-            debug!("Failed to get API version info");
-        }
-
-        Ok(())
     }
 
     /// Log in, initialize a project and potentially create the Shuttle environment for it.
@@ -739,9 +658,6 @@ impl Shuttle {
             project_args.working_directory.clone_from(&path);
 
             self.load_project(&project_args, true, true).await?;
-            if !self.beta {
-                self.project_start(DEFAULT_IDLE_MINUTES).await?;
-            }
         }
 
         if std::env::current_dir().is_ok_and(|d| d != path) {
@@ -780,11 +696,7 @@ impl Shuttle {
     /// true -> success/neutral. false -> try again.
     async fn check_project_name(&self, project_args: &mut ProjectArgs, name: String) -> bool {
         let client = self.client.as_ref().unwrap();
-        match if self.beta {
-            client.check_project_name_beta(&name).await
-        } else {
-            client.check_project_name(&name).await
-        } {
+        match client.check_project_name_beta(&name).await {
             Ok(true) => {
                 // inner value is inverted on beta
                 if self.beta {
@@ -1120,68 +1032,6 @@ impl Shuttle {
         Ok(())
     }
 
-    async fn stop(&self) -> Result<()> {
-        let client = self.client.as_ref().unwrap();
-        let p = self.ctx.project_name();
-        wait_with_spinner(500, |i, pb| async move {
-            let service = if i == 0 {
-                client.stop_service(p).await?
-            } else {
-                client.get_service(p).await?
-            };
-
-            let service_str = format!("{service}");
-            let cleanup = move || {
-                println!("{}", "Successfully stopped service".bold());
-                println!("{service_str}");
-                println!("Run `cargo shuttle deploy` to re-deploy your service.");
-            };
-
-            let Some(ref deployment) = service.deployment else {
-                return Ok(Some(cleanup));
-            };
-
-            pb.set_message(format!("Stopping {}", deployment.id));
-
-            if deployment.state == shuttle_common::deployment::State::Stopped {
-                Ok(Some(cleanup))
-            } else {
-                Ok(None)
-            }
-        })
-        .await
-        .map_err(suggestions::deployment::stop_deployment_failure)?;
-
-        Ok(())
-    }
-
-    async fn status(&self) -> Result<()> {
-        let client = self.client.as_ref().unwrap();
-        let summary = client.get_service(self.ctx.project_name()).await?;
-
-        println!("{summary}");
-
-        Ok(())
-    }
-
-    async fn clean(&self) -> Result<()> {
-        let client = self.client.as_ref().unwrap();
-        let message = client
-            .clean_project(self.ctx.project_name())
-            .await
-            .map_err(|err| {
-                suggestions::project::project_request_failure(
-                    err,
-                    "Project clean failed",
-                    true,
-                    "cleaning your project or checking its status fail repeatedly",
-                )
-            })?;
-        println!("{message}");
-
-        Ok(())
-    }
-
     async fn logs_beta(&self, args: LogsArgs) -> Result<()> {
         if args.follow {
             eprintln!("Streamed logs are not yet supported on the new platform.");
@@ -1225,96 +1075,6 @@ impl Shuttle {
         Ok(())
     }
 
-    async fn logs(&self, args: LogsArgs) -> Result<()> {
-        let range = match (args.head, args.tail, args.all) {
-            (Some(num), _, _) => LogsRange::Head(num),
-            (_, Some(num), _) => LogsRange::Tail(num),
-            (_, _, true) => LogsRange::All,
-            _ => LogsRange::Tail(1000),
-        };
-        let client = self.client.as_ref().unwrap();
-        let id = if let Some(id) = args.id {
-            id
-        } else {
-            let proj_name = self.ctx.project_name();
-
-            if args.latest {
-                // Find latest deployment (not always an active one)
-                let deployments = client
-                    .get_deployments(proj_name, 0, 1)
-                    .await
-                    .map_err(|err| {
-                        suggestions::logs::get_logs_failure(
-                            err,
-                            "Fetching the latest deployment failed",
-                        )
-                    })?;
-                let most_recent = deployments.first().context(format!(
-                    "Could not find any deployments for '{proj_name}'. Try passing a deployment ID manually",
-                ))?;
-
-                most_recent.id.to_string()
-            } else if let Some(deployment) = client.get_service(proj_name).await?.deployment {
-                // Active deployment
-                deployment.id.to_string()
-            } else {
-                bail!(
-                    "Could not find a running deployment for '{proj_name}'. \
-                    Try with '--latest', or pass a deployment ID manually"
-                );
-            }
-        };
-
-        if args.follow {
-            let mut stream = client
-                .get_logs_ws(self.ctx.project_name(), &id, range)
-                .await
-                .map_err(|err| {
-                    suggestions::logs::get_logs_failure(err, "Connecting to the logs stream failed")
-                })?;
-
-            while let Ok(Some(s)) = read_ws_until_text(&mut stream).await {
-                match serde_json::from_str::<LogItem>(&s) {
-                    Ok(log) => {
-                        if args.raw {
-                            println!("{}", log.get_raw_line())
-                        } else {
-                            println!("{log}")
-                        }
-                    }
-                    Err(err) => {
-                        debug!(error = %err, "failed to parse message into log item");
-
-                        let message = if let Ok(err) = serde_json::from_str::<ApiError>(&s) {
-                            err.to_string()
-                        } else {
-                            "failed to parse logs, is your cargo-shuttle outdated?".to_string()
-                        };
-
-                        bail!(message);
-                    }
-                }
-            }
-        } else {
-            let logs = client
-                .get_logs(self.ctx.project_name(), &id, range)
-                .await
-                .map_err(|err| {
-                    suggestions::logs::get_logs_failure(err, "Fetching the deployment failed")
-                })?;
-
-            for log in logs.into_iter() {
-                if args.raw {
-                    println!("{}", log.get_raw_line())
-                } else {
-                    println!("{log}")
-                }
-            }
-        }
-
-        Ok(())
-    }
-
     async fn deployments_list(&self, page: u32, limit: u32, table_args: TableArgs) -> Result<()> {
         let client = self.client.as_ref().unwrap();
         if limit == 0 {
@@ -1325,83 +1085,47 @@ impl Shuttle {
 
         let proj_name = self.ctx.project_name();
 
-        if self.beta {
-            let mut deployments = client
-                .get_deployments_beta(self.ctx.project_id(), page as i32, limit as i32)
-                .await?
-                .deployments;
-            let page_hint = if deployments.len() == limit as usize {
-                deployments.pop();
-                true
-            } else {
-                false
-            };
-            let table = deployments_table_beta(&deployments, table_args.raw);
-
-            println!(
-                "{}",
-                format!("Deployments in project '{}'", proj_name).bold()
-            );
-            println!("{table}");
-            if page_hint {
-                println!("View the next page using `--page {}`", page + 1);
-            }
+        let mut deployments = client
+            .get_deployments_beta(self.ctx.project_id(), page as i32, limit as i32)
+            .await?
+            .deployments;
+        let page_hint = if deployments.len() == limit as usize {
+            deployments.pop();
+            true
         } else {
-            let mut deployments = client
-                .get_deployments(proj_name, page, limit)
-                .await
-                .map_err(suggestions::deployment::get_deployments_list_failure)?;
-            let page_hint = if deployments.len() == limit as usize {
-                deployments.pop();
-                true
-            } else {
-                false
-            };
-            let table =
-                get_deployments_table(&deployments, proj_name, page, table_args.raw, page_hint);
-            println!("{table}");
-
-            if deployments.is_empty() {
-                println!("Run `cargo shuttle deploy` to deploy your project.");
-            } else {
-                println!("Run `cargo shuttle logs <id>` to get logs for a given deployment.");
-            }
+            false
         };
+        let table = deployments_table_beta(&deployments, table_args.raw);
+
+        println!(
+            "{}",
+            format!("Deployments in project '{}'", proj_name).bold()
+        );
+        println!("{table}");
+        if page_hint {
+            println!("View the next page using `--page {}`", page + 1);
+        }
 
         Ok(())
     }
 
     async fn deployment_get(&self, deployment_id: Option<String>) -> Result<()> {
         let client = self.client.as_ref().unwrap();
+        let pid = self.ctx.project_id();
 
-        if self.beta {
-            let pid = self.ctx.project_id();
-            let deployment = match deployment_id {
-                Some(id) => client.get_deployment_beta(pid, &id).await,
-                None => {
-                    let d = client.get_current_deployment_beta(pid).await?;
-                    let Some(d) = d else {
-                        println!("No deployment found");
-                        return Ok(());
-                    };
-                    Ok(d)
-                }
-            }?;
-            println!("{}", deployment.to_string_colored());
-        } else {
-            let deployment_id = deployment_id.expect("deployment id required on alpha platform");
-            let deployment = client
-                .get_deployment_details(
-                    self.ctx.project_name(),
-                    &Uuid::from_str(&deployment_id).map_err(|err| {
-                        anyhow!("Provided deployment id is not a valid UUID: {err}")
-                    })?,
-                )
-                .await
-                .map_err(suggestions::deployment::get_deployment_status_failure)?;
+        let deployment = match deployment_id {
+            Some(id) => client.get_deployment_beta(pid, &id).await,
+            None => {
+                let d = client.get_current_deployment_beta(pid).await?;
+                let Some(d) = d else {
+                    println!("No deployment found");
+                    return Ok(());
+                };
+                Ok(d)
+            }
+        }?;
 
-            println!("{deployment}");
-        }
+        println!("{}", deployment.to_string_colored());
 
         Ok(())
     }
@@ -1415,24 +1139,6 @@ impl Shuttle {
         // TODO?: Make it print logs on fail
         self.track_deployment_status_beta(pid, &deployment.id)
             .await?;
-
-        Ok(())
-    }
-
-    async fn resources_list(&self, table_args: TableArgs, show_secrets: bool) -> Result<()> {
-        let client = self.client.as_ref().unwrap();
-        let resources = client
-            .get_service_resources(self.ctx.project_name())
-            .await
-            .map_err(suggestions::resources::get_service_resources_failure)?;
-        let table = get_resource_tables(
-            &resources,
-            self.ctx.project_name(),
-            table_args.raw,
-            show_secrets,
-        );
-
-        println!("{table}");
 
         Ok(())
     }
@@ -1479,17 +1185,10 @@ impl Shuttle {
             }
         }
 
-        if self.beta {
-            let msg = client
-                .delete_service_resource_beta(self.ctx.project_id(), resource_type)
-                .await?;
-            println!("{msg}");
-        } else {
-            client
-                .delete_service_resource(self.ctx.project_name(), resource_type)
-                .await?;
-            println!("Deleted resource {resource_type}");
-        }
+        let msg = client
+            .delete_service_resource_beta(self.ctx.project_id(), resource_type)
+            .await?;
+        println!("{msg}");
 
         println!(
             "{}",
@@ -1504,14 +1203,13 @@ impl Shuttle {
         Ok(())
     }
 
+    #[allow(unused)]
     async fn resource_dump(&self, resource_type: &resource::Type) -> Result<()> {
         let client = self.client.as_ref().unwrap();
 
-        let bytes = client
-            .dump_service_resource(self.ctx.project_name(), resource_type)
-            .await?;
+        let bytes = unimplemented!();
 
-        std::io::stdout().write_all(&bytes).unwrap();
+        // std::io::stdout().write_all(&bytes).unwrap();
 
         Ok(())
     }
@@ -1569,37 +1267,6 @@ impl Shuttle {
         println!("{msg}");
 
         Ok(())
-    }
-
-    fn get_secrets(run_args: &RunArgs, service: &BuiltService) -> Result<HashMap<String, String>> {
-        let secrets_file = run_args.secret_args.secrets.clone().or_else(|| {
-            let crate_dir = service.crate_directory();
-            // Prioritise crate-local prod secrets over workspace dev secrets (in the rare case that both exist)
-            [
-                crate_dir.join("Secrets.dev.toml"),
-                crate_dir.join("Secrets.toml"),
-                service.workspace_path.join("Secrets.dev.toml"),
-                service.workspace_path.join("Secrets.toml"),
-            ]
-            .into_iter()
-            .find(|f| f.exists() && f.is_file())
-        });
-        let secrets = if let Some(secrets_file) = secrets_file {
-            trace!("Loading secrets from {}", secrets_file.display());
-            if let Ok(secrets_str) = read_to_string(secrets_file) {
-                let secrets = toml::from_str::<HashMap<String, String>>(&secrets_str)?;
-                trace!(keys = ?secrets.keys(), "available secrets");
-                secrets
-            } else {
-                trace!("No secrets were loaded");
-                Default::default()
-            }
-        } else {
-            trace!("No secrets file was found");
-            Default::default()
-        };
-
-        Ok(secrets)
     }
 
     fn get_secrets_beta(
@@ -1677,6 +1344,7 @@ impl Shuttle {
 
     async fn local_run_beta(&self, mut run_args: RunArgs, debug: bool) -> Result<()> {
         let project_name = self.ctx.project_name().to_owned();
+        let working_directory = self.ctx.working_directory();
         let services = self.pre_local_run(&run_args).await?;
         let service = services
             .first()
@@ -1685,7 +1353,8 @@ impl Shuttle {
 
         trace!(path = ?service.executable_path, "runtime executable");
 
-        let secrets = Shuttle::get_secrets(&run_args, &service)?;
+        let secrets = Shuttle::get_secrets_beta(&run_args.secret_args, &working_directory)?
+            .unwrap_or_default();
         Shuttle::find_available_port_beta(&mut run_args);
         if let Some(warning) = check_and_warn_runtime_version(&service.executable_path).await? {
             eprint!("{}", warning);
@@ -1987,85 +1656,72 @@ impl Shuttle {
         let client = self.client.as_ref().unwrap();
         let working_directory = self.ctx.working_directory();
         let manifest_path = working_directory.join("Cargo.toml");
-        let project_name = self.ctx.project_name();
 
-        let secrets = if self.beta {
-            Shuttle::get_secrets_beta(&args.secret_args, working_directory)?
-        } else {
-            None
-        };
+        let secrets = Shuttle::get_secrets_beta(&args.secret_args, working_directory)?;
 
-        // Beta: Image deployment mode
-        if self.beta {
-            if let Some(image) = args.image {
-                let pid = self.ctx.project_id();
-                let deployment_req_image_beta = DeploymentRequestImageBeta { image, secrets };
+        // Image deployment mode
+        if let Some(image) = args.image {
+            let pid = self.ctx.project_id();
+            let deployment_req_image_beta = DeploymentRequestImageBeta { image, secrets };
 
-                let deployment = client
-                    .deploy_beta(pid, DeploymentRequestBeta::Image(deployment_req_image_beta))
-                    .await?;
+            let deployment = client
+                .deploy_beta(pid, DeploymentRequestBeta::Image(deployment_req_image_beta))
+                .await?;
 
-                if args.no_follow {
-                    println!("{}", deployment.to_string_colored());
-                    return Ok(());
-                }
-
-                // TODO?: Make it print logs on fail
-                self.track_deployment_status_beta(pid, &deployment.id)
-                    .await?;
-
+            if args.no_follow {
+                println!("{}", deployment.to_string_colored());
                 return Ok(());
             }
+
+            // TODO?: Make it print logs on fail
+            self.track_deployment_status_beta(pid, &deployment.id)
+                .await?;
+
+            return Ok(());
         }
 
-        // Alpha and beta: Build archive deployment mode
-        let mut deployment_req = DeploymentRequest {
-            no_test: args.no_test,
-            ..Default::default()
-        };
+        // Build archive deployment mode
         let mut deployment_req_beta = DeploymentRequestBuildArchiveBeta {
             secrets,
             ..Default::default()
         };
+        let mut build_meta = BuildMetaBeta::default();
+        let mut rust_build_args = BuildArgsRustBeta::default();
 
-        if self.beta {
-            let mut rust_build_args = BuildArgsRustBeta::default();
+        let metadata = async_cargo_metadata(manifest_path.as_path()).await?;
+        let packages = find_shuttle_packages(&metadata)?;
+        // TODO: support overriding this
+        let package = packages
+            .first()
+            .expect("Expected at least one crate with shuttle-runtime in the workspace");
+        let package_name = package.name.to_owned();
+        rust_build_args.package_name = Some(package_name);
 
-            let metadata = async_cargo_metadata(manifest_path.as_path()).await?;
-            let packages = find_shuttle_packages(&metadata)?;
-            // TODO: support overriding this
-            let package = packages
-                .first()
-                .expect("Expected at least one crate with shuttle-runtime in the workspace");
-            let package_name = package.name.to_owned();
-            rust_build_args.package_name = Some(package_name);
+        // activate shuttle feature if present
+        let (no_default_features, features) = if package.features.contains_key("shuttle") {
+            (true, Some(vec!["shuttle".to_owned()]))
+        } else {
+            (false, None)
+        };
+        rust_build_args.no_default_features = no_default_features;
+        rust_build_args.features = features.map(|v| v.join(","));
 
-            // activate shuttle feature if present
-            let (no_default_features, features) = if package.features.contains_key("shuttle") {
-                (true, Some(vec!["shuttle".to_owned()]))
-            } else {
-                (false, None)
-            };
-            rust_build_args.no_default_features = no_default_features;
-            rust_build_args.features = features.map(|v| v.join(","));
+        rust_build_args.shuttle_runtime_version = package
+            .dependencies
+            .iter()
+            .find(|dependency| dependency.name == RUNTIME_NAME)
+            .expect("shuttle package to have runtime dependency")
+            .req
+            .comparators
+            .first()
+            // is "^0.X.0" when `shuttle-runtime = "0.X.0"` is in Cargo.toml
+            .and_then(|c| c.to_string().strip_prefix('^').map(ToOwned::to_owned));
 
-            rust_build_args.shuttle_runtime_version = package
-                .dependencies
-                .iter()
-                .find(|dependency| dependency.name == RUNTIME_NAME)
-                .expect("shuttle package to have runtime dependency")
-                .req
-                .comparators
-                .first()
-                // is "^0.X.0" when `shuttle-runtime = "0.X.0"` is in Cargo.toml
-                .and_then(|c| c.to_string().strip_prefix('^').map(ToOwned::to_owned));
+        // TODO: determine which (one) binary to build
 
-            // TODO: determine which (one) binary to build
+        deployment_req_beta.build_args = Some(BuildArgsBeta::Rust(rust_build_args));
 
-            deployment_req_beta.build_args = Some(BuildArgsBeta::Rust(rust_build_args));
-
-            // TODO: have all of the above be configurable in CLI and Shuttle.toml
-        }
+        // TODO: have all of the above be configurable in CLI and Shuttle.toml
 
         if let Ok(repo) = Repository::discover(working_directory) {
             let repo_path = repo
@@ -2075,7 +1731,7 @@ impl Shuttle {
             trace!(?repo_path, "found git repository");
 
             let dirty = is_dirty(&repo);
-            deployment_req.git_dirty = Some(dirty.is_err());
+            build_meta.git_dirty = Some(dirty.is_err());
 
             let check_dirty = !self.beta || self.ctx.deny_dirty().is_some_and(|d| d);
             if check_dirty && !args.allow_dirty && dirty.is_err() {
@@ -2085,22 +1741,20 @@ impl Shuttle {
             if let Ok(head) = repo.head() {
                 // This is typically the name of the current branch
                 // It is "HEAD" when head detached, for example when a tag is checked out
-                deployment_req.git_branch = head
+                build_meta.git_branch = head
                     .shorthand()
                     .map(|s| s.chars().take(GIT_STRINGS_MAX_LENGTH).collect());
                 if let Ok(commit) = head.peel_to_commit() {
-                    deployment_req.git_commit_id = Some(commit.id().to_string());
+                    build_meta.git_commit_id = Some(commit.id().to_string());
                     // Summary is None if error or invalid utf-8
-                    deployment_req.git_commit_msg = commit
+                    build_meta.git_commit_msg = commit
                         .summary()
                         .map(|s| s.chars().take(GIT_STRINGS_MAX_LENGTH).collect());
                 }
             }
         }
 
-        if self.beta {
-            eprintln!("Packing files...");
-        }
+        eprintln!("Packing files...");
         let archive = self.make_archive(args.secret_args.secrets.clone(), self.beta)?;
 
         if let Some(path) = args.output_archive {
@@ -2110,242 +1764,44 @@ impl Shuttle {
             return Ok(());
         }
 
-        if !self.beta && archive.len() > CREATE_SERVICE_BODY_LIMIT {
-            bail!(
-                r#"The project is too large - the limit is {} MB. \
-                Your project archive is {:.1} MB. \
-                Run with `cargo shuttle --debug` to see which files are being packed."#,
-                CREATE_SERVICE_BODY_LIMIT / 1_000_000,
-                archive.len() as f32 / 1_000_000f32,
-            );
-        }
+        // TODO: upload secrets separately
 
-        // End early for beta
-        if self.beta {
-            // TODO: upload secrets separately
+        let pid = self.ctx.project_id();
 
-            let pid = self.ctx.project_id();
+        eprintln!("Uploading code...");
+        let arch = client.upload_archive_beta(pid, archive).await?;
+        deployment_req_beta.archive_version_id = arch.archive_version_id;
+        deployment_req_beta.build_meta = Some(build_meta);
 
-            eprintln!("Uploading code...");
-            let arch = client.upload_archive_beta(pid, archive).await?;
-            deployment_req_beta.archive_version_id = arch.archive_version_id;
-            deployment_req_beta.build_meta = Some(BuildMetaBeta {
-                git_commit_id: deployment_req.git_commit_id,
-                git_commit_msg: deployment_req.git_commit_msg,
-                git_branch: deployment_req.git_branch,
-                git_dirty: deployment_req.git_dirty,
-            });
+        eprintln!("Creating deployment...");
+        let deployment = client
+            .deploy_beta(
+                pid,
+                DeploymentRequestBeta::BuildArchive(deployment_req_beta),
+            )
+            .await?;
 
-            eprintln!("Creating deployment...");
-            let deployment = client
-                .deploy_beta(
-                    pid,
-                    DeploymentRequestBeta::BuildArchive(deployment_req_beta),
-                )
-                .await?;
-
-            if args.no_follow {
-                println!("{}", deployment.to_string_colored());
-                return Ok(());
-            }
-
-            if self
-                .track_deployment_status_beta(pid, &deployment.id)
-                .await?
-            {
-                for log in client
-                    .get_deployment_logs_beta(pid, &deployment.id)
-                    .await?
-                    .logs
-                {
-                    if args.raw {
-                        println!("{}", log.line);
-                    } else {
-                        println!("{log}");
-                    }
-                }
-            }
-
+        if args.no_follow {
+            println!("{}", deployment.to_string_colored());
             return Ok(());
         }
 
-        deployment_req.data = archive;
-        let deployment = client
-            .deploy(project_name, deployment_req, args.force)
-            .await
-            .map_err(suggestions::deploy::deploy_request_failure)?;
-
-        let mut stream = client
-            .get_logs_ws(project_name, &deployment.id.to_string(), LogsRange::All)
-            .await
-            .map_err(|err| {
-                suggestions::deploy::deployment_setup_failure(
-                    err,
-                    "Connecting to the deployment logs failed",
-                )
-            })?;
-
-        let mut deployer_version_checked = false;
-        let mut runtime_version_checked = false;
-        while let Ok(Some(s)) = read_ws_until_text(&mut stream).await {
-            let log_item = match serde_json::from_str::<LogItem>(&s) {
-                Ok(log_item) => log_item,
-                Err(err) => {
-                    debug!(error = %err, "failed to parse message into log item");
-
-                    let message = if let Ok(err) = serde_json::from_str::<ApiError>(&s) {
-                        err.to_string()
-                    } else {
-                        "failed to parse logs, is your cargo-shuttle outdated?".to_string()
-                    };
-
-                    bail!(message);
+        if self
+            .track_deployment_status_beta(pid, &deployment.id)
+            .await?
+        {
+            for log in client
+                .get_deployment_logs_beta(pid, &deployment.id)
+                .await?
+                .logs
+            {
+                if args.raw {
+                    println!("{}", log.line);
+                } else {
+                    println!("{log}");
                 }
-            };
-
-            if args.raw {
-                println!("{}", log_item.get_raw_line())
-            } else {
-                println!("{log_item}")
-            }
-
-            // Detect versions of deployer and runtime, and print warnings of outdated.
-            if !deployer_version_checked
-                && self.version_info.is_some()
-                && log_item.line.contains("Deployer version: ")
-            {
-                deployer_version_checked = true;
-                let my_version = &log_item
-                    .line
-                    .split_once("Deployer version: ")
-                    .unwrap()
-                    .1
-                    .parse::<semver::Version>()
-                    .context("parsing deployer version in log stream")?;
-                let latest_version = &self.version_info.as_ref().unwrap().deployer;
-                if latest_version > my_version {
-                    self.version_warnings.push(
-                                formatdoc! {"
-                                    Warning:
-                                        A newer version of shuttle-deployer is available ({latest_version}).
-                                        Use `cargo shuttle project restart` to upgrade."
-                                }
-                                .yellow()
-                                .to_string(),
-                            )
-                }
-            }
-            if !runtime_version_checked
-                && self.version_info.is_some()
-                && log_item
-                    .line
-                    .contains("shuttle-runtime executable started (version ")
-            {
-                runtime_version_checked = true;
-                let my_version = &log_item
-                    .line
-                    .split_once("shuttle-runtime executable started (version ")
-                    .unwrap()
-                    .1
-                    .split_once(')')
-                    .unwrap()
-                    .0
-                    .parse::<semver::Version>()
-                    .context("parsing runtime version in log stream")?;
-                let latest_version = &self.version_info.as_ref().unwrap().runtime;
-                if latest_version > my_version {
-                    self.version_warnings.push(
-                                formatdoc! {"
-                                    Warning:
-                                        A newer version of shuttle-runtime is available ({latest_version}).
-                                        Update it and any other shuttle dependencies in Cargo.toml."
-                                }
-                                .yellow()
-                                .to_string(),
-                            )
-                }
-            }
-
-            // Determine when to stop listening to the log stream
-            if DEPLOYER_END_MESSAGES_BAD
-                .iter()
-                .any(|m| log_item.line.contains(m))
-            {
-                println!();
-                println!("{}", "Deployment crashed".red());
-                println!();
-                println!("Run the following for more details");
-                println!();
-                println!("cargo shuttle logs {}", &deployment.id);
-
-                bail!("");
-            }
-            if DEPLOYER_END_MESSAGES_GOOD
-                .iter()
-                .any(|m| log_item.line.contains(m))
-            {
-                debug!("received end message, breaking deployment stream");
-                break;
             }
         }
-
-        // Temporary fix.
-        // TODO: Make get_service_summary endpoint wait for a bit and see if it entered Running/Crashed state.
-        // Note: Will otherwise be possible when health checks are supported
-        sleep(Duration::from_millis(500)).await;
-
-        let deployment = client
-            .get_deployment_details(project_name, &deployment.id)
-            .await
-            .map_err(|err| {
-                suggestions::deploy::deployment_setup_failure(
-                    err,
-                    "Assessing deployment state failed",
-                )
-            })?;
-
-        // A deployment will only exist if there is currently one in the running state
-        if deployment.state != shuttle_common::deployment::State::Running {
-            println!("{}", "Deployment has not entered the running state".red());
-            println!();
-
-            match deployment.state {
-                shuttle_common::deployment::State::Stopped => {
-                    println!("State: Stopped - Deployment was running, but has been stopped by the user.")
-                }
-                shuttle_common::deployment::State::Completed => {
-                    println!("State: Completed - Deployment was running, but stopped running all by itself.")
-                }
-                shuttle_common::deployment::State::Unknown => {
-                    println!("State: Unknown - Deployment was in an unknown state. We never expect this state and entering this state should be considered a bug.")
-                }
-                shuttle_common::deployment::State::Crashed => {
-                    println!(
-                        "{}",
-                        "State: Crashed - Deployment crashed after startup.".red()
-                    );
-                }
-                state => {
-                    debug!("deployment logs stream received state: {state} when it expected to receive running state");
-                    println!(
-                        "Deployment entered an unexpected state - Please create a ticket to report this."
-                    );
-                }
-            }
-
-            println!();
-            println!("Run the following for more details");
-            println!();
-            println!("cargo shuttle logs {}", &deployment.id);
-
-            bail!("");
-        }
-
-        let service = client.get_service(project_name).await?;
-        let resources = client.get_service_resources(project_name).await?;
-        let resources = get_resource_tables(&resources, project_name, false, false);
-
-        println!("{resources}{service}");
 
         Ok(())
     }
@@ -2379,60 +1835,6 @@ impl Shuttle {
         Ok(failed)
     }
 
-    async fn project_start(&self, idle_minutes: u64) -> Result<()> {
-        let client = self.client.as_ref().unwrap();
-        let config = &project::Config { idle_minutes };
-
-        let p = self.ctx.project_name();
-        wait_with_spinner(500, |i, pb| async move {
-            let project = if i == 0 {
-                client.create_project(p, config).await?
-            } else {
-                client.get_project(p).await?
-            };
-            pb.set_message(format!("{project}"));
-
-            let done = [
-                project::State::Ready,
-                project::State::Errored {
-                    message: Default::default(),
-                },
-            ]
-            .contains(&project.state);
-
-            if done {
-                Ok(Some(move || {
-                    println!("{project}");
-                }))
-            } else {
-                Ok(None)
-            }
-        })
-        .await
-        .map_err(|err| {
-            suggestions::project::project_request_failure(
-                err,
-                "Project creation failed",
-                true,
-                "the project creation or retrieving the status fails repeatedly",
-            )
-        })?;
-
-        if idle_minutes > 0 && !self.beta {
-            let idle_msg = format!(
-                "Your project will sleep if it is idle for {} minutes.",
-                idle_minutes
-            );
-            println!("{}", idle_msg.yellow());
-            println!("To change the idle time refer to the docs: {SHUTTLE_IDLE_DOCS_URL}");
-            println!();
-        }
-
-        println!("Run `cargo shuttle deploy --allow-dirty` to deploy your Shuttle service.");
-
-        Ok(())
-    }
-
     async fn project_create_beta(&self) -> Result<()> {
         let client = self.client.as_ref().unwrap();
         let name = self.ctx.project_name();
@@ -2460,153 +1862,24 @@ impl Shuttle {
         Ok(())
     }
 
-    async fn project_restart(&self, idle_minutes: u64) -> Result<()> {
-        self.project_stop()
-            .await
-            .map_err(suggestions::project::project_restart_failure)?;
-        self.project_start(idle_minutes)
-            .await
-            .map_err(suggestions::project::project_restart_failure)?;
-
-        Ok(())
-    }
-
     async fn projects_list(&self, table_args: TableArgs) -> Result<()> {
         let client = self.client.as_ref().unwrap();
 
-        let projects_table = if self.beta {
-            project::get_projects_table_beta(
-                &client.get_projects_list_beta().await?.projects,
-                table_args.raw,
-            )
-        } else {
-            project::get_projects_table(
-                &client.get_projects_list().await.map_err(|err| {
-                    suggestions::project::project_request_failure(
-                        err,
-                        "Getting projects list failed",
-                        false,
-                        "getting the projects list fails repeatedly",
-                    )
-                })?,
-                table_args.raw,
-            )
-        };
+        let projects_table = project::get_projects_table_beta(
+            &client.get_projects_list_beta().await?.projects,
+            table_args.raw,
+        );
 
         println!("{}", "Personal Projects".bold());
         println!("{projects_table}\n");
 
-        if !self.beta {
-            let teams = client.get_teams_list().await?;
-
-            for team in teams {
-                let team_projects = client.get_team_projects_list(&team.id).await?;
-                let team_projects_table =
-                    project::get_projects_table(&team_projects, table_args.raw);
-
-                println!("{}", format!("{}'s Projects", team.display_name).bold());
-                println!("{team_projects_table}\n");
-            }
-        }
-
         Ok(())
     }
 
-    async fn project_status(&self, follow: bool) -> Result<()> {
-        let client = self.client.as_ref().unwrap();
-        if follow {
-            let p = self.ctx.project_name();
-            wait_with_spinner(500, |_, pb| async move {
-                let project = client.get_project(p).await?;
-                pb.set_message(format!("{project}"));
-
-                let done = [
-                    project::State::Ready,
-                    project::State::Destroyed,
-                    project::State::Errored {
-                        message: Default::default(),
-                    },
-                ]
-                .contains(&project.state);
-
-                if done {
-                    Ok(Some(move || {
-                        println!("{project}");
-                    }))
-                } else {
-                    Ok(None)
-                }
-            })
-            .await?;
-        } else {
-            let project = client
-                .get_project(self.ctx.project_name())
-                .await
-                .map_err(|err| {
-                    suggestions::project::project_request_failure(
-                        err,
-                        "Getting project status failed",
-                        false,
-                        "getting project status failed repeatedly",
-                    )
-                })?;
-            println!(
-                "{project}\nIdle minutes: {}",
-                project
-                    .idle_minutes
-                    .map(|i| i.to_string())
-                    .unwrap_or("<unknown>".to_owned())
-            );
-        }
-
-        Ok(())
-    }
     async fn project_status_beta(&self) -> Result<()> {
         let client = self.client.as_ref().unwrap();
         let project = client.get_project_beta(self.ctx.project_id()).await?;
         print!("{}", project.to_string_colored());
-
-        Ok(())
-    }
-
-    async fn project_stop(&self) -> Result<()> {
-        let client = self.client.as_ref().unwrap();
-
-        let p = self.ctx.project_name();
-        wait_with_spinner(500, |i, pb| async move {
-            let project = if i == 0 {
-                client.stop_project(p).await?
-            } else {
-                client.get_project(p).await?
-            };
-            pb.set_message(format!("{project}"));
-
-            let done = [
-                project::State::Destroyed,
-                project::State::Errored {
-                    message: Default::default(),
-                },
-            ]
-            .contains(&project.state);
-
-            if done {
-                Ok(Some(move || {
-                    println!("{project}");
-                }))
-            } else {
-                Ok(None)
-            }
-        })
-        .await
-        .map_err(|err| {
-            suggestions::project::project_request_failure(
-                err,
-                "Project stop failed",
-                true,
-                "stopping the project or getting project status fails repeatedly",
-            )
-        })?;
-        println!("Run `cargo shuttle project start` to recreate project environment on Shuttle.");
 
         Ok(())
     }
@@ -2644,53 +1917,6 @@ impl Shuttle {
         let res = client.delete_project_beta(pid).await?;
 
         println!("{res}");
-
-        Ok(())
-    }
-
-    async fn project_delete(&self, no_confirm: bool) -> Result<()> {
-        let client = self.client.as_ref().unwrap();
-
-        if !no_confirm {
-            println!(
-                "{}",
-                formatdoc!(
-                    r#"
-                    WARNING:
-                        Are you sure you want to delete "{}"?
-                        This will...
-                        - Delete any databases, secrets, and shuttle-persist data in this project.
-                        - Delete any custom domains linked to this project.
-                        - Release the project name from your account.
-                        This action is permanent."#,
-                    self.ctx.project_name()
-                )
-                .bold()
-                .red()
-            );
-            if !Confirm::with_theme(&ColorfulTheme::default())
-                .with_prompt("Are you sure?")
-                .default(false)
-                .interact()
-                .unwrap()
-            {
-                return Ok(());
-            }
-        }
-
-        client
-            .delete_project(self.ctx.project_name())
-            .await
-            .map_err(|err| {
-                suggestions::project::project_request_failure(
-                    err,
-                    "Project delete failed",
-                    true,
-                    "deleting the project or getting project status fails repeatedly",
-                )
-            })?;
-
-        println!("Deleted project");
 
         Ok(())
     }

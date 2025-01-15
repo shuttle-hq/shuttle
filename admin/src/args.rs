@@ -1,6 +1,4 @@
-use std::{fs, io, path::PathBuf};
-
-use clap::{Error, Parser, Subcommand};
+use clap::{Parser, Subcommand};
 use shuttle_common::{
     constants::API_URL_RS,
     models::{project::ComputeTier, user::UserId},
@@ -68,9 +66,4 @@ pub enum Command {
         #[arg(long, default_value_t = 100)]
         limit: u32,
     },
-}
-
-fn load_credentials(s: &str) -> Result<serde_json::Value, Error> {
-    let credentials = fs::read_to_string(PathBuf::from(s))?;
-    serde_json::from_str(&credentials).map_err(|err| Error::from(io::Error::from(err)))
 }

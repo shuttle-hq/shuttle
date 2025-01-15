@@ -175,3 +175,9 @@ end
 
 end
 '''
+
+# Recursive cargo clean plus more
+[tasks.deep-clean]
+script = '''
+find . -type d \( -name target -or -name node_modules \) | xargs rm -rf
+'''

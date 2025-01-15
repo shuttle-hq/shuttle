@@ -2,7 +2,6 @@ mod args;
 pub mod config;
 mod init;
 mod provisioner_server;
-mod suggestions;
 mod util;
 
 use std::collections::{BTreeMap, HashMap};
@@ -18,8 +17,6 @@ use chrono::Utc;
 use clap::{parser::ValueSource, CommandFactory, FromArgMatches};
 use crossterm::style::Stylize;
 use dialoguer::{theme::ColorfulTheme, Confirm, Input, Password, Select};
-use flate2::write::GzEncoder;
-use flate2::Compression;
 use futures::{SinkExt, StreamExt};
 use git2::Repository;
 use globset::{Glob, GlobSetBuilder};
@@ -54,7 +51,6 @@ use shuttle_service::{
     Environment,
 };
 use strum::{EnumMessage, VariantArray};
-use tar::Builder;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::time::{sleep, Duration};
 use tokio_tungstenite::tungstenite::Message;
@@ -964,9 +960,7 @@ impl Shuttle {
 
     async fn logout(&mut self, logout_args: LogoutArgs) -> Result<()> {
         if logout_args.reset_api_key {
-            self.reset_api_key()
-                .await
-                .map_err(suggestions::api_key::reset_api_key_failed)?;
+            self.reset_api_key().await?;
             println!("Successfully reset the API key.");
             if self.beta {
                 println!(" -> Use `shuttle login` to get a new one.")
@@ -1753,7 +1747,7 @@ impl Shuttle {
         }
 
         eprintln!("Packing files...");
-        let archive = self.make_archive(args.secret_args.secrets.clone(), self.beta)?;
+        let archive = self.make_archive(args.secret_args.secrets.clone())?;
 
         if let Some(path) = args.output_archive {
             eprintln!("Writing archive to {}", path.display());
@@ -1919,7 +1913,7 @@ impl Shuttle {
         Ok(())
     }
 
-    fn make_archive(&self, secrets_file: Option<PathBuf>, zip: bool) -> Result<Vec<u8>> {
+    fn make_archive(&self, secrets_file: Option<PathBuf>) -> Result<Vec<u8>> {
         let include_patterns = self.ctx.include();
 
         let working_directory = self.ctx.working_directory();
@@ -1992,14 +1986,9 @@ impl Shuttle {
                 continue;
             }
 
-            // zip file puts all files in root, tar puts all files nested in a dir at root level
-            let prefix = if zip {
-                working_directory
-            } else {
-                working_directory.parent().context("get parent dir")?
-            };
+            // zip file puts all files in root
             let mut name = path
-                .strip_prefix(prefix)
+                .strip_prefix(working_directory)
                 .context("strip prefix of path")?
                 .to_owned();
 
@@ -2017,7 +2006,7 @@ impl Shuttle {
             bail!("No files included in upload.");
         }
 
-        let bytes = if zip {
+        let bytes = {
             debug!("making zip archive");
             let mut zip = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
             for (path, name) in archive_files {
@@ -2034,17 +2023,6 @@ impl Shuttle {
             let r = zip.finish().context("finish encoding zip archive")?;
 
             r.into_inner()
-        } else {
-            debug!("making tar archive");
-            let encoder = GzEncoder::new(Vec::new(), Compression::new(3));
-            let mut tar = Builder::new(encoder);
-            for (path, name) in archive_files {
-                debug!("Packing {path:?}");
-                tar.append_path_with_name(path, name)?;
-            }
-            let encoder = tar.into_inner().context("get encoder from tar archive")?;
-
-            encoder.finish().context("finish encoding tar archive")?
         };
         debug!("Archive size: {} bytes", bytes.len());
 
@@ -2105,8 +2083,6 @@ fn create_spinner() -> ProgressBar {
 
 #[cfg(test)]
 mod tests {
-    use flate2::read::GzDecoder;
-    use tar::Archive;
     use zip::ZipArchive;
 
     use crate::args::{DeployArgs, ProjectArgs, SecretsArgs};
@@ -2126,7 +2102,6 @@ mod tests {
     async fn get_archive_entries(
         project_args: ProjectArgs,
         deploy_args: DeployArgs,
-        zip: bool,
     ) -> Vec<String> {
         let mut shuttle = Shuttle::new(crate::Binary::CargoShuttle).unwrap();
         shuttle
@@ -2135,34 +2110,13 @@ mod tests {
             .unwrap();
 
         let archive = shuttle
-            .make_archive(deploy_args.secret_args.secrets, zip)
+            .make_archive(deploy_args.secret_args.secrets)
             .unwrap();
 
-        if zip {
-            let mut zip = ZipArchive::new(Cursor::new(archive)).unwrap();
-            (0..zip.len())
-                .map(|i| zip.by_index(i).unwrap().name().to_owned())
-                .collect()
-        } else {
-            let tar = GzDecoder::new(&archive[..]);
-            let mut archive = Archive::new(tar);
-
-            archive
-                .entries()
-                .unwrap()
-                .map(|entry| {
-                    entry
-                        .unwrap()
-                        .path()
-                        .unwrap()
-                        .components()
-                        .skip(1)
-                        .collect::<PathBuf>()
-                        .display()
-                        .to_string()
-                })
-                .collect()
-        }
+        let mut zip = ZipArchive::new(Cursor::new(archive)).unwrap();
+        (0..zip.len())
+            .map(|i| zip.by_index(i).unwrap().name().to_owned())
+            .collect()
     }
 
     #[tokio::test]
@@ -2186,8 +2140,7 @@ mod tests {
             working_directory: working_directory.clone(),
             name_or_id: Some("archiving-test".to_owned()),
         };
-        let mut entries =
-            get_archive_entries(project_args.clone(), Default::default(), false).await;
+        let mut entries = get_archive_entries(project_args.clone(), Default::default()).await;
         entries.sort();
 
         let expected = vec![
@@ -2209,11 +2162,6 @@ mod tests {
         ];
         assert_eq!(entries, expected);
 
-        // check that zip behaves the same way
-        let mut entries = get_archive_entries(project_args.clone(), Default::default(), true).await;
-        entries.sort();
-        assert_eq!(entries, expected);
-
         fs::remove_file(working_directory.join("Secrets.toml")).unwrap();
         let mut entries = get_archive_entries(
             project_args,
@@ -2223,7 +2171,6 @@ mod tests {
                 },
                 ..Default::default()
             },
-            false,
         )
         .await;
         entries.sort();

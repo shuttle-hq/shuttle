@@ -1,8 +1,8 @@
 //! Shared constants used across Shuttle crates
 
-/// Where executables are moved to in order to persist across deploys, relative to workspace root
+/// LEGACY: Where executables are moved to in order to persist across deploys, relative to workspace root
 pub const EXECUTABLE_DIRNAME: &str = ".shuttle-executables";
-/// Where general files will persist across deploys, relative to workspace root. Used by plugins.
+/// Used by plugins for local file storage.
 pub const STORAGE_DIRNAME: &str = ".shuttle-storage";
 
 // URLs

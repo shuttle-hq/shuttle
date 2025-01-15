@@ -12,7 +12,7 @@ doctest = false
 
 [dependencies]
 shuttle-common = { workspace = true, features = [
-    "service",
+    "models",
     "tracing",
 ] }
 

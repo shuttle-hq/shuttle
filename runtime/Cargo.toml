@@ -12,7 +12,7 @@ doctest = false
 [dependencies]
 shuttle-api-client = { workspace = true }
 shuttle-codegen = { workspace = true }
-shuttle-common = { workspace = true, features = ["extract_propagation"] }
+shuttle-common = { workspace = true }
 shuttle-service = { workspace = true }
 
 anyhow = { workspace = true }

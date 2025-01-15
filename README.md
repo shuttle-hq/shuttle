@@ -13,9 +13,6 @@
   <a href="https://docs.rs/shuttle-runtime">
     <img alt="crate-docs" src="https://img.shields.io/badge/docs-docs.rs-orange">
   </a>
-  <a href="https://status.shuttle.rs/">
-    <img alt="status" src="https://img.shields.io/badge/status-blue">
-  </a>
   <a href="https://circleci.com/gh/shuttle-hq/shuttle/">
     <img alt="build status" src="https://circleci.com/gh/shuttle-hq/shuttle.svg?style=shield"/>
   </a>

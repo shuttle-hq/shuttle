@@ -23,14 +23,13 @@ use globset::{Glob, GlobSetBuilder};
 use ignore::overrides::OverrideBuilder;
 use ignore::WalkBuilder;
 use indicatif::ProgressBar;
-use indoc::{formatdoc, printdoc};
+use indoc::formatdoc;
 use reqwest::header::HeaderMap;
 use shuttle_api_client::ShuttleApiClient;
 use shuttle_common::{
     constants::{
-        headers::X_CARGO_SHUTTLE_VERSION, API_URL_DEFAULT, API_URL_DEFAULT_BETA, EXAMPLES_REPO,
-        EXECUTABLE_DIRNAME, RUNTIME_NAME, SHUTTLE_IDLE_DOCS_URL, SHUTTLE_LEGACY_NEW_PROJECT,
-        STORAGE_DIRNAME, TEMPLATES_SCHEMA_VERSION,
+        headers::X_CARGO_SHUTTLE_VERSION, API_URL_DEFAULT_BETA, EXAMPLES_REPO, EXECUTABLE_DIRNAME,
+        RUNTIME_NAME, STORAGE_DIRNAME, TEMPLATES_SCHEMA_VERSION,
     },
     deployment::DeploymentStateBeta,
     models::{
@@ -60,8 +59,8 @@ use zip::write::FileOptions;
 
 use crate::args::{
     CertificateCommand, ConfirmationArgs, DeployArgs, DeploymentCommand, GenerateCommand, InitArgs,
-    LoginArgs, LogoutArgs, LogsArgs, ProjectCommand, ProjectStartArgs, ProjectUpdateCommand,
-    ResourceCommand, SecretsArgs, TableArgs, TemplateLocation,
+    LoginArgs, LogoutArgs, LogsArgs, ProjectCommand, ProjectUpdateCommand, ResourceCommand,
+    SecretsArgs, TableArgs, TemplateLocation,
 };
 pub use crate::args::{Command, ProjectArgs, RunArgs, ShuttleArgs};
 use crate::config::RequestContext;
@@ -121,10 +120,6 @@ impl Binary {
 pub struct Shuttle {
     ctx: RequestContext,
     client: Option<ShuttleApiClient>,
-    /// Strings to print at the end of command execution
-    version_warnings: Vec<String>,
-    /// Alter behaviour to interact with the new platform
-    beta: bool,
     /// Alter behaviour based on which CLI is used
     bin: Binary,
 }
@@ -135,62 +130,17 @@ impl Shuttle {
         Ok(Self {
             ctx,
             client: None,
-            version_warnings: vec![],
-            beta: false,
             bin,
         })
     }
 
-    pub async fn run(mut self, mut args: ShuttleArgs, provided_path_to_init: bool) -> Result<()> {
-        if self.bin == Binary::Shuttle {
-            // beta is always enabled in `shuttle`
-            args.beta = true;
-        }
-        self.beta = args.beta;
-        if self.beta {
-            if matches!(args.cmd, Command::Project(ProjectCommand::Restart { .. })) {
-                bail!("This command is discontinued on the NEW platform (shuttle.dev). Deploy to start a new deployment.");
-            }
-            if matches!(args.cmd, Command::Status) {
-                bail!("This command is discontinued on the NEW platform (shuttle.dev). Use `deployment status` instead.");
-            }
-            if matches!(
-                args.cmd,
-                Command::Stop | Command::Project(ProjectCommand::Stop { .. })
-            ) {
-                bail!("This command is discontinued on the NEW platform (shuttle.dev). Use `deployment stop` instead.");
-            }
-            if matches!(args.cmd, Command::Clean) {
-                bail!("This command is discontinued on the NEW platform (shuttle.dev).");
-            }
-            if matches!(args.cmd, Command::Resource(ResourceCommand::Dump { .. })) {
-                bail!("This command is not yet supported on the NEW platform (shuttle.dev).");
-            }
-        } else if matches!(
-            args.cmd,
-            Command::Deployment(DeploymentCommand::Stop)
-                | Command::Deployment(DeploymentCommand::Redeploy { .. })
-                | Command::Account
-                | Command::Project(ProjectCommand::Link)
-                | Command::Project(ProjectCommand::Update(..))
-        ) {
-            bail!("This command is not supported on the OLD platform (shuttle.rs).");
+    pub async fn run(mut self, args: ShuttleArgs, provided_path_to_init: bool) -> Result<()> {
+        if matches!(args.cmd, Command::Resource(ResourceCommand::Dump { .. })) {
+            bail!("This command is not yet supported on the NEW platform (shuttle.dev).");
         }
 
-        if !matches!(
-            args.cmd,
-            // commands that don't differ in behavior in any way between .rs/.dev
-            Command::Feedback | Command::Generate(_) | Command::Upgrade { .. }
-        ) {
-            if self.beta {
-                eprintln!("{}", "INFO: Using NEW platform API (shuttle.dev)".green());
-            } else {
-                eprintln!("{}", "INFO: Using OLD platform API (shuttle.rs)".blue());
-            }
-        }
         if let Some(ref url) = args.api_url {
-            if (!self.beta && url != API_URL_DEFAULT) || (self.beta && url != API_URL_DEFAULT_BETA)
-            {
+            if url != API_URL_DEFAULT_BETA {
                 eprintln!(
                     "{}",
                     format!("INFO: Targeting non-default API: {url}").yellow(),
@@ -207,7 +157,6 @@ impl Shuttle {
             args.cmd,
             Command::Init(..)
                 | Command::Deploy(..)
-                | Command::Status
                 | Command::Logs { .. }
                 | Command::Account
                 | Command::Login(..)
@@ -215,16 +164,14 @@ impl Shuttle {
                 | Command::Deployment(..)
                 | Command::Resource(..)
                 | Command::Certificate(..)
-                | Command::Stop
-                | Command::Clean
                 | Command::Project(..)
         ) || (
             // project linking on beta requires api client
             // TODO: refactor so that beta local run does not need to know project id / always uses crate name ???
-            self.beta && matches!(args.cmd, Command::Run(..))
+            matches!(args.cmd, Command::Run(..))
         ) {
             let client = ShuttleApiClient::new(
-                self.ctx.api_url(self.beta),
+                self.ctx.api_url(),
                 self.ctx.api_key().ok(),
                 Some(
                     HeaderMap::try_from(&HashMap::from([(
@@ -247,17 +194,12 @@ impl Shuttle {
                 | Command::Certificate(..)
                 | Command::Project(
                     // ProjectCommand::List does not need to know which project we are in
-                    ProjectCommand::Start { .. }
+                    ProjectCommand::Create
                         | ProjectCommand::Update(..)
                         | ProjectCommand::Status { .. }
-                        | ProjectCommand::Stop { .. }
-                        | ProjectCommand::Restart { .. }
                         | ProjectCommand::Delete { .. }
                         | ProjectCommand::Link
                 )
-                | Command::Stop
-                | Command::Clean
-                | Command::Status
                 | Command::Logs { .. }
         ) {
             // Command::Run only uses load_local (below) instead of load_project since it does not target a project in the API
@@ -271,7 +213,7 @@ impl Shuttle {
             .await?;
         }
 
-        let res = match args.cmd {
+        match args.cmd {
             Command::Init(init_args) => {
                 self.init(
                     init_args,
@@ -325,34 +267,19 @@ impl Shuttle {
                 } => self.delete_certificate(domain, yes).await,
             },
             Command::Project(cmd) => match cmd {
-                ProjectCommand::Start(ProjectStartArgs { idle_minutes }) => {
-                    self.project_create_beta().await
-                }
+                ProjectCommand::Create => self.project_create_beta().await,
                 ProjectCommand::Update(cmd) => match cmd {
                     ProjectUpdateCommand::Name { name } => self.project_rename_beta(name).await,
                 },
-                ProjectCommand::Status { follow } => self.project_status_beta().await,
+                ProjectCommand::Status => self.project_status_beta().await,
                 ProjectCommand::List { table, .. } => self.projects_list(table).await,
                 ProjectCommand::Delete(ConfirmationArgs { yes }) => {
                     self.project_delete_beta(yes).await
                 }
                 ProjectCommand::Link => Ok(()), // logic is done in `load_local`
-                ProjectCommand::Restart(ProjectStartArgs { idle_minutes }) => {
-                    unimplemented!()
-                }
-                ProjectCommand::Stop => unimplemented!(),
             },
-            Command::Status => unimplemented!(),
-            Command::Stop => unimplemented!(),
-            Command::Clean => unimplemented!(),
             Command::Upgrade { preview } => update_cargo_shuttle(preview).await,
-        };
-
-        for w in self.version_warnings {
-            println!("{w}");
         }
-
-        res
     }
 
     /// Log in, initialize a project and potentially create the Shuttle environment for it.
@@ -388,13 +315,6 @@ impl Shuttle {
         }
 
         // 2. Ask for project name or validate the given one
-        if needs_name && !self.beta {
-            printdoc! {"
-                What do you want to name your project?
-                It will be hosted at ${{project_name}}.shuttleapp.rs, so choose something unique!
-                "
-            };
-        }
         let mut prev_name: Option<String> = None;
         loop {
             // prompt if interactive
@@ -627,21 +547,11 @@ impl Shuttle {
                 .expect("to have a project name provided");
 
             let should_create = Confirm::with_theme(&theme)
-                .with_prompt(if self.beta {
-                    format!(r#"Create a project on Shuttle with the name "{name}"?"#)
-                } else {
-                    format!(
-                        r#"Claim the project name "{name}" by starting a project container on Shuttle?"#
-                    )
-                })
+                .with_prompt(format!(
+                    r#"Create a project on Shuttle with the name "{name}"?"#
+                ))
                 .default(true)
                 .interact()?;
-            if !should_create && !self.beta {
-                println!(
-                    "Note: The project name will not be claimed until \
-                    you start the project with `cargo shuttle project start`."
-                )
-            }
             println!();
             should_create
         };
@@ -657,57 +567,26 @@ impl Shuttle {
         if std::env::current_dir().is_ok_and(|d| d != path) {
             println!("You can `cd` to the directory, then:");
         }
-        if self.beta {
-            println!("Run `shuttle run` to run the app locally.");
-        } else {
-            println!("Run `cargo shuttle run` to run the app locally.");
-        }
+        println!("Run `shuttle run` to run the app locally.");
         if !should_create_environment {
-            if self.beta {
-                println!("Run `shuttle deploy` to deploy it to Shuttle.");
-            } else {
-                println!(
-                    "Run `cargo shuttle project start` to create a project environment on Shuttle."
-                );
-                let serenity_idle_hint = template
-                    .subfolder
-                    .as_ref()
-                    .is_some_and(|s| s.contains("serenity") || s.contains("poise"));
-                if serenity_idle_hint {
-                    printdoc!(
-                        "
-                        Hint: Discord bots might want to use `--idle-minutes 0` when starting the
-                        project so that they don't go offline: {SHUTTLE_IDLE_DOCS_URL}
-                        "
-                    );
-                }
-            }
+            println!("Run `shuttle deploy` to deploy it to Shuttle.");
         }
 
         Ok(())
     }
 
-    /// true -> success/neutral. false -> try again.
+    /// Return value: true -> success or unknown. false -> try again.
     async fn check_project_name(&self, project_args: &mut ProjectArgs, name: String) -> bool {
         let client = self.client.as_ref().unwrap();
         match client.check_project_name_beta(&name).await {
             Ok(true) => {
-                // inner value is inverted on beta
-                if self.beta {
-                    project_args.name_or_id = Some(name);
-                    return true;
-                }
-
-                println!("{} {}", "Project name already taken:".red(), name);
-                println!("{}", "Try a different name.".yellow());
-
-                false
-            }
-            // not possible on beta
-            Ok(false) => {
                 project_args.name_or_id = Some(name);
 
                 true
+            }
+            Ok(false) => {
+                // should not be possible
+                panic!("Unexpected API response");
             }
             Err(e) => {
                 // If API error contains message regarding format of error name, print that error and prompt again
@@ -741,56 +620,55 @@ impl Shuttle {
         trace!("project arguments: {project_args:?}");
 
         self.ctx.load_local(project_args)?;
-        if self.beta {
-            // load project id from file if exists
-            self.ctx.load_local_internal(project_args)?;
-            if let Some(name) = project_args.name_or_id.as_ref() {
-                // uppercase project id
-                if let Some(suffix) = name.strip_prefix("proj_") {
-                    // Soft (dumb) validation of ULID format in the id (ULIDs are 26 chars)
-                    if suffix.len() == 26 {
-                        let proj_id_uppercase = format!("proj_{}", suffix.to_ascii_uppercase());
-                        if *name != proj_id_uppercase {
-                            eprintln!("INFO: Converted project id to '{}'", proj_id_uppercase);
-                            self.ctx.set_project_id(proj_id_uppercase);
-                        }
+
+        // load project id from file if exists
+        self.ctx.load_local_internal(project_args)?;
+        if let Some(name) = project_args.name_or_id.as_ref() {
+            // uppercase project id
+            if let Some(suffix) = name.strip_prefix("proj_") {
+                // Soft (dumb) validation of ULID format in the id (ULIDs are 26 chars)
+                if suffix.len() == 26 {
+                    let proj_id_uppercase = format!("proj_{}", suffix.to_ascii_uppercase());
+                    if *name != proj_id_uppercase {
+                        eprintln!("INFO: Converted project id to '{}'", proj_id_uppercase);
+                        self.ctx.set_project_id(proj_id_uppercase);
                     }
                 }
-                // translate project name to project id if a name was given
-                if !name.starts_with("proj_") {
-                    trace!("unprefixed project id found, assuming it's a project name");
-                    let client = self.client.as_ref().unwrap();
-                    trace!(%name, "looking up project id from project name");
-                    if let Some(proj) = client
-                        .get_projects_list_beta()
-                        .await?
-                        .projects
-                        .into_iter()
-                        .find(|p| p.name == *name)
-                    {
-                        trace!("found project by name");
+            }
+            // translate project name to project id if a name was given
+            if !name.starts_with("proj_") {
+                trace!("unprefixed project id found, assuming it's a project name");
+                let client = self.client.as_ref().unwrap();
+                trace!(%name, "looking up project id from project name");
+                if let Some(proj) = client
+                    .get_projects_list_beta()
+                    .await?
+                    .projects
+                    .into_iter()
+                    .find(|p| p.name == *name)
+                {
+                    trace!("found project by name");
+                    self.ctx.set_project_id(proj.id);
+                } else {
+                    trace!("did not find project by name");
+                    if create_missing_beta_project {
+                        trace!("creating project since it was not found");
+                        let proj = client.create_project_beta(name).await?;
+                        eprintln!("Created project '{}' with id {}", proj.name, proj.id);
                         self.ctx.set_project_id(proj.id);
-                    } else {
-                        trace!("did not find project by name");
-                        if create_missing_beta_project {
-                            trace!("creating project since it was not found");
-                            let proj = client.create_project_beta(name).await?;
-                            eprintln!("Created project '{}' with id {}", proj.name, proj.id);
-                            self.ctx.set_project_id(proj.id);
-                        }
                     }
                 }
-                // if called from Link command, command-line override is saved to file
-                if do_linking {
-                    eprintln!("Linking to project {}", self.ctx.project_id());
-                    self.ctx.save_local_internal()?;
-                    return Ok(());
-                }
             }
-            // if project id is still not known or an explicit linking is wanted, start the linking prompt
-            if !self.ctx.project_id_found() || do_linking {
-                self.project_link(None).await?;
+            // if called from Link command, command-line override is saved to file
+            if do_linking {
+                eprintln!("Linking to project {}", self.ctx.project_id());
+                self.ctx.save_local_internal()?;
+                return Ok(());
             }
+        }
+        // if project id is still not known or an explicit linking is wanted, start the linking prompt
+        if !self.ctx.project_id_found() || do_linking {
+            self.project_link(None).await?;
         }
 
         Ok(())
@@ -865,16 +743,7 @@ impl Shuttle {
         let api_key = match login_args.api_key {
             Some(api_key) => api_key,
             None => {
-                if login_args.prompt || !self.beta {
-                    // manual input requested (always the case on shuttle.rs)
-
-                    if !login_args.prompt && !self.beta {
-                        // if !beta, open console
-                        let url = SHUTTLE_LEGACY_NEW_PROJECT;
-                        let _ = webbrowser::open(url);
-                        println!("If your browser did not automatically open, go to {url}");
-                    }
-
+                if login_args.prompt {
                     Password::with_theme(&ColorfulTheme::default())
                         .with_prompt("API key")
                         .validate_with(|input: &String| {
@@ -896,16 +765,14 @@ impl Shuttle {
         if let Some(client) = self.client.as_mut() {
             client.api_key = Some(api_key);
 
-            if self.beta {
-                if offline {
-                    eprintln!("INFO: Skipping API key verification");
-                } else {
-                    let u = client
-                        .get_current_user_beta()
-                        .await
-                        .context("failed to check API key validity")?;
-                    println!("Logged in as {} ({})", u.name.bold(), u.id.bold());
-                }
+            if offline {
+                eprintln!("INFO: Skipping API key verification");
+            } else {
+                let u = client
+                    .get_current_user_beta()
+                    .await
+                    .context("failed to check API key validity")?;
+                println!("Logged in as {} ({})", u.name.bold(), u.id.bold());
             }
         }
 
@@ -962,15 +829,10 @@ impl Shuttle {
         if logout_args.reset_api_key {
             self.reset_api_key().await?;
             println!("Successfully reset the API key.");
-            if self.beta {
-                println!(" -> Use `shuttle login` to get a new one.")
-            } else {
-                println!(" -> Go to {SHUTTLE_LEGACY_NEW_PROJECT} to get a new one.");
-            }
-            println!();
         }
         self.ctx.clear_api_key()?;
         println!("Successfully logged out.");
+        println!(" -> Use `shuttle login` to log in again.");
 
         Ok(())
     }
@@ -1029,7 +891,10 @@ impl Shuttle {
             eprintln!("Streamed logs are not yet supported on the new platform.");
             return Ok(());
         }
-        // TODO: implement logs range
+        if args.tail.is_some() | args.head.is_some() {
+            eprintln!("Fetching log ranges are not yet supported on the new platform.");
+            return Ok(());
+        }
         let client = self.client.as_ref().unwrap();
         let pid = self.ctx.project_id();
         let logs = if args.all_deployments {
@@ -1197,10 +1062,10 @@ impl Shuttle {
 
     #[allow(unused)]
     async fn resource_dump(&self, resource_type: &resource::Type) -> Result<()> {
-        let client = self.client.as_ref().unwrap();
+        unimplemented!();
 
-        let bytes = unimplemented!();
-
+        // let client = self.client.as_ref().unwrap();
+        // let bytes = client...;
         // std::io::stdout().write_all(&bytes).unwrap();
 
         Ok(())
@@ -1345,7 +1210,7 @@ impl Shuttle {
 
         trace!(path = ?service.executable_path, "runtime executable");
 
-        let secrets = Shuttle::get_secrets_beta(&run_args.secret_args, &working_directory)?
+        let secrets = Shuttle::get_secrets_beta(&run_args.secret_args, working_directory)?
             .unwrap_or_default();
         Shuttle::find_available_port_beta(&mut run_args);
         if let Some(warning) = check_and_warn_runtime_version(&service.executable_path).await? {
@@ -1725,7 +1590,7 @@ impl Shuttle {
             let dirty = is_dirty(&repo);
             build_meta.git_dirty = Some(dirty.is_err());
 
-            let check_dirty = !self.beta || self.ctx.deny_dirty().is_some_and(|d| d);
+            let check_dirty = self.ctx.deny_dirty().is_some_and(|d| d);
             if check_dirty && !args.allow_dirty && dirty.is_err() {
                 bail!(dirty.unwrap_err());
             }

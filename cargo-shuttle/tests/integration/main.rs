@@ -30,13 +30,18 @@ async fn cargo_shuttle_command(cmd: Command, working_directory: &str) -> anyhow:
 #[tokio::test]
 #[should_panic(expected = "failed to start `cargo metadata`: No such file or directory")]
 async fn fails_if_working_directory_does_not_exist() {
-    cargo_shuttle_command(Command::Status, "/path_that_does_not_exist")
-        .await
-        .unwrap();
+    cargo_shuttle_command(
+        Command::Logs(Default::default()),
+        "/path_that_does_not_exist",
+    )
+    .await
+    .unwrap();
 }
 
 #[tokio::test]
 #[should_panic(expected = "could not find `Cargo.toml` in `/` or any parent directory")]
 async fn fails_if_working_directory_not_part_of_cargo_workspace() {
-    cargo_shuttle_command(Command::Status, "/").await.unwrap();
+    cargo_shuttle_command(Command::Logs(Default::default()), "/")
+        .await
+        .unwrap();
 }

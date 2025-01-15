@@ -35,7 +35,6 @@ tracing-opentelemetry = { workspace = true, optional = true }
 tracing-subscriber = { workspace = true, optional = true }
 typeshare = { workspace = true }
 url = { workspace = true, features = ["serde"] }
-uuid = { workspace = true, features = ["v4", "serde"], optional = true }
 zeroize = { workspace = true }
 
 [dev-dependencies]
@@ -67,7 +66,7 @@ extract_propagation = [
     "tracing-opentelemetry",
 ]
 models = ["async-trait", "reqwest", "service"]
-service = ["chrono/serde", "display", "tracing", "tracing-subscriber", "uuid"]
+service = ["chrono/serde", "display", "tracing", "tracing-subscriber"]
 tracing = ["dep:tracing"]
 
 [package.metadata.docs.rs]

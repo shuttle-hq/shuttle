@@ -47,7 +47,7 @@ use shuttle_common::{
         project::{self, ProjectUpdateRequestBeta},
         resource::{get_certificates_table_beta, get_resource_tables_beta},
     },
-    resource, LogItemBeta, VersionInfo,
+    resource, LogItemBeta,
 };
 use shuttle_service::{
     builder::{async_cargo_metadata, build_workspace, find_shuttle_packages, BuiltService},
@@ -125,7 +125,6 @@ impl Binary {
 pub struct Shuttle {
     ctx: RequestContext,
     client: Option<ShuttleApiClient>,
-    version_info: Option<VersionInfo>,
     /// Strings to print at the end of command execution
     version_warnings: Vec<String>,
     /// Alter behaviour to interact with the new platform
@@ -140,7 +139,6 @@ impl Shuttle {
         Ok(Self {
             ctx,
             client: None,
-            version_info: None,
             version_warnings: vec![],
             beta: false,
             bin,

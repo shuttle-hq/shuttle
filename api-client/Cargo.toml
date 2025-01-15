@@ -23,7 +23,6 @@ serde_json = { workspace = true }
 tokio = { workspace = true, features = ["macros", "signal", "rt-multi-thread"] }
 tokio-tungstenite = { workspace = true }
 url = { workspace = true }
-uuid = { workspace = true, features = ["v4"] }
 
 task-local-extensions = { version = "0.1.4", optional = true }
 tracing = { workspace = true, features = ["default"], optional = true }

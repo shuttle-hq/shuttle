@@ -5,8 +5,6 @@ pub mod database;
 #[cfg(feature = "service")]
 pub mod deployment;
 #[cfg(feature = "service")]
-pub type DeploymentId = uuid::Uuid;
-#[cfg(feature = "service")]
 pub mod log;
 #[cfg(feature = "service")]
 pub use log::LogItemBeta;
@@ -209,18 +207,6 @@ pub struct ContainerResponse {
     /// The port that the container exposes to the host.
     /// Is a string for parity with the Docker respose.
     pub host_port: String,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct VersionInfo {
-    /// Version of gateway
-    pub gateway: semver::Version,
-    /// Latest version of cargo-shuttle compatible with this gateway.
-    pub cargo_shuttle: semver::Version,
-    /// Latest version of shuttle-deployer compatible with this gateway.
-    pub deployer: semver::Version,
-    /// Latest version of shuttle-runtime compatible with the above deployer.
-    pub runtime: semver::Version,
 }
 
 /// Check if two versions are compatible based on the rule used by cargo:

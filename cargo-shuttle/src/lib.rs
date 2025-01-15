@@ -615,7 +615,7 @@ impl Shuttle {
         &mut self,
         project_args: &ProjectArgs,
         do_linking: bool,
-        create_missing_beta_project: bool,
+        create_missing_project: bool,
     ) -> Result<()> {
         trace!("project arguments: {project_args:?}");
 
@@ -651,7 +651,7 @@ impl Shuttle {
                     self.ctx.set_project_id(proj.id);
                 } else {
                     trace!("did not find project by name");
-                    if create_missing_beta_project {
+                    if create_missing_project {
                         trace!("creating project since it was not found");
                         let proj = client.create_project_beta(name).await?;
                         eprintln!("Created project '{}' with id {}", proj.name, proj.id);
@@ -1060,15 +1060,12 @@ impl Shuttle {
         Ok(())
     }
 
-    #[allow(unused)]
-    async fn resource_dump(&self, resource_type: &resource::Type) -> Result<()> {
+    async fn resource_dump(&self, _resource_type: &resource::Type) -> Result<()> {
         unimplemented!();
-
         // let client = self.client.as_ref().unwrap();
         // let bytes = client...;
         // std::io::stdout().write_all(&bytes).unwrap();
-
-        Ok(())
+        // Ok(())
     }
 
     async fn list_certificates(&self, table_args: TableArgs) -> Result<()> {
@@ -1380,131 +1377,6 @@ impl Shuttle {
                 runtime.kill().await?;
             }
         }
-
-        Ok(())
-    }
-
-    #[cfg(target_family = "windows")]
-    async fn handle_signals() -> bool {
-        let mut ctrl_break_notif = tokio::signal::windows::ctrl_break()
-            .expect("Can not get the CtrlBreak signal receptor");
-        let mut ctrl_c_notif =
-            tokio::signal::windows::ctrl_c().expect("Can not get the CtrlC signal receptor");
-        let mut ctrl_close_notif = tokio::signal::windows::ctrl_close()
-            .expect("Can not get the CtrlClose signal receptor");
-        let mut ctrl_logoff_notif = tokio::signal::windows::ctrl_logoff()
-            .expect("Can not get the CtrlLogoff signal receptor");
-        let mut ctrl_shutdown_notif = tokio::signal::windows::ctrl_shutdown()
-            .expect("Can not get the CtrlShutdown signal receptor");
-
-        tokio::select! {
-            _ = ctrl_break_notif.recv() => {
-                println!("cargo-shuttle received ctrl-break.");
-                true
-            },
-            _ = ctrl_c_notif.recv() => {
-                println!("cargo-shuttle received ctrl-c.");
-                true
-            },
-            _ = ctrl_close_notif.recv() => {
-                println!("cargo-shuttle received ctrl-close.");
-                true
-            },
-            _ = ctrl_logoff_notif.recv() => {
-                println!("cargo-shuttle received ctrl-logoff.");
-                true
-            },
-            _ = ctrl_shutdown_notif.recv() => {
-                println!("cargo-shuttle received ctrl-shutdown.");
-                true
-            }
-            else => {
-                false
-            }
-        }
-    }
-
-    #[cfg(target_family = "windows")]
-    async fn local_run(&self, mut run_args: RunArgs) -> Result<()> {
-        let services = self.pre_local_run(&run_args).await?;
-
-        // Start all the services.
-        let mut runtimes: Vec<(Child, runtime::Client)> = Vec::new();
-
-        Shuttle::find_available_port(&mut run_args, services.len());
-
-        let mut signal_received = false;
-        for (i, service) in services.iter().enumerate() {
-            signal_received = tokio::select! {
-                res = Shuttle::spin_local_runtime(&run_args, service, i as u16) => {
-                    Shuttle::add_runtime_info(res.unwrap(), &mut runtimes).await?;
-                    false
-                },
-                _ = Shuttle::handle_signals() => {
-                    println!(
-                        "Killing all the runtimes..."
-                    );
-                    true
-                }
-            };
-
-            if signal_received {
-                break;
-            }
-        }
-
-        // If prior signal received is set to true we must stop all the existing runtimes and
-        // exit the `local_run`.
-        if signal_received {
-            for (mut rt, mut rt_client) in runtimes {
-                Shuttle::stop_runtime(&mut rt, &mut rt_client)
-                    .await
-                    .unwrap_or_else(|err| {
-                        trace!(status = ?err, "stopping the runtime errored out");
-                    });
-            }
-            return Ok(());
-        }
-
-        // If no signal was received during runtimes initialization, then we must handle each runtime until
-        // completion and handle the signals during this time.
-        for (mut rt, mut rt_client) in runtimes {
-            // If we received a signal while waiting for any runtime we must stop the rest and exit
-            // the waiting loop.
-            if signal_received {
-                Shuttle::stop_runtime(&mut rt, &mut rt_client)
-                    .await
-                    .unwrap_or_else(|err| {
-                        trace!(status = ?err, "stopping the runtime errored out");
-                    });
-                continue;
-            }
-
-            // Receiving a signal will stop the current runtime we're waiting for.
-            signal_received = tokio::select! {
-                res = rt.wait() => {
-                    println!(
-                        "a service future completed with exit status: {:?}",
-                        res.unwrap().code()
-                    );
-                    false
-                },
-                _ = Shuttle::handle_signals() => {
-                    println!(
-                        "Killing all the runtimes..."
-                    );
-                    Shuttle::stop_runtime(&mut rt, &mut rt_client).await.unwrap_or_else(|err| {
-                        trace!(status = ?err, "stopping the runtime errored out");
-                    });
-                    true
-                }
-            };
-        }
-
-        println!(
-            "Run `cargo shuttle project start` to create a project environment on Shuttle.\n\
-             Run `cargo shuttle deploy` to deploy your Shuttle service."
-        );
 
         Ok(())
     }
@@ -1968,7 +1840,7 @@ mod tests {
         project_args: ProjectArgs,
         deploy_args: DeployArgs,
     ) -> Vec<String> {
-        let mut shuttle = Shuttle::new(crate::Binary::CargoShuttle).unwrap();
+        let mut shuttle = Shuttle::new(crate::Binary::Shuttle).unwrap();
         shuttle
             .load_project(&project_args, false, false)
             .await
@@ -2003,7 +1875,7 @@ mod tests {
 
         let project_args = ProjectArgs {
             working_directory: working_directory.clone(),
-            name_or_id: Some("archiving-test".to_owned()),
+            name_or_id: Some("proj_archiving-test".to_owned()),
         };
         let mut entries = get_archive_entries(project_args.clone(), Default::default()).await;
         entries.sort();
@@ -2069,16 +1941,6 @@ mod tests {
             name_or_id: None,
         };
 
-        let mut shuttle = Shuttle::new(crate::Binary::CargoShuttle).unwrap();
-        shuttle
-            .load_project(&project_args, false, false)
-            .await
-            .unwrap();
-
-        assert_eq!(
-            project_args.working_directory,
-            path_from_workspace_root("examples/axum/hello-world/src")
-        );
         assert_eq!(
             project_args.workspace_path().unwrap(),
             path_from_workspace_root("examples/axum/hello-world")

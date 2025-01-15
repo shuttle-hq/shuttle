@@ -21,7 +21,7 @@ use tracing::{debug, info, trace};
 
 use crate::__internals::{Loader, Runner};
 
-struct BetaEnvArgs {
+struct RuntimeEnvArgs {
     /// Are we running in a Shuttle deployment?
     shuttle: bool,
     project_id: String,
@@ -39,7 +39,7 @@ struct BetaEnvArgs {
     api_key: Option<String>,
 }
 
-impl BetaEnvArgs {
+impl RuntimeEnvArgs {
     /// Uses primitive parsing instead of clap for reduced dependency weight.
     /// # Panics
     /// if any required arg is missing or does not parse
@@ -71,7 +71,7 @@ impl BetaEnvArgs {
 
 pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + Send + 'static) {
     debug!("Parsing environment variables");
-    let BetaEnvArgs {
+    let RuntimeEnvArgs {
         shuttle,
         project_id,
         project_name,
@@ -81,7 +81,7 @@ pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + S
         healthz_port,
         api_url,
         api_key,
-    } = BetaEnvArgs::parse();
+    } = RuntimeEnvArgs::parse();
 
     let service_addr = SocketAddr::new(ip, port);
     let client = ShuttleApiClient::new(api_url, api_key, None, None);

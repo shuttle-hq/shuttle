@@ -1,5 +1,3 @@
-use anyhow::Context;
-
 use crate::{
     __internals::{Loader, Runner},
     rt,
@@ -9,8 +7,6 @@ use crate::{
 struct Args {
     /// Enable compatibility with beta platform [env: SHUTTLE_BETA]
     beta: bool,
-    /// Alpha (required): Port to open gRPC server on
-    port: Option<u16>,
 }
 
 impl Args {
@@ -20,28 +16,18 @@ impl Args {
 
         // The first argument is the path of the executable
         let mut args_iter = std::env::args().skip(1);
-
-        while let Some(arg) = args_iter.next() {
-            if arg.as_str() == "--port" {
-                let port = args_iter
-                    .next()
-                    .context("missing port value")?
-                    .parse()
-                    .context("invalid port value")?;
-                args.port = Some(port);
-            }
+        if args_iter.any(|arg| arg.as_str() == "--port") {
+            return Err(anyhow::anyhow!(
+                "Outdated argument detected (--port). Upgrade your Shuttle CLI."
+            ));
         }
 
         args.beta = std::env::var("SHUTTLE_BETA").is_ok();
 
-        if args.beta {
-            if std::env::var("SHUTTLE_ENV").is_err() {
-                return Err(anyhow::anyhow!(
-                    "SHUTTLE_ENV is required to be set on shuttle.dev"
-                ));
-            }
-        } else if args.port.is_none() {
-            return Err(anyhow::anyhow!("--port is required"));
+        if std::env::var("SHUTTLE_ENV").is_err() {
+            return Err(anyhow::anyhow!(
+                "SHUTTLE_ENV is required to be set on shuttle.dev"
+            ));
         }
 
         Ok(args)
@@ -89,13 +75,9 @@ pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + S
             )
             .init();
 
-        if args.beta {
-            tracing::warn!(
-                "Default tracing subscriber initialized (https://docs.shuttle.dev/docs/logs)"
-            );
-        } else {
-            tracing::warn!("Default tracing subscriber initialized (https://docs.shuttle.rs/configuration/logs)");
-        }
+        tracing::warn!(
+            "Default tracing subscriber initialized (https://docs.shuttle.dev/docs/logs)"
+        );
     }
 
     rt::start(loader, runner).await

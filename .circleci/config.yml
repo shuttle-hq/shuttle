@@ -382,7 +382,6 @@ workflows:
                 - resources/aws-rds
                 - resources/openai
                 - resources/opendal
-                - resources/persist
                 - resources/qdrant
                 - resources/shared-db
                 - resources/turso
@@ -411,7 +410,6 @@ workflows:
               resource_class:
                 - large
               crate:
-                - shuttle-runtime
                 - shuttle-service
       - test-workspace-member-with-integration:
           name: << matrix.crate >>
@@ -498,7 +496,6 @@ workflows:
             parameters:
               path:
                 - api-client
-                - proto
                 - service
           name: publish-<< matrix.path >>
           requires:
@@ -510,7 +507,6 @@ workflows:
                 - resources/aws-rds
                 - resources/openai
                 - resources/opendal
-                - resources/persist
                 - resources/qdrant
                 - resources/shared-db
                 - resources/turso
@@ -527,7 +523,6 @@ workflows:
           requires:
             - publish-api-client
             - publish-service
-            - publish-proto
       - publish-crate:
           matrix:
             parameters:

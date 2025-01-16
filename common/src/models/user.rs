@@ -45,11 +45,21 @@ impl UserResponse {
 }
 
 #[derive(
-    Clone, Copy, Debug, Default, Deserialize, Serialize, Eq, PartialEq, Ord, PartialOrd, EnumString,
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    Deserialize,
+    Serialize,
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    EnumString,
+    strum::Display,
 )]
 #[serde(rename_all = "lowercase")]
-#[cfg_attr(feature = "display", derive(strum::Display))]
-#[cfg_attr(feature = "display", strum(serialize_all = "lowercase"))]
+#[strum(serialize_all = "lowercase")]
 #[typeshare::typeshare]
 pub enum AccountTier {
     #[default]

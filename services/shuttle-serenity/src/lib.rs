@@ -34,4 +34,3 @@ impl From<Client> for SerenityService {
 
 #[doc = include_str!("../README.md")]
 pub type ShuttleSerenity = Result<SerenityService, Error>;
-

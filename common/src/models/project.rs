@@ -10,7 +10,7 @@ use crossterm::style::Stylize;
 use serde::{Deserialize, Serialize};
 use strum::{Display, EnumString};
 
-use crate::deployment::DeploymentStateBeta;
+use super::deployment::DeploymentStateBeta;
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 #[typeshare::typeshare]

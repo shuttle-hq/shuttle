@@ -13,7 +13,7 @@ use hyper::{
 };
 use shuttle_api_client::ShuttleApiClient;
 use shuttle_common::{
-    resource::{ResourceInputBeta, ResourceState, ResourceTypeBeta},
+    models::resource::{ResourceInputBeta, ResourceState, ResourceTypeBeta},
     secrets::Secret,
 };
 use shuttle_service::{Environment, ResourceFactory, Service};

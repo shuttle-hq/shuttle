@@ -6,10 +6,12 @@ use async_trait::async_trait;
 use serde::{de::DeserializeOwned, Serialize};
 use shuttle_common::constants::STORAGE_DIRNAME;
 pub use shuttle_common::{
-    deployment::{DeploymentMetadata, Environment},
-    resource,
-    secrets::Secret,
-    ContainerRequest, ContainerResponse, DatabaseInfo, DatabaseResource, DbInput, SecretStore,
+    models::{
+        deployment::{DeploymentMetadata, Environment},
+        resource,
+    },
+    secrets::{Secret, SecretStore},
+    ContainerRequest, ContainerResponse, DatabaseInfo, DatabaseResource, DbInput,
 };
 
 pub use crate::error::{CustomError, Error};

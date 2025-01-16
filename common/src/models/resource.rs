@@ -1,14 +1,90 @@
 use comfy_table::{
     presets::{NOTHING, UTF8_BORDERS_ONLY},
-    Attribute, Cell, ContentArrangement, Table,
+    ContentArrangement, Table,
 };
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
-use crate::{
-    certificate::CertificateResponse,
-    resource::{ResourceResponseBeta, ResourceTypeBeta},
-    secrets::SecretStore,
-    DatabaseInfoBeta,
-};
+use crate::{secrets::SecretStore, DatabaseInfoBeta};
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[typeshare::typeshare]
+pub struct ProvisionResourceRequestBeta {
+    /// The type of this resource
+    pub r#type: ResourceTypeBeta,
+    /// The config used when creating this resource.
+    /// Use `Self::r#type` to know how to parse this data.
+    pub config: Value,
+}
+
+/// Helper for deserializing
+#[derive(Deserialize)]
+#[serde(untagged)] // Try deserializing as a Shuttle resource, fall back to a custom value
+pub enum ResourceInputBeta {
+    Shuttle(ProvisionResourceRequestBeta),
+    Custom(Value),
+}
+
+/// The resource state represents the stage of the provisioning process the resource is in.
+#[derive(
+    Debug, Clone, PartialEq, Eq, strum::Display, strum::EnumString, Serialize, Deserialize,
+)]
+#[serde(rename_all = "lowercase")]
+#[strum(serialize_all = "lowercase")]
+#[typeshare::typeshare]
+pub enum ResourceState {
+    Authorizing,
+    Provisioning,
+    Failed,
+    Ready,
+    Deleting,
+    Deleted,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[typeshare::typeshare]
+pub struct ResourceResponseBeta {
+    pub r#type: ResourceTypeBeta,
+    pub state: ResourceState,
+    /// The config used when creating this resource. Use the `r#type` to know how to parse this data.
+    pub config: Value,
+    /// The output type for this resource, if state is Ready. Use the `r#type` to know how to parse this data.
+    pub output: Value,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[typeshare::typeshare]
+pub struct ResourceListResponseBeta {
+    pub resources: Vec<ResourceResponseBeta>,
+}
+
+#[derive(
+    Clone, Copy, Debug, strum::EnumString, strum::Display, Deserialize, Serialize, Eq, PartialEq,
+)]
+#[typeshare::typeshare]
+// is a flat enum instead of nested enum to allow typeshare
+pub enum ResourceTypeBeta {
+    #[strum(to_string = "database::shared::postgres")]
+    #[serde(rename = "database::shared::postgres")]
+    DatabaseSharedPostgres,
+    #[strum(to_string = "database::aws_rds::postgres")]
+    #[serde(rename = "database::aws_rds::postgres")]
+    DatabaseAwsRdsPostgres,
+    #[strum(to_string = "database::aws_rds::mysql")]
+    #[serde(rename = "database::aws_rds::mysql")]
+    DatabaseAwsRdsMySql,
+    #[strum(to_string = "database::aws_rds::mariadb")]
+    #[serde(rename = "database::aws_rds::mariadb")]
+    DatabaseAwsRdsMariaDB,
+    /// (Will probably be removed)
+    #[strum(to_string = "secrets")]
+    #[serde(rename = "secrets")]
+    Secrets,
+    /// Local provisioner only
+    #[strum(to_string = "container")]
+    #[serde(rename = "container")]
+    Container,
+}
 
 pub fn get_resource_tables_beta(
     resources: &[ResourceResponseBeta],
@@ -83,24 +159,6 @@ fn get_databases_table_beta(
     format!("These databases are linked to {service_name}\n{table}\n{show_secret_hint}")
 }
 
-pub fn get_certificates_table_beta(certs: &[CertificateResponse], raw: bool) -> String {
-    let mut table = Table::new();
-    table
-        .load_preset(if raw { NOTHING } else { UTF8_BORDERS_ONLY })
-        .set_content_arrangement(ContentArrangement::Disabled)
-        .set_header(vec!["Certificate ID", "Subject", "Expires"]);
-
-    for cert in certs {
-        table.add_row(vec![
-            Cell::new(&cert.id).add_attribute(Attribute::Bold),
-            Cell::new(&cert.subject),
-            Cell::new(&cert.not_after),
-        ]);
-    }
-
-    table.to_string()
-}
-
 fn get_secrets_table_beta(
     secrets: &[ResourceResponseBeta],
     service_name: &str,
@@ -125,4 +183,25 @@ fn get_secrets_table_beta(
     }
 
     format!("These secrets can be accessed by {service_name}\n{table}")
+}
+
+#[cfg(test)]
+mod test {
+    use std::str::FromStr;
+
+    use super::*;
+
+    #[test]
+    fn to_string_and_back() {
+        let inputs = [
+            ResourceTypeBeta::DatabaseSharedPostgres,
+            ResourceTypeBeta::Secrets,
+            ResourceTypeBeta::Container,
+        ];
+
+        for input in inputs {
+            let actual = ResourceTypeBeta::from_str(&input.to_string()).unwrap();
+            assert_eq!(input, actual, ":{} should map back to itself", input);
+        }
+    }
 }

@@ -25,11 +25,12 @@ use hyper::{
 };
 use portpicker::pick_unused_port;
 use shuttle_common::{
-    models::resource::get_resource_tables_beta,
-    resource::{
-        self, ProvisionResourceRequestBeta, ResourceResponseBeta, ResourceState, ResourceTypeBeta,
+    models::resource::{
+        self, get_resource_tables_beta, ProvisionResourceRequestBeta, ResourceResponseBeta,
+        ResourceState, ResourceTypeBeta,
     },
-    ContainerRequest, ContainerResponse, DatabaseInfo, DbInput, Secret,
+    secrets::Secret,
+    ContainerRequest, ContainerResponse, DatabaseInfo, DbInput,
 };
 use tokio::time::sleep;
 use tracing::{debug, error, trace};

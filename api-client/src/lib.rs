@@ -7,22 +7,22 @@ use reqwest::header::HeaderMap;
 use reqwest::Response;
 use reqwest_middleware::{ClientWithMiddleware, RequestBuilder};
 use serde::{Deserialize, Serialize};
-use shuttle_common::certificate::{
+use shuttle_common::models::certificate::{
     AddCertificateRequest, CertificateListResponse, CertificateResponse, DeleteCertificateRequest,
 };
-use shuttle_common::log::LogsResponseBeta;
 use shuttle_common::models::deployment::{
     DeploymentListResponseBeta, DeploymentRequestBeta, DeploymentResponseBeta,
     UploadArchiveResponseBeta,
 };
+use shuttle_common::models::log::LogsResponseBeta;
 use shuttle_common::models::project::{
     ProjectCreateRequestBeta, ProjectListResponseBeta, ProjectResponseBeta,
     ProjectUpdateRequestBeta,
 };
-use shuttle_common::models::{team, user};
-use shuttle_common::resource::{
+use shuttle_common::models::resource::{
     ProvisionResourceRequestBeta, ResourceListResponseBeta, ResourceResponseBeta, ResourceTypeBeta,
 };
+use shuttle_common::models::{team, user};
 use tokio::net::TcpStream;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};

@@ -14,7 +14,7 @@ use clap::{
 use clap_complete::Shell;
 use shuttle_common::{
     constants::{EXAMPLES_REPO, SHUTTLE_CONSOLE_URL},
-    resource::ResourceTypeBeta,
+    models::resource::ResourceTypeBeta,
 };
 
 #[derive(Parser)]

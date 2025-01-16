@@ -1,16 +1,7 @@
-#[cfg(feature = "models")]
-pub mod certificate;
 pub mod constants;
 #[cfg(feature = "models")]
-pub mod deployment;
-#[cfg(feature = "models")]
-pub mod log;
-#[cfg(feature = "models")]
 pub mod models;
-#[cfg(feature = "models")]
-pub mod resource;
 pub mod secrets;
-pub use secrets::{Secret, SecretStore};
 pub mod templates;
 
 use std::fmt::Debug;
@@ -43,7 +34,7 @@ pub enum DatabaseResource {
 pub struct DatabaseInfo {
     engine: String,
     role_name: String,
-    role_password: Secret<String>,
+    role_password: secrets::Secret<String>,
     database_name: String,
     port: String,
     // aliases to parse older versions of this struct
@@ -66,7 +57,7 @@ impl DatabaseInfo {
         Self {
             engine,
             role_name,
-            role_password: Secret::new(role_password),
+            role_password: secrets::Secret::new(role_password),
             database_name,
             port,
             hostname_shuttle,

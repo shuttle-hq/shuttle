@@ -31,20 +31,19 @@ use shuttle_common::{
         headers::X_CARGO_SHUTTLE_VERSION, API_URL_DEFAULT_BETA, EXAMPLES_REPO, EXECUTABLE_DIRNAME,
         RUNTIME_NAME, STORAGE_DIRNAME, TEMPLATES_SCHEMA_VERSION,
     },
-    deployment::DeploymentStateBeta,
-    log::LogItemBeta,
     models::{
         auth::{KeyMessage, TokenMessage},
+        certificate::get_certificates_table_beta,
         deployment::{
             deployments_table_beta, BuildArgsBeta, BuildArgsRustBeta, BuildMetaBeta,
             DeploymentRequestBeta, DeploymentRequestBuildArchiveBeta, DeploymentRequestImageBeta,
-            DeploymentResponseBeta, GIT_STRINGS_MAX_LENGTH,
+            DeploymentResponseBeta, DeploymentStateBeta, GIT_STRINGS_MAX_LENGTH,
         },
         error::ApiError,
+        log::LogItemBeta,
         project::{self, ProjectUpdateRequestBeta},
-        resource::{get_certificates_table_beta, get_resource_tables_beta},
+        resource::{get_resource_tables_beta, ResourceTypeBeta},
     },
-    resource::ResourceTypeBeta,
 };
 use shuttle_service::{
     builder::{async_cargo_metadata, build_workspace, find_shuttle_packages, BuiltService},

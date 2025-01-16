@@ -362,11 +362,11 @@ pub(crate) fn log_level_as_severity(level: log::Level) -> Severity {
 }
 
 // Create a Resource that captures information about the entity for which telemetry is recorded.
-pub fn resource(project_name: &'static str, project_version: &'static str) -> Resource {
+pub fn resource(crate_name: &'static str, package_version: &'static str) -> Resource {
     Resource::from_schema_url(
         [
-            Some(KeyValue::new(SERVICE_NAME, project_name)),
-            Some(KeyValue::new(SERVICE_VERSION, project_version)),
+            Some(KeyValue::new(SERVICE_NAME, crate_name)),
+            Some(KeyValue::new(SERVICE_VERSION, package_version)),
             Some(KeyValue::new(TELEMETRY_SDK_NAME, "opentelemetry")),
             Some(KeyValue::new(TELEMETRY_SDK_VERSION, "0.27.1")),
             Some(KeyValue::new(TELEMETRY_SDK_LANGUAGE, "rust")),
@@ -441,12 +441,12 @@ pub fn init_tracer_provider(endpoint: &str, resource: Resource) -> TracerProvide
 
 // Initialize tracing-subscriber and return ExporterGuard for opentelemetry-related termination processing
 pub fn init_tracing_subscriber(
-    project_name: &'static str,
-    project_version: &'static str,
+    crate_name: &'static str,
+    package_version: &'static str,
 ) -> ProviderGuard {
     global::set_text_map_propagator(TraceContextPropagator::new());
 
-    let resource = resource(project_name, project_version);
+    let resource = resource(crate_name, package_version);
 
     // The OTLP_HOST env var is useful for setting a specific host when running locally
     let endpoint = std::env::var(OTEL_EXPORTER_OTLP_ENDPOINT)
@@ -459,6 +459,9 @@ pub fn init_tracing_subscriber(
         std::env::var("RUST_LOG").unwrap_or_else(|_| format!("info,{}=debug", project_name));
 
     let logger = init_log_subscriber(&endpoint, resource);
+
+    let level_filter =
+        std::env::var("RUST_LOG").unwrap_or_else(|_| format!("info,{}=debug", crate_name));
 
     let layers = EnvFilter::from(&level_filter)
         .and_then(MetricsLayer::new(meter.clone()))

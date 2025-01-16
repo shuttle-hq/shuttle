@@ -51,10 +51,9 @@ impl Args {
 pub async fn start(
     loader: impl Loader + Send + 'static,
     runner: impl Runner + Send + 'static,
+    #[cfg_attr(not(feature = "setup-telemetry"), allow(unused_variables))] crate_name: &'static str,
     #[cfg_attr(not(feature = "setup-telemetry"), allow(unused_variables))]
-    project_name: &'static str,
-    #[cfg_attr(not(feature = "setup-telemetry"), allow(unused_variables))]
-    project_version: &'static str,
+    package_version: &'static str,
 ) {
     // `--version` overrides any other arguments. Used by cargo-shuttle to check compatibility on local runs.
     if std::env::args().any(|arg| arg == "--version") {
@@ -62,7 +61,12 @@ pub async fn start(
         return;
     }
 
-    println!("{} starting", crate::VERSION_STRING);
+    println!(
+        "{} starting: {} {}",
+        crate::VERSION_STRING,
+        crate_name,
+        package_version
+    );
 
     let args = match Args::parse() {
         Ok(args) => args,
@@ -92,7 +96,7 @@ pub async fn start(
                         } else {
                             "info,shuttle=trace"
                         },
-                        project_name
+                        crate_name
                     ))
                 }),
             )
@@ -100,7 +104,7 @@ pub async fn start(
     }
 
     #[cfg(feature = "setup-telemetry")]
-    let _guard = crate::trace::init_tracing_subscriber(project_name, project_version);
+    let _guard = crate::trace::init_tracing_subscriber(crate_name, package_version);
 
     #[cfg(any(feature = "setup-tracing", feature = "setup-telemetry"))]
     if args.beta {

@@ -37,7 +37,7 @@ pub fn get_resource_tables_beta(
                     r.r#type,
                     ResourceTypeBeta::DatabaseSharedPostgres
                         | ResourceTypeBeta::DatabaseAwsRdsMariaDB
-                        | ResourceTypeBeta::DatabaseAwsRdsMysql
+                        | ResourceTypeBeta::DatabaseAwsRdsMySql
                         | ResourceTypeBeta::DatabaseAwsRdsPostgres
                 )
             })

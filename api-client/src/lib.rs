@@ -21,7 +21,7 @@ use shuttle_common::models::project::{
 };
 use shuttle_common::models::{team, user};
 use shuttle_common::resource::{
-    self, ProvisionResourceRequestBeta, ResourceListResponseBeta, ResourceResponseBeta,
+    ProvisionResourceRequestBeta, ResourceListResponseBeta, ResourceResponseBeta, ResourceTypeBeta,
 };
 use tokio::net::TcpStream;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
@@ -159,7 +159,7 @@ impl ShuttleApiClient {
     async fn _dump_service_resource(
         &self,
         project: &str,
-        resource_type: &resource::Type,
+        resource_type: &ResourceTypeBeta,
     ) -> Result<Vec<u8>> {
         let r#type = resource_type.to_string();
         let r#type = utf8_percent_encode(&r#type, percent_encoding::NON_ALPHANUMERIC).to_owned();
@@ -182,7 +182,7 @@ impl ShuttleApiClient {
     pub async fn delete_service_resource_beta(
         &self,
         project: &str,
-        resource_type: &resource::Type,
+        resource_type: &ResourceTypeBeta,
     ) -> Result<String> {
         let r#type = resource_type.to_string();
         let r#type = utf8_percent_encode(&r#type, percent_encoding::NON_ALPHANUMERIC).to_owned();

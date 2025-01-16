@@ -25,14 +25,12 @@ use hyper::{
 };
 use portpicker::pick_unused_port;
 use shuttle_common::{
-    database::{self, AwsRdsEngine, SharedEngine},
     models::resource::get_resource_tables_beta,
     resource::{
         self, ProvisionResourceRequestBeta, ResourceResponseBeta, ResourceState, ResourceTypeBeta,
     },
-    ContainerRequest, ContainerResponse, DatabaseInfoBeta, DbInput, Secret,
+    ContainerRequest, ContainerResponse, DatabaseInfo, DbInput, Secret,
 };
-use shuttle_service::database::Type;
 use tokio::time::sleep;
 use tracing::{debug, error, trace};
 
@@ -162,14 +160,17 @@ impl LocalProvisioner {
     async fn get_db_connection_string(
         &self,
         project_name: &str,
-        db_type: Type,
+        db_type: ResourceTypeBeta,
         db_name: Option<String>,
-    ) -> Result<DatabaseInfoBeta> {
+    ) -> Result<DatabaseInfo> {
         trace!("getting sql string for project '{project_name}'");
 
         let database_name = match db_type {
-            database::Type::AwsRds(_) => db_name.unwrap_or_else(|| project_name.to_string()),
-            database::Type::Shared(SharedEngine::MongoDb) => "admin".to_string(),
+            ResourceTypeBeta::DatabaseAwsRdsPostgres
+            | ResourceTypeBeta::DatabaseAwsRdsMySql
+            | ResourceTypeBeta::DatabaseAwsRdsMariaDB => {
+                db_name.unwrap_or_else(|| project_name.to_string())
+            }
             _ => project_name.to_string(),
         };
 
@@ -202,14 +203,14 @@ impl LocalProvisioner {
         sleep(Duration::from_millis(450)).await;
         self.wait_for_ready(&container_name, is_ready_cmd).await?;
 
-        let res = DatabaseInfoBeta::new(
+        let res = DatabaseInfo::new(
             engine,
             username,
             password.expose().clone(),
             database_name,
             host_port,
             "localhost".to_string(),
-            None,
+            "localhost".to_string(),
         );
 
         Ok(res)
@@ -365,11 +366,11 @@ struct EngineConfig {
     is_ready_cmd: Vec<String>,
 }
 
-fn db_type_to_config(db_type: Type, database_name: &str) -> EngineConfig {
+fn db_type_to_config(db_type: ResourceTypeBeta, database_name: &str) -> EngineConfig {
     match db_type {
-        Type::Shared(SharedEngine::Postgres) => EngineConfig {
+        ResourceTypeBeta::DatabaseSharedPostgres => EngineConfig {
             r#type: "shared_postgres".to_string(),
-            image: "docker.io/library/postgres:14".to_string(),
+            image: "docker.io/library/postgres:16".to_string(),
             engine: "postgres".to_string(),
             username: "postgres".to_string(),
             password: "postgres".to_string().into(),
@@ -384,28 +385,9 @@ fn db_type_to_config(db_type: Type, database_name: &str) -> EngineConfig {
                 "pg_isready | grep 'accepting connections'".to_string(),
             ],
         },
-        Type::Shared(SharedEngine::MongoDb) => EngineConfig {
-            r#type: "shared_mongodb".to_string(),
-            image: "docker.io/library/mongo:5.0.10".to_string(),
-            engine: "mongodb".to_string(),
-            username: "mongodb".to_string(),
-            password: "password".to_string().into(),
-            port: "27017/tcp".to_string(),
-            env: Some(vec![
-                "MONGO_INITDB_ROOT_USERNAME=mongodb".to_string(),
-                "MONGO_INITDB_ROOT_PASSWORD=password".to_string(),
-                format!("MONGO_INITDB_DATABASE={database_name}"),
-            ]),
-            is_ready_cmd: vec![
-                "mongosh".to_string(),
-                "--quiet".to_string(),
-                "--eval".to_string(),
-                "db".to_string(),
-            ],
-        },
-        Type::AwsRds(AwsRdsEngine::Postgres) => EngineConfig {
+        ResourceTypeBeta::DatabaseAwsRdsPostgres => EngineConfig {
             r#type: "aws_rds_postgres".to_string(),
-            image: "docker.io/library/postgres:13.4".to_string(),
+            image: "docker.io/library/postgres:16".to_string(),
             engine: "postgres".to_string(),
             username: "postgres".to_string(),
             password: "postgres".to_string().into(),
@@ -420,7 +402,7 @@ fn db_type_to_config(db_type: Type, database_name: &str) -> EngineConfig {
                 "pg_isready | grep 'accepting connections'".to_string(),
             ],
         },
-        Type::AwsRds(AwsRdsEngine::MariaDB) => EngineConfig {
+        ResourceTypeBeta::DatabaseAwsRdsMariaDB => EngineConfig {
             r#type: "aws_rds_mariadb".to_string(),
             image: "docker.io/library/mariadb:10.6.7".to_string(),
             engine: "mariadb".to_string(),
@@ -439,7 +421,7 @@ fn db_type_to_config(db_type: Type, database_name: &str) -> EngineConfig {
                 "show databases;".to_string(),
             ],
         },
-        Type::AwsRds(AwsRdsEngine::MySql) => EngineConfig {
+        ResourceTypeBeta::DatabaseAwsRdsMySql => EngineConfig {
             r#type: "aws_rds_mysql".to_string(),
             image: "docker.io/library/mysql:8.0.28".to_string(),
             engine: "mysql".to_string(),
@@ -458,6 +440,7 @@ fn db_type_to_config(db_type: Type, database_name: &str) -> EngineConfig {
                 "show databases;".to_string(),
             ],
         },
+        _ => panic!("Non-database resource type provided: {db_type}"),
     }
 }
 
@@ -536,14 +519,13 @@ async fn provision(
             let response = match shuttle_resource.r#type {
                 ResourceTypeBeta::DatabaseSharedPostgres
                 | ResourceTypeBeta::DatabaseAwsRdsMariaDB
-                | ResourceTypeBeta::DatabaseAwsRdsMysql
+                | ResourceTypeBeta::DatabaseAwsRdsMySql
                 | ResourceTypeBeta::DatabaseAwsRdsPostgres => {
                     let config: DbInput = serde_json::from_value(shuttle_resource.config.clone())
                         .context("deserializing resource config")?;
                     let res = prov.get_db_connection_string(
                             &state.project_name,
-                            database::Type::try_from(shuttle_resource.r#type)
-                                .map_err(anyhow::Error::msg)?,
+                            shuttle_resource.r#type,
                             config.db_name,
                         )
                         .await

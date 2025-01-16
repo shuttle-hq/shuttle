@@ -12,8 +12,10 @@ use clap::{
     Args, Parser, Subcommand, ValueEnum,
 };
 use clap_complete::Shell;
-use shuttle_common::constants::{EXAMPLES_REPO, SHUTTLE_CONSOLE_URL};
-use shuttle_common::resource;
+use shuttle_common::{
+    constants::{EXAMPLES_REPO, SHUTTLE_CONSOLE_URL},
+    resource::ResourceTypeBeta,
+};
 
 #[derive(Parser)]
 #[command(
@@ -54,7 +56,6 @@ pub struct ProjectArgs {
     pub working_directory: PathBuf,
     /// Specify the name or id of the project
     #[arg(global = true, long = "name", visible_alias = "id")]
-    // in alpha mode, this is always a name
     pub name_or_id: Option<String>,
 }
 
@@ -211,7 +212,7 @@ pub enum ResourceCommand {
         /// Type of the resource to delete.
         /// Use the string in the 'Type' column as displayed in the `resource list` command.
         /// For example, 'database::shared::postgres'.
-        resource_type: resource::Type,
+        resource_type: ResourceTypeBeta,
         #[command(flatten)]
         confirmation: ConfirmationArgs,
     },
@@ -220,7 +221,7 @@ pub enum ResourceCommand {
         /// Type of the resource to dump.
         /// Use the string in the 'Type' column as displayed in the `resource list` command.
         /// For example, 'database::shared::postgres'.
-        resource_type: resource::Type,
+        resource_type: ResourceTypeBeta,
     },
 }
 

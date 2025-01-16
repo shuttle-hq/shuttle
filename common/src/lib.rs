@@ -2,13 +2,9 @@
 pub mod certificate;
 pub mod constants;
 #[cfg(feature = "models")]
-pub mod database;
-#[cfg(feature = "models")]
 pub mod deployment;
 #[cfg(feature = "models")]
 pub mod log;
-#[cfg(feature = "models")]
-pub use log::LogItemBeta;
 #[cfg(feature = "models")]
 pub mod models;
 #[cfg(feature = "models")]

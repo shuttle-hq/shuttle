@@ -56,7 +56,7 @@ async fn not_found() {
         .unwrap();
 }
 
-// Test that alpha projects are compiled correctly. Any shared library crates should not be compiled too
+// Test that workspace projects are compiled correctly
 #[tokio::test]
 async fn workspace() {
     let (tx, mut rx) = tokio::sync::mpsc::channel::<String>(256);

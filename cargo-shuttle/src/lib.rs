@@ -32,6 +32,7 @@ use shuttle_common::{
         RUNTIME_NAME, STORAGE_DIRNAME, TEMPLATES_SCHEMA_VERSION,
     },
     deployment::DeploymentStateBeta,
+    log::LogItemBeta,
     models::{
         auth::{KeyMessage, TokenMessage},
         deployment::{
@@ -43,7 +44,7 @@ use shuttle_common::{
         project::{self, ProjectUpdateRequestBeta},
         resource::{get_certificates_table_beta, get_resource_tables_beta},
     },
-    resource, LogItemBeta,
+    resource::ResourceTypeBeta,
 };
 use shuttle_service::{
     builder::{async_cargo_metadata, build_workspace, find_shuttle_packages, BuiltService},
@@ -1014,7 +1015,7 @@ impl Shuttle {
 
     async fn resource_delete(
         &self,
-        resource_type: &resource::Type,
+        resource_type: &ResourceTypeBeta,
         no_confirm: bool,
     ) -> Result<()> {
         let client = self.client.as_ref().unwrap();
@@ -1060,7 +1061,7 @@ impl Shuttle {
         Ok(())
     }
 
-    async fn resource_dump(&self, _resource_type: &resource::Type) -> Result<()> {
+    async fn resource_dump(&self, _resource_type: &ResourceTypeBeta) -> Result<()> {
         unimplemented!();
         // let client = self.client.as_ref().unwrap();
         // let bytes = client...;

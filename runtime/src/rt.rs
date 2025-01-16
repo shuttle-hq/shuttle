@@ -13,7 +13,7 @@ use hyper::{
 };
 use shuttle_api_client::ShuttleApiClient;
 use shuttle_common::{
-    resource::{ProvisionResourceRequestBeta, ResourceInput, ResourceState, ResourceTypeBeta},
+    resource::{ResourceInputBeta, ResourceState, ResourceTypeBeta},
     secrets::Secret,
 };
 use shuttle_service::{Environment, ResourceFactory, Service};
@@ -144,7 +144,8 @@ pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + S
     let values = match resources
         .iter()
         .map(|bytes| {
-            serde_json::from_slice::<ResourceInput>(bytes).context("deserializing resource input")
+            serde_json::from_slice::<ResourceInputBeta>(bytes)
+                .context("deserializing resource input")
         })
         .collect::<anyhow::Result<Vec<_>>>()
     {
@@ -160,10 +161,8 @@ pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + S
         .zip(values)
         // ignore non-Shuttle resource items
         .filter_map(|(bytes, value)| match value {
-            ResourceInput::Shuttle(shuttle_resource) => {
-                Some((bytes, ProvisionResourceRequestBeta::from(shuttle_resource)))
-            }
-            ResourceInput::Custom(_) => None,
+            ResourceInputBeta::Shuttle(shuttle_resource) => Some((bytes, shuttle_resource)),
+            ResourceInputBeta::Custom(_) => None,
         })
     {
         // Secrets don't need to be requested here since we already got them above.

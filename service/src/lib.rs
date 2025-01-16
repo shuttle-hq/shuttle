@@ -6,9 +6,8 @@ use async_trait::async_trait;
 use serde::{de::DeserializeOwned, Serialize};
 use shuttle_common::constants::STORAGE_DIRNAME;
 pub use shuttle_common::{
-    database,
     deployment::{DeploymentMetadata, Environment},
-    resource::{self, ShuttleResourceOutput},
+    resource,
     secrets::Secret,
     ContainerRequest, ContainerResponse, DatabaseInfo, DatabaseResource, DbInput, SecretStore,
 };
@@ -37,8 +36,8 @@ pub trait ResourceInputBuilder: Default {
     /// The input for requesting this resource.
     ///
     /// If the input is a [`shuttle_common::resource::ProvisionResourceRequest`],
-    /// then the resource will be provisioned and the [`ResourceInputBuilder::Output`]
-    /// will be a [`shuttle_common::resource::ShuttleResourceOutput<T>`] with the resource's associated output type.
+    /// then the resource will be provisioned and the associated output type will
+    /// be put in [`ResourceInputBuilder::Output`].
     type Input: Serialize + DeserializeOwned;
 
     /// The output from provisioning this resource.
@@ -96,17 +95,11 @@ pub trait IntoResource<R>: Serialize + DeserializeOwned {
     async fn into_resource(self) -> Result<R, crate::Error>;
 }
 
-// Base impls for [`ResourceInputBuilder::Output`] types that don't need to convert into anything else
+// Base impl for [`ResourceInputBuilder::Output`] types that don't need to convert into anything else
 #[async_trait]
 impl<R: Serialize + DeserializeOwned + Send> IntoResource<R> for R {
     async fn into_resource(self) -> Result<R, crate::Error> {
         Ok(self)
-    }
-}
-#[async_trait]
-impl<R: Serialize + DeserializeOwned + Send> IntoResource<R> for ShuttleResourceOutput<R> {
-    async fn into_resource(self) -> Result<R, crate::Error> {
-        Ok(self.output)
     }
 }
 

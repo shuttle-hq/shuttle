@@ -9,7 +9,7 @@ use tokio::io::AsyncBufReadExt;
 use tracing::{debug, error, info, trace};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-/// This represents a compiled alpha service
+/// This represents a compiled Shuttle service
 pub struct BuiltService {
     pub workspace_path: PathBuf,
     pub manifest_path: PathBuf,

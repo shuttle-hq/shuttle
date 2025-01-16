@@ -2,9 +2,9 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use shuttle_service::{
     error::{CustomError, Error},
-    resource::{ProvisionResourceRequest, Type},
+    resource::{ProvisionResourceRequestBeta, ResourceTypeBeta},
     ContainerRequest, ContainerResponse, Environment, IntoResource, ResourceFactory,
-    ResourceInputBuilder, ShuttleResourceOutput,
+    ResourceInputBuilder,
 };
 
 /// A Qdrant vector database
@@ -37,7 +37,7 @@ impl Qdrant {
 #[derive(Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum MaybeRequest {
-    Request(ProvisionResourceRequest),
+    Request(ProvisionResourceRequestBeta),
     NotRequest(QdrantClientConfigWrap),
 }
 
@@ -64,9 +64,9 @@ impl ResourceInputBuilder for Qdrant {
                     url: local_url,
                     api_key: self.api_key,
                 })),
-                None => Ok(MaybeRequest::Request(ProvisionResourceRequest::new(
-                    Type::Container,
-                    serde_json::to_value(ContainerRequest {
+                None => Ok(MaybeRequest::Request(ProvisionResourceRequestBeta {
+                    r#type: ResourceTypeBeta::Container,
+                    config: serde_json::to_value(ContainerRequest {
                         project_name: md.project_name,
                         container_name: "qdrant".to_string(),
                         image: "docker.io/qdrant/qdrant:v1.10.0".to_string(),
@@ -74,8 +74,7 @@ impl ResourceInputBuilder for Qdrant {
                         env: vec![],
                     })
                     .unwrap(),
-                    serde_json::Value::Null,
-                ))),
+                })),
             },
         }
     }
@@ -84,7 +83,7 @@ impl ResourceInputBuilder for Qdrant {
 #[derive(Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum OutputWrapper {
-    Container(ShuttleResourceOutput<ContainerResponse>),
+    Container(ContainerResponse),
     Config(QdrantClientConfigWrap),
 }
 
@@ -101,7 +100,7 @@ impl IntoResource<qdrant_client::Qdrant> for OutputWrapper {
     async fn into_resource(self) -> Result<qdrant_client::Qdrant, Error> {
         let config = match self {
             Self::Container(output) => QdrantClientConfigWrap {
-                url: format!("http://localhost:{}", output.output.host_port),
+                url: format!("http://localhost:{}", output.host_port),
                 api_key: None,
             },
             Self::Config(c) => c,

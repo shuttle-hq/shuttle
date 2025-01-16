@@ -1,6 +1,8 @@
 #![doc = include_str!("../README.md")]
 use std::net::SocketAddr;
 
+pub use rocket;
+
 /// A wrapper type for [rocket::Rocket<rocket::Build>] so we can implement [shuttle_runtime::Service] for it.
 pub struct RocketService(pub rocket::Rocket<rocket::Build>);
 

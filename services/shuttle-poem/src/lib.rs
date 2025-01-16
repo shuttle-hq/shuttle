@@ -1,4 +1,7 @@
 #![doc = include_str!("../README.md")]
+
+pub use poem;
+
 /// A wrapper type for [poem::Endpoint] so we can implement [shuttle_runtime::Service] for it.
 pub struct PoemService<T>(pub T);
 

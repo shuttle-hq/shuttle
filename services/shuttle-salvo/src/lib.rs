@@ -3,6 +3,8 @@ use salvo::Listener;
 use shuttle_runtime::Error;
 use std::net::SocketAddr;
 
+pub use salvo;
+
 /// A wrapper type for [salvo::Router] so we can implement [shuttle_runtime::Service] for it.
 pub struct SalvoService(pub salvo::Router);
 

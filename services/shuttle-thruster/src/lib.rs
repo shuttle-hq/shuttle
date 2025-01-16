@@ -2,6 +2,8 @@
 use shuttle_runtime::Error;
 use std::net::SocketAddr;
 
+pub use thruster;
+
 /// A wrapper type for [thruster::ThrusterServer] so we can implement [shuttle_runtime::Service] for it.
 pub struct ThrusterService<T>(pub T);
 

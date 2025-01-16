@@ -19,10 +19,8 @@ semver = { workspace = true }
 serde = { workspace = true, features = ["derive", "std"] }
 serde_json = { workspace = true }
 strum = { workspace = true, features = ["derive"] }
-thiserror = { workspace = true }
 tracing = { workspace = true, features = ["std"], optional = true }
 typeshare = { workspace = true }
-url = { workspace = true, features = ["serde"] }
 zeroize = { workspace = true }
 
 [features]

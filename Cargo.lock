@@ -3600,10 +3600,8 @@ dependencies = [
  "serde",
  "serde_json",
  "strum 0.26.3",
- "thiserror 2.0.11",
  "tracing",
  "typeshare",
- "url",
  "zeroize",
 ]
 
@@ -4380,7 +4378,6 @@ dependencies = [
  "form_urlencoded",
  "idna",
  "percent-encoding",
- "serde",
 ]
 
 [[package]]

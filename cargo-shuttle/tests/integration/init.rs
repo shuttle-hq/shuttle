@@ -20,6 +20,7 @@ async fn non_interactive_basic_init() {
     let args = ShuttleArgs::parse_from([
         "cargo-shuttle",
         "init",
+        "--offline",
         "--api-key",
         "dh9z58jttoes3qvt",
         "--force-name",
@@ -52,6 +53,7 @@ async fn non_interactive_rocket_init() {
     let args = ShuttleArgs::parse_from([
         "cargo-shuttle",
         "init",
+        "--offline",
         "--api-key",
         "dh9z58jttoes3qvt",
         "--force-name",
@@ -82,6 +84,7 @@ async fn non_interactive_init_with_from_url() {
     let args = ShuttleArgs::parse_from([
         "cargo-shuttle",
         "init",
+        "--offline",
         "--api-key",
         "dh9z58jttoes3qvt",
         "--force-name",
@@ -116,6 +119,7 @@ async fn non_interactive_init_with_from_gh() {
     let args = ShuttleArgs::parse_from([
         "cargo-shuttle",
         "init",
+        "--offline",
         "--api-key",
         "dh9z58jttoes3qvt",
         "--force-name",
@@ -150,6 +154,7 @@ async fn non_interactive_init_with_from_repo_name() {
     let args = ShuttleArgs::parse_from([
         "cargo-shuttle",
         "init",
+        "--offline",
         "--api-key",
         "dh9z58jttoes3qvt",
         "--force-name",
@@ -184,6 +189,7 @@ async fn non_interactive_init_with_from_local_path() {
     let args = ShuttleArgs::parse_from([
         "cargo-shuttle",
         "init",
+        "--offline",
         "--api-key",
         "dh9z58jttoes3qvt",
         "--force-name",
@@ -218,6 +224,7 @@ async fn non_interactive_init_from_local_path_with_workspace() {
     let args = ShuttleArgs::parse_from([
         "cargo-shuttle",
         "init",
+        "--offline",
         "--api-key",
         "dh9z58jttoes3qvt",
         "--force-name",
@@ -262,7 +269,6 @@ fn interactive_rocket_init() -> Result<(), Box<dyn std::error::Error>> {
     ]);
     let mut session = rexpect::session::spawn_command(command, Some(EXPECT_TIMEOUT_MS))?;
 
-    session.exp_string("What do you want to name your project?")?;
     session.exp_string("Project name")?;
     session.send_line("my-project")?;
     session.exp_string("Where should we create this project?")?;
@@ -271,7 +277,7 @@ fn interactive_rocket_init() -> Result<(), Box<dyn std::error::Error>> {
     session.exp_string("Which one do you want to use?")?;
     session.send_line("\t\t")?;
     session.exp_string("Creating project")?;
-    session.exp_string("container on Shuttle?")?;
+    session.exp_string("Create a project on Shuttle with the name")?;
     session.send("n")?;
     session.flush()?;
     session.exp_string("no")?;
@@ -299,7 +305,6 @@ fn interactive_rocket_init_manually_choose_template() -> Result<(), Box<dyn std:
     ]);
     let mut session = rexpect::session::spawn_command(command, Some(EXPECT_TIMEOUT_MS))?;
 
-    session.exp_string("What do you want to name your project?")?;
     session.exp_string("Project name")?;
     session.send_line("my-project")?;
     session.exp_string("Where should we create this project?")?;
@@ -308,7 +313,7 @@ fn interactive_rocket_init_manually_choose_template() -> Result<(), Box<dyn std:
     session.exp_string("Which one do you want to use?")?;
     session.send_line("\t\t")?;
     session.exp_string("Creating project")?;
-    session.exp_string("container on Shuttle?")?;
+    session.exp_string("Create a project on Shuttle with the name")?;
     session.send("n")?;
     session.flush()?;
     session.exp_string("no")?;
@@ -338,14 +343,13 @@ fn interactive_rocket_init_dont_prompt_framework() -> Result<(), Box<dyn std::er
     ]);
     let mut session = rexpect::session::spawn_command(command, Some(EXPECT_TIMEOUT_MS))?;
 
-    session.exp_string("What do you want to name your project?")?;
     session.exp_string("Project name")?;
     session.send_line("my-project")?;
     session.exp_string("Where should we create this project?")?;
     session.exp_string("Directory")?;
     session.send_line(temp_dir_path.join("my-project").to_str().unwrap())?;
     session.exp_string("Creating project")?;
-    session.exp_string("container on Shuttle?")?;
+    session.exp_string("Create a project on Shuttle with the name")?;
     session.send("n")?;
     session.flush()?;
     session.exp_string("no")?;
@@ -381,7 +385,7 @@ fn interactive_rocket_init_dont_prompt_name() -> Result<(), Box<dyn std::error::
     session.exp_string("Which one do you want to use?")?;
     session.send_line("\t\t")?;
     session.exp_string("Creating project")?;
-    session.exp_string("container on Shuttle?")?;
+    session.exp_string("Create a project on Shuttle with the name")?;
     session.send("n")?;
     session.flush()?;
     session.exp_string("no")?;
@@ -430,7 +434,7 @@ fn interactive_rocket_init_prompt_path_dirty_dir() -> Result<(), Box<dyn std::er
     session.flush()?;
     session.exp_string("yes")?;
     session.exp_string("Creating project")?;
-    session.exp_string("container on Shuttle?")?;
+    session.exp_string("Create a project on Shuttle with the name")?;
     session.send("n")?;
     session.flush()?;
     session.exp_string("no")?;

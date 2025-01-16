@@ -791,7 +791,7 @@ impl Shuttle {
         // keep the socket alive with ping/pong
         let pinger = tokio::spawn(async move {
             loop {
-                if let Err(e) = tx.send(Message::Ping(Vec::new())).await {
+                if let Err(e) = tx.send(Message::Ping(Default::default())).await {
                     error!(error = %e, "Error when pinging websocket");
                     break;
                 };
@@ -1227,7 +1227,7 @@ impl Shuttle {
             project_name: project_name.clone(),
             secrets,
         });
-        ProvisionerServerBeta::start(state, &api_addr);
+        tokio::spawn(async move { ProvisionerServerBeta::run(state, &api_addr).await });
 
         println!(
             "\n    {} {} on http://{}:{}\n",

@@ -9,7 +9,7 @@ use crossterm::style::Stylize;
 #[cfg(feature = "axum")]
 impl axum::response::IntoResponse for ApiError {
     fn into_response(self) -> axum::response::Response {
-        warn!("{}", self.message);
+        tracing::warn!("{}", self.message);
 
         (self.status(), axum::Json(self)).into_response()
     }

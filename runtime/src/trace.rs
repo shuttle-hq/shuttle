@@ -1,13 +1,17 @@
-use opentelemetry::trace::{SpanId, TraceId};
+use std::{
+    collections::BTreeMap,
+    marker::PhantomData,
+    sync::Arc,
+    time::{Duration, SystemTime},
+};
+
 use opentelemetry::{
     global,
     logs::{LogRecord as OtelLogRecord, Logger as OtelLogger, LoggerProvider as _, Severity},
-    trace::TracerProvider as _,
+    trace::{SpanId, TraceId, TracerProvider as _},
     KeyValue,
 };
-use opentelemetry_otlp::{
-    WithExportConfig, OTEL_EXPORTER_OTLP_ENDPOINT, OTEL_EXPORTER_OTLP_ENDPOINT_DEFAULT,
-};
+use opentelemetry_otlp::{WithExportConfig, OTEL_EXPORTER_OTLP_ENDPOINT};
 use opentelemetry_sdk::{
     logs::{LogRecord, Logger, LoggerProvider},
     metrics::{MeterProviderBuilder, PeriodicReader, SdkMeterProvider, Temporality},
@@ -23,8 +27,6 @@ use opentelemetry_semantic_conventions::{
     },
     SCHEMA_URL,
 };
-use std::time::SystemTime;
-use std::{collections::BTreeMap, marker::PhantomData, sync::Arc, time::Duration};
 use tracing::Event as TracingEvent;
 use tracing_core::{
     span::{Attributes, Id, Record},
@@ -380,36 +382,42 @@ pub fn resource(crate_name: &'static str, package_version: &'static str) -> Reso
     )
 }
 
-pub fn init_log_subscriber(endpoint: &str, resource: Resource) -> LoggerProvider {
-    let exporter = opentelemetry_otlp::LogExporter::builder()
-        .with_http()
-        .with_endpoint(format!("{endpoint}/v1/logs"))
-        .build()
-        .unwrap();
+pub fn init_log_subscriber(endpoint: &Option<String>, resource: Resource) -> LoggerProvider {
+    let mut builder = LoggerProvider::builder().with_resource(resource);
 
-    LoggerProvider::builder()
-        .with_batch_exporter(exporter, runtime::Tokio)
-        .with_resource(resource)
-        .build()
+    if let Some(endpoint) = endpoint {
+        let exporter = opentelemetry_otlp::LogExporter::builder()
+            .with_http()
+            .with_endpoint(format!("{endpoint}/v1/logs"))
+            .build()
+            .unwrap();
+
+        builder = builder.with_batch_exporter(exporter, runtime::Tokio);
+    }
+
+    builder.build()
 }
 
 // Construct MeterProvider for MetricsLayer
-pub fn init_meter_provider(endpoint: &str, resource: Resource) -> SdkMeterProvider {
-    let exporter = opentelemetry_otlp::MetricExporter::builder()
-        .with_temporality(Temporality::default())
-        .with_http()
-        .with_endpoint(format!("{endpoint}/v1/metrics"))
-        .build()
-        .unwrap();
+pub fn init_meter_provider(endpoint: &Option<String>, resource: Resource) -> SdkMeterProvider {
+    let mut builder = MeterProviderBuilder::default().with_resource(resource);
 
-    let reader = PeriodicReader::builder(exporter, runtime::Tokio)
-        .with_interval(Duration::from_secs(30)) // TODO(the-wondersmith): make metrics read period configurable
-        .build();
+    if let Some(endpoint) = endpoint {
+        let exporter = opentelemetry_otlp::MetricExporter::builder()
+            .with_temporality(Temporality::default())
+            .with_http()
+            .with_endpoint(format!("{endpoint}/v1/metrics"))
+            .build()
+            .unwrap();
 
-    let provider = MeterProviderBuilder::default()
-        .with_resource(resource)
-        .with_reader(reader)
-        .build();
+        let reader = PeriodicReader::builder(exporter, runtime::Tokio)
+            .with_interval(Duration::from_secs(30)) // TODO(the-wondersmith): make metrics read period configurable
+            .build();
+
+        builder = builder.with_reader(reader);
+    }
+
+    let provider = builder.build();
 
     global::set_meter_provider(provider.clone());
 
@@ -417,22 +425,26 @@ pub fn init_meter_provider(endpoint: &str, resource: Resource) -> SdkMeterProvid
 }
 
 // Construct TracerProvider for OpenTelemetryLayer
-pub fn init_tracer_provider(endpoint: &str, resource: Resource) -> TracerProvider {
-    let exporter = opentelemetry_otlp::SpanExporter::builder()
-        .with_http()
-        .with_endpoint(format!("{endpoint}/v1/traces"))
-        .build()
-        .unwrap();
+pub fn init_tracer_provider(endpoint: &Option<String>, resource: Resource) -> TracerProvider {
+    // TODO(the-wondersmith): make trace sample rate & strategy configurable
+    let sampler = Sampler::ParentBased(Box::new(Sampler::TraceIdRatioBased(1.0)));
 
-    let provider = TracerProvider::builder()
-        // Customize sampling strategy
-        .with_sampler(Sampler::ParentBased(Box::new(Sampler::TraceIdRatioBased(
-            1.0, // TODO(the-wondersmith): make trace sample rate configurable
-        ))))
-        .with_id_generator(RandomIdGenerator::default())
-        .with_batch_exporter(exporter, runtime::Tokio)
+    let mut builder = TracerProvider::builder()
+        .with_sampler(sampler)
         .with_resource(resource)
-        .build();
+        .with_id_generator(RandomIdGenerator::default());
+
+    if let Some(endpoint) = endpoint {
+        let exporter = opentelemetry_otlp::SpanExporter::builder()
+            .with_http()
+            .with_endpoint(format!("{endpoint}/v1/traces"))
+            .build()
+            .unwrap();
+
+        builder = builder.with_batch_exporter(exporter, runtime::Tokio);
+    }
+
+    let provider = builder.build();
 
     global::set_tracer_provider(provider.clone());
 
@@ -449,15 +461,10 @@ pub fn init_tracing_subscriber(
     let resource = resource(crate_name, package_version);
 
     // The OTLP_HOST env var is useful for setting a specific host when running locally
-    let endpoint = std::env::var(OTEL_EXPORTER_OTLP_ENDPOINT)
-        .unwrap_or(OTEL_EXPORTER_OTLP_ENDPOINT_DEFAULT.into());
+    let endpoint = std::env::var(OTEL_EXPORTER_OTLP_ENDPOINT).ok();
 
     let tracer = init_tracer_provider(&endpoint, resource.clone());
     let meter = init_meter_provider(&endpoint, resource.clone());
-
-    let level_filter =
-        std::env::var("RUST_LOG").unwrap_or_else(|_| format!("info,{}=debug", project_name));
-
     let logger = init_log_subscriber(&endpoint, resource);
 
     let level_filter =
@@ -475,6 +482,13 @@ pub fn init_tracing_subscriber(
         .and_then(LogCourier::new(logger.logger("shuttle-telemetry")));
 
     tracing_subscriber::registry().with(layers).init();
+
+    if endpoint.is_none() {
+        tracing::warn!(
+            "No value set for `OTEL_EXPORTER_OTLP_ENDPOINT` env var, \
+            declining to attach OTLP exporter to default tracing subscriber"
+        );
+    }
 
     ProviderGuard {
         logger,

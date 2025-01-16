@@ -18,11 +18,14 @@ use crossterm::{
     QueueableCommand,
 };
 use futures::StreamExt;
+use http_body_util::{combinators::BoxBody, BodyExt, Empty, Full};
 use hyper::{
-    body,
-    service::{make_service_fn, service_fn},
-    Body, Method, Request as HyperRequest, Response, Server,
+    body::{self, Bytes},
+    server::conn::http1,
+    service::service_fn,
+    Method, Request as HyperRequest, Response,
 };
+use hyper_util::rt::TokioIo;
 use portpicker::pick_unused_port;
 use shuttle_common::{
     models::resource::{
@@ -32,7 +35,7 @@ use shuttle_common::{
     tables::get_resource_tables_beta,
     ContainerRequest, ContainerResponse, DatabaseInfo, DbInput,
 };
-use tokio::time::sleep;
+use tokio::{net::TcpListener, time::sleep};
 use tracing::{debug, error, trace};
 
 /// A provisioner for local runs
@@ -454,44 +457,48 @@ pub struct ProvApiState {
 pub struct ProvisionerServerBeta;
 
 impl ProvisionerServerBeta {
-    pub fn start(state: Arc<ProvApiState>, api_addr: &SocketAddr) {
-        let make_svc = make_service_fn(move |_conn| {
-            let state = state.clone();
-            async {
-                Ok::<_, Infallible>(service_fn(move |req| {
-                    let state = state.clone();
-                    handler(state, req)
-                }))
-            }
-        });
-        let server = Server::bind(api_addr).serve(make_svc);
-        tokio::spawn(async move {
-            if let Err(e) = server.await {
-                eprintln!("Provisioner server error: {}", e);
-                exit(1);
-            }
-        });
+    pub async fn run(
+        state: Arc<ProvApiState>,
+        api_addr: &SocketAddr,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let listener = TcpListener::bind(api_addr).await?;
+        loop {
+            let (stream, _) = listener.accept().await?;
+            let io = TokioIo::new(stream);
+
+            let state = Arc::clone(&state);
+            tokio::task::spawn(async move {
+                if let Err(err) = http1::Builder::new()
+                    .serve_connection(io, service_fn(|req| handler(Arc::clone(&state), req)))
+                    .await
+                {
+                    eprintln!("Provisioner server error: {:?}", err);
+                    exit(1);
+                }
+            });
+        }
     }
 }
 
 pub async fn handler(
     state: Arc<ProvApiState>,
-    req: HyperRequest<Body>,
-) -> std::result::Result<Response<Body>, hyper::Error> {
+    req: HyperRequest<body::Incoming>,
+) -> std::result::Result<Response<BoxBody<Bytes, Infallible>>, hyper::http::Error> {
     let method = req.method().clone();
     let uri = req.uri().clone();
     debug!("Received {method} {uri}");
 
-    let body = body::to_bytes(req.into_body()).await?.to_vec();
-    let res = match provision(state, method, uri.to_string().as_str(), body).await {
-        Ok(bytes) => Response::new(Body::from(bytes)),
+    let body = req.into_body().collect().await.unwrap().to_bytes();
+
+    match provision(state, method, uri.to_string().as_str(), body.to_vec()).await {
+        Ok(bytes) => Response::builder()
+            .status(200)
+            .body(BoxBody::new(Full::new(Bytes::from(bytes)))),
         Err(e) => {
             eprintln!("Encountered error when provisioning: {e}");
-            Response::builder().status(500).body(Body::empty()).unwrap()
+            Response::builder().status(500).body(Empty::new().boxed())
         }
-    };
-
-    Ok(res)
+    }
 }
 
 async fn provision(

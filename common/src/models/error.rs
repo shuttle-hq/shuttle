@@ -1,9 +1,10 @@
 use std::fmt::{Display, Formatter};
 
-use crossterm::style::Stylize;
 use http::StatusCode;
 use serde::{Deserialize, Serialize};
-use tracing::{error, warn};
+
+#[cfg(feature = "display")]
+use crossterm::style::Stylize;
 
 #[cfg(feature = "axum")]
 impl axum::response::IntoResponse for ApiError {
@@ -31,11 +32,12 @@ impl ApiError {
 
     /// Creates an internal error without exposing sensitive information to the user.
     #[inline(always)]
+    #[allow(unused_variables)]
     pub fn internal_safe<E>(message: &str, error: E) -> Self
     where
         E: std::error::Error + 'static,
     {
-        error!(error = &error as &dyn std::error::Error, "{message}");
+        tracing::error!(error = &error as &dyn std::error::Error, "{message}");
 
         // Return the raw error during debug builds
         #[cfg(debug_assertions)]
@@ -138,7 +140,7 @@ where
             Ok(value) => Ok(value),
             Err(error) => Err({
                 let message = message();
-                warn!(
+                tracing::warn!(
                     error = &error as &dyn std::error::Error,
                     "bad request: {message}"
                 );
@@ -157,7 +159,7 @@ where
             Ok(value) => Ok(value),
             Err(error) => Err({
                 let message = message();
-                warn!(
+                tracing::warn!(
                     error = &error as &dyn std::error::Error,
                     "not found: {message}"
                 );
@@ -209,12 +211,15 @@ impl<T> ErrorContext<T> for Option<T> {
 
 impl Display for ApiError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(
+        #[cfg(feature = "display")]
+        return write!(
             f,
             "{}\nMessage: {}",
             self.status().to_string().bold(),
             self.message.to_string().red()
-        )
+        );
+        #[cfg(not(feature = "display"))]
+        return write!(f, "{}\nMessage: {}", self.status(), self.message);
     }
 }
 

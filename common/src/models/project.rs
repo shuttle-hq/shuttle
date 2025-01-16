@@ -1,14 +1,11 @@
-use std::fmt::Write;
-use std::str::FromStr;
-
-use chrono::{DateTime, SecondsFormat, Utc};
-use comfy_table::{
-    presets::{NOTHING, UTF8_BORDERS_ONLY},
-    Attribute, Cell, Color, ContentArrangement, Table,
-};
-use crossterm::style::Stylize;
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use strum::{Display, EnumString};
+
+#[cfg(feature = "display")]
+use crossterm::style::Stylize;
+#[cfg(feature = "display")]
+use std::fmt::Write;
 
 use super::deployment::DeploymentStateBeta;
 
@@ -34,6 +31,7 @@ pub struct ProjectResponseBeta {
 }
 
 impl ProjectResponseBeta {
+    #[cfg(feature = "display")]
     pub fn to_string_colored(&self) -> String {
         let mut s = String::new();
         writeln!(&mut s, "{}", "Project info:".bold()).unwrap();
@@ -52,7 +50,8 @@ impl ProjectResponseBeta {
         writeln!(
             &mut s,
             "  Created: {}",
-            self.created_at.to_rfc3339_opts(SecondsFormat::Secs, true)
+            self.created_at
+                .to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
         )
         .unwrap();
         writeln!(&mut s, "  URIs:").unwrap();
@@ -92,34 +91,4 @@ pub enum ComputeTier {
     L,
     XL,
     XXL,
-}
-
-pub fn get_projects_table_beta(projects: &[ProjectResponseBeta], raw: bool) -> String {
-    let mut table = Table::new();
-    table
-        .load_preset(if raw { NOTHING } else { UTF8_BORDERS_ONLY })
-        .set_content_arrangement(ContentArrangement::Disabled)
-        .set_header(vec!["Project ID", "Project Name", "Deployment Status"]);
-
-    for project in projects {
-        let state = project
-            .deployment_state
-            .as_ref()
-            .map(|s| s.to_string())
-            .unwrap_or_default();
-        let color = project
-            .deployment_state
-            .as_ref()
-            .map(|s| s.get_color())
-            .unwrap_or_default();
-        table.add_row(vec![
-            Cell::new(&project.id).add_attribute(Attribute::Bold),
-            Cell::new(&project.name),
-            Cell::new(state)
-                // Unwrap is safe because Color::from_str returns the color white if the argument is not a Color.
-                .fg(Color::from_str(color).unwrap()),
-        ]);
-    }
-
-    table.to_string()
 }

@@ -27,8 +27,10 @@ zeroize = { workspace = true }
 
 [features]
 axum = ["dep:axum"]
-display = ["chrono/clock", "comfy-table", "crossterm"]
-models = ["chrono/serde", "display", "tracing"]
+display = ["chrono/clock", "dep:crossterm"]
+models = ["chrono/serde", "tracing"]
+tables = ["models", "display", "dep:comfy-table"]
+tracing = ["dep:tracing"]
 
 [package.metadata.docs.rs]
 all-features = true

@@ -26,10 +26,10 @@ use hyper::{
 use portpicker::pick_unused_port;
 use shuttle_common::{
     models::resource::{
-        self, get_resource_tables_beta, ProvisionResourceRequestBeta, ResourceResponseBeta,
-        ResourceState, ResourceTypeBeta,
+        self, ProvisionResourceRequestBeta, ResourceResponseBeta, ResourceState, ResourceTypeBeta,
     },
     secrets::Secret,
+    tables::get_resource_tables_beta,
     ContainerRequest, ContainerResponse, DatabaseInfo, DbInput,
 };
 use tokio::time::sleep;

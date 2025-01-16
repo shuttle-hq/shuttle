@@ -26,6 +26,7 @@ use indicatif::ProgressBar;
 use indoc::formatdoc;
 use reqwest::header::HeaderMap;
 use shuttle_api_client::ShuttleApiClient;
+use shuttle_common::tables::get_projects_table_beta;
 use shuttle_common::{
     constants::{
         headers::X_CARGO_SHUTTLE_VERSION, API_URL_DEFAULT_BETA, EXAMPLES_REPO, EXECUTABLE_DIRNAME,
@@ -33,17 +34,17 @@ use shuttle_common::{
     },
     models::{
         auth::{KeyMessage, TokenMessage},
-        certificate::get_certificates_table_beta,
         deployment::{
-            deployments_table_beta, BuildArgsBeta, BuildArgsRustBeta, BuildMetaBeta,
-            DeploymentRequestBeta, DeploymentRequestBuildArchiveBeta, DeploymentRequestImageBeta,
-            DeploymentResponseBeta, DeploymentStateBeta, GIT_STRINGS_MAX_LENGTH,
+            BuildArgsBeta, BuildArgsRustBeta, BuildMetaBeta, DeploymentRequestBeta,
+            DeploymentRequestBuildArchiveBeta, DeploymentRequestImageBeta, DeploymentResponseBeta,
+            DeploymentStateBeta, GIT_STRINGS_MAX_LENGTH,
         },
         error::ApiError,
         log::LogItemBeta,
-        project::{self, ProjectUpdateRequestBeta},
-        resource::{get_resource_tables_beta, ResourceTypeBeta},
+        project::ProjectUpdateRequestBeta,
+        resource::ResourceTypeBeta,
     },
+    tables::{deployments_table_beta, get_certificates_table_beta, get_resource_tables_beta},
 };
 use shuttle_service::{
     builder::{async_cargo_metadata, build_workspace, find_shuttle_packages, BuiltService},
@@ -1594,7 +1595,7 @@ impl Shuttle {
     async fn projects_list(&self, table_args: TableArgs) -> Result<()> {
         let client = self.client.as_ref().unwrap();
 
-        let projects_table = project::get_projects_table_beta(
+        let projects_table = get_projects_table_beta(
             &client.get_projects_list_beta().await?.projects,
             table_args.raw,
         );

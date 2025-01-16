@@ -1,13 +1,11 @@
-use std::{collections::HashMap, path::PathBuf, str::FromStr};
+use std::{collections::HashMap, path::PathBuf};
 
-use chrono::{DateTime, Local, SecondsFormat, Utc};
-use comfy_table::{
-    presets::{NOTHING, UTF8_BORDERS_ONLY},
-    Attribute, Cell, Color, ContentArrangement, Table,
-};
-use crossterm::style::Stylize;
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use strum::{Display, EnumString};
+
+#[cfg(feature = "display")]
+use crossterm::style::Stylize;
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Display, Serialize, EnumString)]
 #[serde(rename_all = "lowercase")]
@@ -31,6 +29,7 @@ impl DeploymentStateBeta {
     /// We return a &str rather than a Color here, since `comfy-table` re-exports
     /// crossterm::style::Color and we depend on both `comfy-table` and `crossterm`
     /// we may end up with two different versions of Color.
+    #[cfg(feature = "display")]
     pub fn get_color(&self) -> &str {
         match self {
             Self::Pending => "dark_yellow",
@@ -43,7 +42,9 @@ impl DeploymentStateBeta {
             Self::Unknown => "grey",
         }
     }
+    #[cfg(feature = "display")]
     pub fn to_string_colored(&self) -> String {
+        use std::str::FromStr;
         // Unwrap is safe because Color::from_str returns the color white if the argument is not a Color.
         self.to_string()
             .with(crossterm::style::Color::from_str(self.get_color()).unwrap())
@@ -70,6 +71,7 @@ pub struct DeploymentResponseBeta {
     pub build_meta: Option<BuildMetaBeta>,
 }
 
+#[cfg(feature = "display")]
 impl DeploymentResponseBeta {
     pub fn to_string_summary_colored(&self) -> String {
         // TODO: make this look nicer
@@ -88,34 +90,6 @@ impl DeploymentResponseBeta {
             self.uris.join("\n"),
         )
     }
-}
-
-pub fn deployments_table_beta(deployments: &[DeploymentResponseBeta], raw: bool) -> String {
-    let mut table = Table::new();
-    table
-        .load_preset(if raw { NOTHING } else { UTF8_BORDERS_ONLY })
-        .set_content_arrangement(ContentArrangement::Disabled)
-        .set_header(vec!["Deployment ID", "Status", "Date", "Git revision"]);
-
-    for deploy in deployments.iter() {
-        let datetime: DateTime<Local> = DateTime::from(deploy.created_at);
-        table.add_row(vec![
-            Cell::new(&deploy.id).add_attribute(Attribute::Bold),
-            Cell::new(&deploy.state)
-                // Unwrap is safe because Color::from_str returns the color white if str is not a Color.
-                .fg(Color::from_str(deploy.state.get_color()).unwrap()),
-            Cell::new(datetime.to_rfc3339_opts(SecondsFormat::Secs, false)),
-            Cell::new(
-                deploy
-                    .build_meta
-                    .as_ref()
-                    .map(ToString::to_string)
-                    .unwrap_or_default(),
-            ),
-        ]);
-    }
-
-    table.to_string()
 }
 
 #[derive(Deserialize, Serialize)]
@@ -205,6 +179,7 @@ pub struct BuildMetaBeta {
     pub git_dirty: Option<bool>,
 }
 
+#[cfg(feature = "display")]
 impl std::fmt::Display for BuildMetaBeta {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if let Some(true) = self.git_dirty {

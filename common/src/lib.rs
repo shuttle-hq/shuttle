@@ -2,6 +2,8 @@ pub mod constants;
 #[cfg(feature = "models")]
 pub mod models;
 pub mod secrets;
+#[cfg(feature = "tables")]
+pub mod tables;
 pub mod templates;
 
 use std::fmt::Debug;

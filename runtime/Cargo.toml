@@ -20,15 +20,15 @@ anyhow = { workspace = true }
 async-trait = { workspace = true }
 hyper = { workspace = true, features = ["http1", "server", "tcp"] }
 log = { version = "0.4", optional = true, default-features = false }
-opentelemetry = { version = "0.27", optional = true, default-features = false, features = ["logs", "metrics", "trace", "tracing"] }
-opentelemetry-otlp = { version = "0.27", optional = true, default-features = false, features = [
+opentelemetry = { version = "0.27.0", optional = true, default-features = false, features = ["logs", "metrics", "trace", "tracing"] }
+opentelemetry-otlp = { version = "0.27.0", optional = true, default-features = false, features = [
     "http-proto",
     "logs",
     "metrics",
     "reqwest-client",
     "trace",
 ] }
-opentelemetry_sdk = { version = "0.27", optional = true, default-features = false, features = [
+opentelemetry_sdk = { version = "0.27.0", optional = true, default-features = false, features = [
     "http",
     "logs",
     "metrics",
@@ -36,7 +36,7 @@ opentelemetry_sdk = { version = "0.27", optional = true, default-features = fals
     "trace",
     "spec_unstable_logs_enabled",
 ] }
-opentelemetry-semantic-conventions = { version = "0.27", optional = true, default-features = false, features = ["semconv_experimental"] }
+opentelemetry-semantic-conventions = { version = "0.27.0", optional = true, default-features = false, features = ["semconv_experimental"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 strfmt = { workspace = true }

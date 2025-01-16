@@ -182,10 +182,6 @@ pub enum ResourceTypeBeta {
     #[strum(to_string = "database::aws_rds::mariadb")]
     #[serde(rename = "database::aws_rds::mariadb")]
     DatabaseAwsRdsMariaDB,
-    /// Project-specific telemetry configuration data
-    #[strum(to_string = "project::telemetry::config")]
-    #[serde(rename = "project::telemetry::config")]
-    ProjectTelemetryConfig,
     /// (Will probably be removed)
     #[strum(to_string = "secrets")]
     #[serde(rename = "secrets")]
@@ -254,7 +250,7 @@ impl Display for Type {
 // this can be removed when deployers AND r-r no longer hold resources in sqlite state
 #[cfg(feature = "sqlx")]
 mod _sqlx {
-    use std::{borrow::Cow, boxed::Box, str::FromStr};
+    use std::{borrow::Cow, str::FromStr};
 
     use sqlx::{
         postgres::{PgArgumentBuffer, PgValueRef},
@@ -289,16 +285,16 @@ mod _sqlx {
         }
     }
 
-    impl<DB: Database> sqlx::Type<DB> for ResourceState
+    impl<DB: sqlx::Database> sqlx::Type<DB> for ResourceState
     where
         str: sqlx::Type<DB>,
     {
-        fn type_info() -> <DB as Database>::TypeInfo {
+        fn type_info() -> <DB as sqlx::Database>::TypeInfo {
             <str as sqlx::Type<DB>>::type_info()
         }
     }
 
-    impl sqlx::Encode<'_, Postgres> for ResourceState {
+    impl sqlx::Encode<'_, sqlx::Postgres> for ResourceState {
         fn encode_by_ref(&self, buf: &mut PgArgumentBuffer) -> sqlx::encode::IsNull {
             #[allow(clippy::needless_borrows_for_generic_args)]
             <&str as sqlx::Encode<Postgres>>::encode(&self.to_string(), buf)
@@ -311,28 +307,6 @@ mod _sqlx {
 
             let state = ResourceState::from_str(value)?;
             Ok(state)
-        }
-    }
-
-    impl<DB: Database> sqlx::Type<DB> for super::ResourceTypeBeta
-    where
-        str: sqlx::Type<DB>,
-    {
-        fn type_info() -> <DB as Database>::TypeInfo {
-            <str as sqlx::Type<DB>>::type_info()
-        }
-    }
-
-    impl sqlx::Encode<'_, Postgres> for super::ResourceTypeBeta {
-        fn encode_by_ref(&self, args: &mut PgArgumentBuffer) -> sqlx::encode::IsNull {
-            <&str as sqlx::Encode<Postgres>>::encode(self.to_string().as_str(), args)
-        }
-    }
-
-    impl<'r> sqlx::Decode<'r, Postgres> for super::ResourceTypeBeta {
-        fn decode(value: PgValueRef<'r>) -> Result<Self, sqlx::error::BoxDynError> {
-            <&str as sqlx::Decode<Postgres>>::decode(value)
-                .and_then(|value| super::ResourceTypeBeta::from_str(value).map_err(Into::into))
         }
     }
 }

@@ -352,7 +352,7 @@ mod test {
         ];
 
         for input in inputs {
-            let actual = ResourceTypeBeta::from_str(&input.to_string()).unwrap();
+            let actual = ResourceTypeBeta::from_str(input.as_ref()).unwrap();
             assert_eq!(input, actual, ":{} should map back to itself", input);
         }
     }

@@ -25,8 +25,9 @@ pub(crate) fn tokens(_attr: TokenStream, item: TokenStream) -> TokenStream {
                         __runner,
                         env!("CARGO_CRATE_NAME"),
                         env!("CARGO_PKG_VERSION"),
-                ).await;
-            })
+                    )
+                    .await;
+                })
         }
 
         #loader_runner

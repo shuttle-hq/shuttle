@@ -31,7 +31,7 @@ pub enum MaybeRequest {
 }
 
 macro_rules! aws_engine {
-    ($feature:expr, $struct_ident:ident) => {
+    ($feature:expr, $struct_ident:ident, $res_type:ident) => {
         paste::paste! {
             #[cfg(feature = $feature)]
             #[derive(Default)]
@@ -65,7 +65,7 @@ macro_rules! aws_engine {
                     let md = factory.get_metadata();
                     Ok(match md.env {
                         Environment::Deployment => MaybeRequest::Request(ProvisionResourceRequestBeta {
-                            r#type: ResourceTypeBeta::DatabaseAwsRds$struct_ident,
+                            r#type: ResourceTypeBeta::$res_type,
                             config: serde_json::to_value(self.0).unwrap(),
                         }),
                         Environment::Local => match self.0.local_uri {
@@ -73,7 +73,7 @@ macro_rules! aws_engine {
                                 MaybeRequest::NotRequest(DatabaseResource::ConnectionString(local_uri))
                             }
                             None => MaybeRequest::Request(ProvisionResourceRequestBeta {
-                                r#type: ResourceTypeBeta::DatabaseAwsRds$struct_ident,
+                                r#type: ResourceTypeBeta::$res_type,
                                 config: serde_json::to_value(self.0).unwrap(),
                             }),
                         },
@@ -84,11 +84,9 @@ macro_rules! aws_engine {
     };
 }
 
-aws_engine!("postgres", Postgres);
-
-aws_engine!("mysql", MySql);
-
-aws_engine!("mariadb", MariaDB);
+aws_engine!("postgres", Postgres, DatabaseAwsRdsPostgres);
+aws_engine!("mysql", MySql, DatabaseAwsRdsMySql);
+aws_engine!("mariadb", MariaDB, DatabaseAwsRdsMariaDB);
 
 #[derive(Serialize, Deserialize)]
 #[serde(transparent)]

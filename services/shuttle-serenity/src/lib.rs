@@ -2,12 +2,15 @@
 use shuttle_runtime::{CustomError, Error};
 use std::net::SocketAddr;
 
-pub use serenity;
-
 #[cfg(feature = "serenity")]
 use serenity::Client;
 #[cfg(feature = "serenity-0-11")]
 use serenity_0_11::Client;
+
+#[cfg(feature = "serenity")]
+pub use serenity;
+#[cfg(feature = "serenity-0-11")]
+pub use serenity_0_11 as serenity;
 
 /// A wrapper type for [serenity::Client] so we can implement [shuttle_runtime::Service] for it.
 pub struct SerenityService(pub Client);
@@ -31,3 +34,4 @@ impl From<Client> for SerenityService {
 
 #[doc = include_str!("../README.md")]
 pub type ShuttleSerenity = Result<SerenityService, Error>;
+

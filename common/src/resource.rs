@@ -165,7 +165,16 @@ pub enum Type {
 }
 
 #[derive(
-    Clone, Copy, Debug, strum::EnumString, strum::Display, Deserialize, Serialize, Eq, PartialEq,
+    Clone,
+    Copy,
+    Debug,
+    Deserialize,
+    Eq,
+    PartialEq,
+    Serialize,
+    strum::AsRefStr,
+    strum::EnumString,
+    strum::Display,
 )]
 #[typeshare::typeshare]
 // is a flat enum instead of nested enum to allow typeshare

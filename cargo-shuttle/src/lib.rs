@@ -419,7 +419,7 @@ impl Shuttle {
                             }
                             println!(
                                 "{}",
-                                "Template list with incompatible version found. Consider updating cargo-shuttle. Falling back to internal list."
+                                "Template list with incompatible version found. Consider upgrading Shuttle CLI. Falling back to internal list."
                                     .yellow()
                             );
 
@@ -1316,11 +1316,11 @@ impl Shuttle {
                     Some(exit_result)
                 }
                 _ = sigterm_notif.recv() => {
-                    eprintln!("cargo-shuttle received SIGTERM. Killing the runtime...");
+                    eprintln!("Received SIGTERM. Killing the runtime...");
                     None
                 },
                 _ = sigint_notif.recv() => {
-                    eprintln!("cargo-shuttle received SIGINT. Killing the runtime...");
+                    eprintln!("Received SIGINT. Killing the runtime...");
                     None
                 }
             }
@@ -1342,23 +1342,23 @@ impl Shuttle {
                     Some(exit_result)
                 }
                 _ = ctrl_break_notif.recv() => {
-                    eprintln!("cargo-shuttle received ctrl-break.");
+                    eprintln!("Received ctrl-break.");
                     None
                 },
                 _ = ctrl_c_notif.recv() => {
-                    eprintln!("cargo-shuttle received ctrl-c.");
+                    eprintln!("Received ctrl-c.");
                     None
                 },
                 _ = ctrl_close_notif.recv() => {
-                    eprintln!("cargo-shuttle received ctrl-close.");
+                    eprintln!("Received ctrl-close.");
                     None
                 },
                 _ = ctrl_logoff_notif.recv() => {
-                    eprintln!("cargo-shuttle received ctrl-logoff.");
+                    eprintln!("Received ctrl-logoff.");
                     None
                 },
                 _ = ctrl_shutdown_notif.recv() => {
-                    eprintln!("cargo-shuttle received ctrl-shutdown.");
+                    eprintln!("Received ctrl-shutdown.");
                     None
                 }
             }

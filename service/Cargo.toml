@@ -7,37 +7,11 @@ repository.workspace = true
 description = "The core traits for running services on Shuttle (shuttle.dev)"
 homepage = "https://www.shuttle.dev"
 
-[lib]
-doctest = false
-
 [dependencies]
-shuttle-common = { workspace = true, features = [
-    "models",
-    "tracing",
-] }
+shuttle-common = { workspace = true, features = ["models"] }
 
 anyhow = { workspace = true }
 async-trait = { workspace = true }
-cargo_metadata = { workspace = true, optional = true }
 serde = { workspace = true, features = ["derive"] }
 strfmt = { workspace = true }
 thiserror = { workspace = true }
-tokio = { workspace = true, optional = true }
-toml = { workspace = true, optional = true }
-tracing = { workspace = true, optional = true }
-
-[dev-dependencies]
-tokio = { workspace = true, features = ["macros", "rt"] }
-
-[features]
-default = []
-
-builder = [
-    "cargo_metadata",
-    "tokio/process",
-    "tokio/io-util",
-    "tokio/sync",
-    "tokio/time",
-    "toml",
-    "tracing",
-]

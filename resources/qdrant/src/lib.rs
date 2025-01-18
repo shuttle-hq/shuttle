@@ -88,7 +88,6 @@ pub enum OutputWrapper {
 }
 
 /// Scrappy wrapper over `QdrantClientConfig` to implement Clone and serde
-/// for use in ResourceBuilder
 #[derive(Clone, Serialize, Deserialize)]
 pub struct QdrantClientConfigWrap {
     url: String,

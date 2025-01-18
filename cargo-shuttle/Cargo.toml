@@ -11,7 +11,6 @@ default-run = "shuttle"
 [dependencies]
 shuttle-api-client = { workspace = true, default-features = true }
 shuttle-common = { workspace = true, features = ["models", "tables"] }
-shuttle-service = { workspace = true, features = ["builder"] }
 
 anyhow = { workspace = true }
 async-trait = { workspace = true }
@@ -22,7 +21,9 @@ clap = { workspace = true, features = ["env"] }
 clap_complete = "4.3.1"
 clap_mangen = "0.2.15"
 crossterm = { workspace = true }
-dialoguer = { version = "0.11", default-features = false, features = ["password"] }
+dialoguer = { version = "0.11", default-features = false, features = [
+  "password",
+] }
 dirs = { workspace = true }
 dunce = { workspace = true }
 futures = { workspace = true }
@@ -49,7 +50,12 @@ serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 strum = { workspace = true }
 tempfile = { workspace = true }
-tokio = { workspace = true, features = ["rt-multi-thread"] }
+tokio = { workspace = true, features = [
+  "rt-multi-thread",
+  "process",
+  "sync",
+  "time",
+] }
 tokio-tungstenite = { workspace = true }
 toml = { workspace = true }
 toml_edit = { workspace = true }

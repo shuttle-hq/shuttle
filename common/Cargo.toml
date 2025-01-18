@@ -24,11 +24,13 @@ typeshare = { workspace = true }
 zeroize = { workspace = true }
 
 [features]
-axum = ["dep:axum", "tracing"]
+# main features
+models = ["chrono/serde", "dep:tracing"]
+
+# additional sub-features
+axum = ["dep:axum", "dep:tracing"]
 display = ["chrono/clock", "dep:crossterm"]
-models = ["chrono/serde", "tracing"]
 tables = ["models", "display", "dep:comfy-table"]
-tracing = ["dep:tracing"]
 
 [package.metadata.docs.rs]
 all-features = true

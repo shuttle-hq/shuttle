@@ -9,7 +9,7 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines about commit style, issu
 
 ### Binaries
 
-- `cargo-shuttle` is the CLI used by users to initialize, deploy and manage their projects and services on Shuttle.
+- `cargo-shuttle` is the CLI used by users to initialize, run, deploy and manage their projects and services on Shuttle.
 
 ### Libraries
 
@@ -19,11 +19,10 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines about commit style, issu
   The redirect through `runtime` is to make it available under the prettier name of `shuttle_runtime::main`.
 - `runtime` sets up a tracing subscriber and provisions resources for the user service.
 - `service` is where our special `Service` trait is defined.
-  Anything implementing this `Service` can be loaded by the `deployer` and the local runner in `cargo-shuttle`.
-  The `service` library also defines the `ResourceConfigBuilder` trait which is used in our codegen to provision resources.
-  The `service` library also contains the utilities we use for compiling user crates with `cargo`.
-- `resources` contains various implementations of `ResourceBuilder`, which are consumed in the `codegen` to provision resources.
-- `services` contains implementations of `Service` for common Rust web frameworks. Anything implementing `Service` can be deployed on Shuttle.
+  Anything implementing `Service` can be started by the `runtime`.
+  The `service` library also defines the `ResourceInputBuilder` trait which is used in our codegen to provision resources.
+- `resources` contains various implementations of `ResourceInputBuilder` for official resources and plugins.
+- `services` contains implementations of `Service` for common Rust frameworks to run on Shuttle. Anything implementing `Service` can be deployed on Shuttle.
 
 ## Running Locally
 

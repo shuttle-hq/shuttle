@@ -405,15 +405,6 @@ workflows:
       - test-workspace-member-with-integration:
           name: << matrix.crate >>
           matrix:
-            alias: test-workspace-member-with-integration-large
-            parameters:
-              resource_class:
-                - large
-              crate:
-                - shuttle-service
-      - test-workspace-member-with-integration:
-          name: << matrix.crate >>
-          matrix:
             alias: test-workspace-member-with-integration-xlarge
             parameters:
               resource_class:

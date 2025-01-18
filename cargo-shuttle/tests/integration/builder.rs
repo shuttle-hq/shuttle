@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use shuttle_service::builder::{build_workspace, BuiltService};
+use cargo_shuttle::builder::{build_workspace, BuiltService};
 
 #[tokio::test]
 #[should_panic(expected = "Build failed. Is the Shuttle runtime missing?")]

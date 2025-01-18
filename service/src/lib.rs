@@ -16,8 +16,6 @@ pub use shuttle_common::{
 
 pub use crate::error::{CustomError, Error};
 
-#[cfg(feature = "builder")]
-pub mod builder;
 pub mod error;
 
 /// Allows implementing plugins for the Shuttle main function.

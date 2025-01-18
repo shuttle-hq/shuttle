@@ -1,4 +1,5 @@
 mod args;
+pub mod builder;
 pub mod config;
 mod init;
 mod provisioner_server;
@@ -37,7 +38,7 @@ use shuttle_common::{
         deployment::{
             BuildArgsBeta, BuildArgsRustBeta, BuildMetaBeta, DeploymentRequestBeta,
             DeploymentRequestBuildArchiveBeta, DeploymentRequestImageBeta, DeploymentResponseBeta,
-            DeploymentStateBeta, GIT_STRINGS_MAX_LENGTH,
+            DeploymentStateBeta, Environment, GIT_STRINGS_MAX_LENGTH,
         },
         error::ApiError,
         log::LogItemBeta,
@@ -45,10 +46,6 @@ use shuttle_common::{
         resource::ResourceTypeBeta,
     },
     tables::{deployments_table_beta, get_certificates_table_beta, get_resource_tables_beta},
-};
-use shuttle_service::{
-    builder::{async_cargo_metadata, build_workspace, find_shuttle_packages, BuiltService},
-    Environment,
 };
 use strum::{EnumMessage, VariantArray};
 use tokio::io::{AsyncBufReadExt, BufReader};
@@ -64,6 +61,7 @@ use crate::args::{
     SecretsArgs, TableArgs, TemplateLocation,
 };
 pub use crate::args::{Command, ProjectArgs, RunArgs, ShuttleArgs};
+use crate::builder::{async_cargo_metadata, build_workspace, find_shuttle_packages, BuiltService};
 use crate::config::RequestContext;
 use crate::provisioner_server::{ProvApiState, ProvisionerServerBeta};
 use crate::util::{

@@ -34,13 +34,6 @@ pub enum Command {
         compute_tier: ComputeTier,
     },
 
-    SetBetaAccess {
-        user_id: String,
-    },
-    UnsetBetaAccess {
-        user_id: String,
-    },
-
     /// Renew all custom domain certificates
     RenewCerts,
 

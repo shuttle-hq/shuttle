@@ -13,25 +13,6 @@ impl Client {
         }
     }
 
-    pub async fn set_beta_access(&self, user_id: &str, access: bool) -> Result<()> {
-        let resp = if access {
-            self.inner
-                .put(format!("/admin/users/{user_id}/beta"), Option::<()>::None)
-                .await?
-        } else {
-            self.inner
-                .delete(format!("/admin/users/{user_id}/beta"), Option::<()>::None)
-                .await?
-        };
-
-        if !resp.status().is_success() {
-            dbg!(resp);
-            panic!("request failed");
-        }
-
-        Ok(())
-    }
-
     pub async fn renew_old_certificates(&self) -> Result<serde_json::Value> {
         self.inner
             .put_json("/admin/certificates/renew", Option::<()>::None)

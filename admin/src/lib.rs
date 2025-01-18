@@ -20,14 +20,6 @@ pub async fn run(args: Args) {
         Command::ChangeProjectOwner { .. } => {
             unimplemented!();
         }
-        Command::SetBetaAccess { user_id } => {
-            client.set_beta_access(&user_id, true).await.unwrap();
-            println!("Set user {user_id} beta access");
-        }
-        Command::UnsetBetaAccess { user_id } => {
-            client.set_beta_access(&user_id, false).await.unwrap();
-            println!("Unset user {user_id} beta access");
-        }
         Command::RenewCerts => {
             let res = client.renew_old_certificates().await.unwrap();
             println!("{res}");

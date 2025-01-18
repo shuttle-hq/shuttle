@@ -103,7 +103,10 @@ impl TestApp {
 
     pub async fn get_user_typed(&self, user_id: &str) -> user::UserResponse {
         let response = self.get_user(user_id).await;
-        let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
+        let body = hyper::body::HttpBody::collect(response.into_body())
+            .await
+            .unwrap()
+            .to_bytes();
 
         serde_json::from_slice(&body).unwrap()
     }
@@ -174,7 +177,10 @@ impl TestApp {
     }
 
     pub async fn claim_from_response(&self, res: Response) -> Claim {
-        let body = hyper::body::to_bytes(res.into_body()).await.unwrap();
+        let body = hyper::body::HttpBody::collect(res.into_body())
+            .await
+            .unwrap()
+            .to_bytes();
         let convert: Value = serde_json::from_slice(&body).unwrap();
         let token = convert["token"].as_str().unwrap();
 
@@ -188,7 +194,10 @@ impl TestApp {
 
         assert_eq!(response.status(), StatusCode::OK);
 
-        let public_key = hyper::body::to_bytes(response.into_body()).await.unwrap();
+        let public_key = hyper::body::HttpBody::collect(response.into_body())
+            .await
+            .unwrap()
+            .to_bytes();
 
         Claim::from_token(token, &public_key).unwrap()
     }

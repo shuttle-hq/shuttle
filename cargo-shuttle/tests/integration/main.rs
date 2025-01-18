@@ -19,7 +19,6 @@ async fn shuttle_command(cmd: Command, working_directory: &str) -> anyhow::Resul
                 },
                 offline: false,
                 debug: false,
-                beta: false,
                 cmd,
             },
             false,

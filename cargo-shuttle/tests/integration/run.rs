@@ -36,7 +36,6 @@ async fn shuttle_run(working_directory: &str, external: bool) -> String {
             },
             offline: false,
             debug: false,
-            beta: false,
             cmd: Command::Run(RunArgs {
                 port,
                 external,

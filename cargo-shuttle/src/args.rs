@@ -38,9 +38,6 @@ pub struct ShuttleArgs {
     /// Turn on tracing output for Shuttle libraries. (WARNING: can print sensitive data)
     #[arg(global = true, long, env = "SHUTTLE_DEBUG")]
     pub debug: bool,
-    /// Target Shuttle's development environment
-    #[arg(global = true, long, env = "SHUTTLE_BETA", hide = true)]
-    pub beta: bool,
     #[command(flatten)]
     pub project_args: ProjectArgs,
 

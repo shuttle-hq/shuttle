@@ -1424,8 +1424,7 @@ impl Shuttle {
         let pid = self.ctx.project_id();
         let deployment = client.redeploy_beta(pid, &deployment_id).await?;
 
-        // TODO?: Make it print logs on fail
-        self.track_deployment_status_beta(pid, &deployment.id)
+        self.track_deployment_status_and_print_logs_on_fail(pid, &deployment.id, false)
             .await?;
 
         Ok(())
@@ -2451,8 +2450,7 @@ impl Shuttle {
                     return Ok(());
                 }
 
-                // TODO?: Make it print logs on fail
-                self.track_deployment_status_beta(pid, &deployment.id)
+                self.track_deployment_status_and_print_logs_on_fail(pid, &deployment.id, args.raw)
                     .await?;
 
                 return Ok(());
@@ -2590,22 +2588,8 @@ impl Shuttle {
                 return Ok(());
             }
 
-            if self
-                .track_deployment_status_beta(pid, &deployment.id)
-                .await?
-            {
-                for log in client
-                    .get_deployment_logs_beta(pid, &deployment.id)
-                    .await?
-                    .logs
-                {
-                    if args.raw {
-                        println!("{}", log.line);
-                    } else {
-                        println!("{log}");
-                    }
-                }
-            }
+            self.track_deployment_status_and_print_logs_on_fail(pid, &deployment.id, args.raw)
+                .await?;
 
             return Ok(());
         }
@@ -2818,6 +2802,30 @@ impl Shuttle {
         .await?;
 
         Ok(failed)
+    }
+
+    async fn track_deployment_status_and_print_logs_on_fail(
+        &self,
+        proj_id: &str,
+        depl_id: &str,
+        raw: bool,
+    ) -> Result<()> {
+        let client = self.client.as_ref().unwrap();
+        if self.track_deployment_status_beta(proj_id, depl_id).await? {
+            for log in client
+                .get_deployment_logs_beta(proj_id, &depl_id)
+                .await?
+                .logs
+            {
+                if raw {
+                    println!("{}", log.line);
+                } else {
+                    println!("{log}");
+                }
+            }
+        }
+
+        Ok(())
     }
 
     async fn project_start(&self, idle_minutes: u64) -> Result<()> {

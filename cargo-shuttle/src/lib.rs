@@ -2813,7 +2813,7 @@ impl Shuttle {
         let client = self.client.as_ref().unwrap();
         if self.track_deployment_status_beta(proj_id, depl_id).await? {
             for log in client
-                .get_deployment_logs_beta(proj_id, &depl_id)
+                .get_deployment_logs_beta(proj_id, depl_id)
                 .await?
                 .logs
             {

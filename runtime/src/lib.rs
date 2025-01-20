@@ -12,6 +12,9 @@ mod plugins;
 mod rt;
 mod start;
 
+#[cfg(feature = "setup-telemetry")]
+mod trace;
+
 // Public API
 pub use plugins::{Metadata, Secrets};
 pub use shuttle_codegen::main;
@@ -51,7 +54,7 @@ pub mod __internals {
         O: Future<Output = Result<Vec<Vec<u8>>, Error>> + Send,
     {
         async fn load(self, factory: ResourceFactory) -> Result<Vec<Vec<u8>>, Error> {
-            (self)(factory).await
+            self(factory).await
         }
     }
 
@@ -72,7 +75,7 @@ pub mod __internals {
         type Service = S;
 
         async fn run(self, resources: Vec<Vec<u8>>) -> Result<Self::Service, Error> {
-            (self)(resources).await
+            self(resources).await
         }
     }
 }

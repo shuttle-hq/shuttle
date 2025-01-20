@@ -93,7 +93,7 @@ pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + S
             // light hyper server
             let make_service = make_service_fn(|_conn| async {
                 Ok::<_, Infallible>(service_fn(|_req| async move {
-                    trace!("Receivied health check");
+                    trace!("Received health check");
                     // TODO: A hook into the `Service` trait can be added here
                     trace!("Responding to health check");
                     Result::<Response<Body>, hyper::Error>::Ok(Response::new(Body::empty()))
@@ -130,7 +130,7 @@ pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + S
     // Sort secrets by key
     let secrets = BTreeMap::from_iter(secrets.into_iter().map(|(k, v)| (k, Secret::new(v))));
 
-    // TODO: rework resourcefactory
+    // TODO: rework `ResourceFactory`
     let factory = ResourceFactory::new(project_name, secrets.clone(), env);
     let mut resources = match loader.load(factory).await {
         Ok(r) => r,

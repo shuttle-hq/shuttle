@@ -165,7 +165,16 @@ pub enum Type {
 }
 
 #[derive(
-    Clone, Copy, Debug, strum::EnumString, strum::Display, Deserialize, Serialize, Eq, PartialEq,
+    Clone,
+    Copy,
+    Debug,
+    Deserialize,
+    Eq,
+    PartialEq,
+    Serialize,
+    strum::AsRefStr,
+    strum::EnumString,
+    strum::Display,
 )]
 #[typeshare::typeshare]
 // is a flat enum instead of nested enum to allow typeshare
@@ -343,7 +352,7 @@ mod test {
         ];
 
         for input in inputs {
-            let actual = ResourceTypeBeta::from_str(&input.to_string()).unwrap();
+            let actual = ResourceTypeBeta::from_str(input.as_ref()).unwrap();
             assert_eq!(input, actual, ":{} should map back to itself", input);
         }
     }

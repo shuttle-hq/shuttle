@@ -17,7 +17,7 @@ use opentelemetry_sdk::{
     metrics::{MeterProviderBuilder, PeriodicReader, SdkMeterProvider, Temporality},
     propagation::TraceContextPropagator,
     runtime,
-    trace::{RandomIdGenerator, Sampler, TracerProvider},
+    trace::TracerProvider,
     Resource,
 };
 use opentelemetry_semantic_conventions::{
@@ -427,12 +427,13 @@ pub fn init_meter_provider(endpoint: &Option<String>, resource: Resource) -> Sdk
 // Construct TracerProvider for OpenTelemetryLayer
 pub fn init_tracer_provider(endpoint: &Option<String>, resource: Resource) -> TracerProvider {
     // TODO(the-wondersmith): make trace sample rate & strategy configurable
-    let sampler = Sampler::ParentBased(Box::new(Sampler::TraceIdRatioBased(1.0)));
+    // let sampler = opentelemetry_sdk::trace::Sampler::ParentBased(Box::new(
+    //     opentelemetry_sdk::trace::Sampler::TraceIdRatioBased(1.0),
+    // ));
 
     let mut builder = TracerProvider::builder()
-        .with_sampler(sampler)
-        .with_resource(resource)
-        .with_id_generator(RandomIdGenerator::default());
+        // .with_sampler(sampler)
+        .with_resource(resource);
 
     if let Some(endpoint) = endpoint {
         let exporter = opentelemetry_otlp::SpanExporter::builder()

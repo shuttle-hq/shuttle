@@ -22,8 +22,8 @@ use opentelemetry_sdk::{
 };
 use opentelemetry_semantic_conventions::{
     attribute::{
-        CODE_FILEPATH, CODE_LINENO, DEPLOYMENT_ENVIRONMENT_NAME, SERVICE_NAME, SERVICE_VERSION,
-        TELEMETRY_SDK_LANGUAGE, TELEMETRY_SDK_NAME, TELEMETRY_SDK_VERSION,
+        CODE_FILEPATH, CODE_LINENO, SERVICE_NAME, SERVICE_VERSION, TELEMETRY_SDK_LANGUAGE,
+        TELEMETRY_SDK_NAME, TELEMETRY_SDK_VERSION,
     },
     SCHEMA_URL,
 };
@@ -365,16 +365,29 @@ pub(crate) fn log_level_as_severity(level: log::Level) -> Severity {
 
 // Create a Resource that captures information about the entity for which telemetry is recorded.
 pub fn resource(crate_name: &'static str, package_version: &'static str) -> Resource {
+    let project_name = std::env::var("SHUTTLE_PROJECT_NAME").ok();
+
     Resource::from_schema_url(
         [
-            Some(KeyValue::new(SERVICE_NAME, crate_name)),
+            Some(KeyValue::new(
+                SERVICE_NAME,
+                project_name.clone().unwrap_or_else(|| crate_name.into()),
+            )),
             Some(KeyValue::new(SERVICE_VERSION, package_version)),
             Some(KeyValue::new(TELEMETRY_SDK_NAME, "opentelemetry")),
             Some(KeyValue::new(TELEMETRY_SDK_VERSION, "0.27.1")),
             Some(KeyValue::new(TELEMETRY_SDK_LANGUAGE, "rust")),
-            std::env::var("SHUTTLE_ENV")
+            Some(KeyValue::new("shuttle.project.crate.name", crate_name)),
+            Some(KeyValue::new(
+                "shuttle.deployment.env",
+                std::env::var("SHUTTLE_ENV")
+                    .ok()
+                    .unwrap_or("unknown".into()),
+            )),
+            std::env::var("SHUTTLE_PROJECT_ID")
                 .ok()
-                .map(|value| KeyValue::new(DEPLOYMENT_ENVIRONMENT_NAME, value)),
+                .map(|value| KeyValue::new("shuttle.project.id", value)),
+            project_name.map(|value| KeyValue::new("shuttle.project.name", value)),
         ]
         .into_iter()
         .flatten(),

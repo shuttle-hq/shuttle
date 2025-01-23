@@ -51,8 +51,9 @@ impl Args {
 pub async fn start(
     loader: impl Loader + Send + 'static,
     runner: impl Runner + Send + 'static,
-    #[cfg_attr(not(feature = "setup-telemetry"), allow(unused_variables))] crate_name: &'static str,
-    #[cfg_attr(not(feature = "setup-telemetry"), allow(unused_variables))]
+    #[cfg_attr(not(feature = "setup-otel-exporter"), allow(unused_variables))]
+    crate_name: &'static str,
+    #[cfg_attr(not(feature = "setup-otel-exporter"), allow(unused_variables))]
     package_version: &'static str,
 ) {
     // `--version` overrides any other arguments. Used by cargo-shuttle to check compatibility on local runs.
@@ -80,7 +81,7 @@ pub async fn start(
     };
 
     // this is handled after arg parsing to not interfere with --version above
-    #[cfg(all(feature = "setup-tracing", not(feature = "setup-telemetry")))]
+    #[cfg(all(feature = "setup-tracing", not(feature = "setup-otel-exporter")))]
     {
         use tracing_subscriber::{fmt, prelude::*, registry, EnvFilter};
         registry()
@@ -103,10 +104,10 @@ pub async fn start(
             .init();
     }
 
-    #[cfg(feature = "setup-telemetry")]
+    #[cfg(feature = "setup-otel-exporter")]
     let _guard = crate::trace::init_tracing_subscriber(crate_name, package_version);
 
-    #[cfg(any(feature = "setup-tracing", feature = "setup-telemetry"))]
+    #[cfg(any(feature = "setup-tracing", feature = "setup-otel-exporter"))]
     if args.beta {
         tracing::warn!(
             "Default tracing subscriber initialized (https://docs.shuttle.dev/docs/logs)"

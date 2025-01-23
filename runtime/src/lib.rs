@@ -12,19 +12,18 @@ mod plugins;
 mod rt;
 mod start;
 
-#[cfg(feature = "setup-telemetry")]
+#[cfg(feature = "setup-otel-exporter")]
 mod trace;
 
 // Public API
+// Useful re-exports
+pub use async_trait::async_trait;
 pub use plugins::{Metadata, Secrets};
 pub use shuttle_codegen::main;
 pub use shuttle_service::{
     CustomError, DbInput, DeploymentMetadata, Environment, Error, IntoResource, ResourceFactory,
     ResourceInputBuilder, SecretStore, Service,
 };
-
-// Useful re-exports
-pub use async_trait::async_trait;
 pub use tokio;
 
 const VERSION_STRING: &str = concat!(env!("CARGO_PKG_NAME"), " ", env!("CARGO_PKG_VERSION"));
@@ -33,7 +32,7 @@ const VERSION_STRING: &str = concat!(env!("CARGO_PKG_NAME"), " ", env!("CARGO_PK
 #[doc(hidden)]
 pub mod __internals {
     // Internals used by the codegen
-    pub use crate::start::start;
+    use std::future::Future;
 
     // Dependencies required by the codegen
     pub use anyhow::Context;
@@ -41,7 +40,8 @@ pub mod __internals {
     pub use strfmt::strfmt;
 
     use super::*;
-    use std::future::Future;
+    pub use crate::start::start;
+
     #[async_trait]
     pub trait Loader {
         async fn load(self, factory: ResourceFactory) -> Result<Vec<Vec<u8>>, Error>;

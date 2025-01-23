@@ -374,13 +374,10 @@ pub fn resource(crate_name: &'static str, package_version: &'static str) -> Reso
                 project_name.clone().unwrap_or_else(|| crate_name.into()),
             )),
             Some(KeyValue::new(SERVICE_VERSION, package_version)),
-            Some(KeyValue::new("code.crate.name", crate_name)),
             Some(KeyValue::new(TELEMETRY_SDK_NAME, "opentelemetry")),
             Some(KeyValue::new(TELEMETRY_SDK_VERSION, "0.27.1")),
             Some(KeyValue::new(TELEMETRY_SDK_LANGUAGE, "rust")),
-            std::env::var("APP_ENV")
-                .ok()
-                .map(|value| KeyValue::new(DEPLOYMENT_ENVIRONMENT_NAME, value)),
+            Some(KeyValue::new("shuttle.project.crate.name", crate_name)),
             Some(KeyValue::new(
                 "shuttle.deployment.env",
                 std::env::var("SHUTTLE_ENV")

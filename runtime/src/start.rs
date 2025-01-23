@@ -105,7 +105,7 @@ pub async fn start(
     }
 
     #[cfg(feature = "setup-otel-exporter")]
-    let _guard = crate::trace::init_tracing_subscriber(crate_name, package_version);
+    let _guard = crate::telemetry::init_tracing_subscriber(crate_name, package_version);
 
     #[cfg(any(feature = "setup-tracing", feature = "setup-otel-exporter"))]
     if args.beta {

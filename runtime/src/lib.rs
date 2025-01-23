@@ -13,7 +13,7 @@ mod rt;
 mod start;
 
 #[cfg(feature = "setup-otel-exporter")]
-mod trace;
+mod telemetry;
 
 // Public API
 // Useful re-exports
@@ -32,7 +32,7 @@ const VERSION_STRING: &str = concat!(env!("CARGO_PKG_NAME"), " ", env!("CARGO_PK
 #[doc(hidden)]
 pub mod __internals {
     // Internals used by the codegen
-    use std::future::Future;
+    pub use crate::start::start;
 
     // Dependencies required by the codegen
     pub use anyhow::Context;
@@ -40,7 +40,7 @@ pub mod __internals {
     pub use strfmt::strfmt;
 
     use super::*;
-    pub use crate::start::start;
+    use std::future::Future;
 
     #[async_trait]
     pub trait Loader {

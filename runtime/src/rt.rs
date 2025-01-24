@@ -1,22 +1,21 @@
 use std::{
     collections::BTreeMap,
-    convert::Infallible,
     iter::FromIterator,
     net::{IpAddr, Ipv4Addr, SocketAddr},
     process::exit,
 };
 
 use anyhow::Context;
-use hyper::{
-    service::{make_service_fn, service_fn},
-    Body, Response, Server,
-};
+use http_body_util::Empty;
+use hyper::{body::Bytes, server::conn::http1, service::service_fn, Response};
+use hyper_util::rt::TokioIo;
 use shuttle_api_client::ShuttleApiClient;
 use shuttle_common::{
     models::resource::{ResourceInputBeta, ResourceState, ResourceTypeBeta},
     secrets::Secret,
 };
 use shuttle_service::{Environment, ResourceFactory, Service};
+use tokio::net::TcpListener;
 use tracing::{debug, info, trace};
 
 use crate::__internals::{Loader, Runner};
@@ -89,22 +88,40 @@ pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + S
     // start a health check server if requested
     if let Some(healthz_port) = healthz_port {
         trace!("Starting health check server on port {healthz_port}");
+        let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), healthz_port);
         tokio::spawn(async move {
             // light hyper server
-            let make_service = make_service_fn(|_conn| async {
-                Ok::<_, Infallible>(service_fn(|_req| async move {
-                    trace!("Received health check");
-                    // TODO: A hook into the `Service` trait can be added here
-                    trace!("Responding to health check");
-                    Result::<Response<Body>, hyper::Error>::Ok(Response::new(Body::empty()))
-                }))
-            });
-            let server = Server::bind(&SocketAddr::new(Ipv4Addr::LOCALHOST.into(), healthz_port))
-                .serve(make_service);
+            let Ok(listener) = TcpListener::bind(&addr).await else {
+                eprintln!("ERROR: Failed to bind to health check port");
+                exit(201);
+            };
 
-            if let Err(e) = server.await {
-                eprintln!("ERROR: Health check error: {e}");
-                exit(200);
+            loop {
+                let Ok((stream, _)) = listener.accept().await else {
+                    eprintln!("ERROR: Health check listener error");
+                    exit(202);
+                };
+                let io = TokioIo::new(stream);
+
+                tokio::task::spawn(async move {
+                    if let Err(err) = http1::Builder::new()
+                        .serve_connection(
+                            io,
+                            service_fn(|_req| async move {
+                                trace!("Received health check");
+                                // TODO: A hook into the `Service` trait can be added here
+                                trace!("Responding to health check");
+                                Result::<Response<Empty<Bytes>>, hyper::Error>::Ok(Response::new(
+                                    Empty::new(),
+                                ))
+                            }),
+                        )
+                        .await
+                    {
+                        eprintln!("ERROR: Health check error: {err}");
+                        exit(200);
+                    }
+                });
             }
         });
     }

@@ -1,5 +1,3 @@
-use std::str::FromStr;
-
 use chrono::{DateTime, Local, SecondsFormat};
 use comfy_table::{
     presets::{NOTHING, UTF8_BORDERS_ONLY},
@@ -46,9 +44,7 @@ pub fn deployments_table_beta(deployments: &[DeploymentResponseBeta], raw: bool)
         let datetime: DateTime<Local> = DateTime::from(deploy.created_at);
         table.add_row(vec![
             Cell::new(&deploy.id).add_attribute(Attribute::Bold),
-            Cell::new(&deploy.state)
-                // Unwrap is safe because Color::from_str returns the color white if str is not a Color.
-                .fg(Color::from_str(deploy.state.get_color()).unwrap()),
+            Cell::new(&deploy.state).fg(deploy.state.get_color_comfy_table()),
             Cell::new(datetime.to_rfc3339_opts(SecondsFormat::Secs, false)),
             Cell::new(
                 deploy
@@ -79,14 +75,12 @@ pub fn get_projects_table_beta(projects: &[ProjectResponseBeta], raw: bool) -> S
         let color = project
             .deployment_state
             .as_ref()
-            .map(|s| s.get_color())
-            .unwrap_or_default();
+            .map(|s| s.get_color_comfy_table())
+            .unwrap_or(Color::White);
         table.add_row(vec![
             Cell::new(&project.id).add_attribute(Attribute::Bold),
             Cell::new(&project.name),
-            Cell::new(state)
-                // Unwrap is safe because Color::from_str returns the color white if the argument is not a Color.
-                .fg(Color::from_str(color).unwrap()),
+            Cell::new(state).fg(color),
         ]);
     }
 

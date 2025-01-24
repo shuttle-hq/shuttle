@@ -26,28 +26,40 @@ pub enum DeploymentStateBeta {
 }
 
 impl DeploymentStateBeta {
-    /// We return a &str rather than a Color here, since `comfy-table` re-exports
-    /// crossterm::style::Color and we depend on both `comfy-table` and `crossterm`
-    /// we may end up with two different versions of Color.
     #[cfg(feature = "display")]
-    pub fn get_color(&self) -> &str {
+    pub fn get_color_crossterm(&self) -> crossterm::style::Color {
+        use crossterm::style::Color;
+
         match self {
-            Self::Pending => "dark_yellow",
-            Self::Building => "yellow",
-            Self::InProgress => "cyan",
-            Self::Running => "green",
-            Self::Stopped => "dark_blue",
-            Self::Stopping => "blue",
-            Self::Failed => "red",
-            Self::Unknown => "grey",
+            Self::Pending => Color::DarkYellow,
+            Self::Building => Color::Yellow,
+            Self::InProgress => Color::Cyan,
+            Self::Running => Color::Green,
+            Self::Stopped => Color::DarkBlue,
+            Self::Stopping => Color::Blue,
+            Self::Failed => Color::Red,
+            Self::Unknown => Color::Grey,
+        }
+    }
+    #[cfg(feature = "display")]
+    pub fn get_color_comfy_table(&self) -> comfy_table::Color {
+        use comfy_table::Color;
+
+        match self {
+            Self::Pending => Color::DarkYellow,
+            Self::Building => Color::Yellow,
+            Self::InProgress => Color::Cyan,
+            Self::Running => Color::Green,
+            Self::Stopped => Color::DarkBlue,
+            Self::Stopping => Color::Blue,
+            Self::Failed => Color::Red,
+            Self::Unknown => Color::Grey,
         }
     }
     #[cfg(feature = "display")]
     pub fn to_string_colored(&self) -> String {
-        use std::str::FromStr;
-        // Unwrap is safe because Color::from_str returns the color white if the argument is not a Color.
         self.to_string()
-            .with(crossterm::style::Color::from_str(self.get_color()).unwrap())
+            .with(self.get_color_crossterm())
             .to_string()
     }
 }

@@ -14,7 +14,7 @@ use gix::{open, progress};
 use regex::Regex;
 use shuttle_common::constants::EXAMPLES_README;
 use tempfile::{Builder, TempDir};
-use toml_edit::{value, Document};
+use toml_edit::{value, DocumentMut};
 use url::Url;
 
 use crate::args::TemplateLocation;
@@ -221,7 +221,7 @@ enum GitDir {
 fn set_crate_name(path: &Path, name: &str) -> Result<bool> {
     let path = path.join("Cargo.toml");
     let toml_str = read_to_string(&path)?;
-    let mut doc = toml_str.parse::<Document>()?;
+    let mut doc = toml_str.parse::<DocumentMut>()?;
 
     // if the crate is a workspace, don't set the package name
     if doc.get("workspace").is_some() {
@@ -247,7 +247,7 @@ fn edit_shuttle_toml(path: &Path, set_name: Option<&str>) -> Result<()> {
     }
 
     let toml_str = read_to_string(&path).unwrap_or_default();
-    let mut doc = toml_str.parse::<Document>()?;
+    let mut doc = toml_str.parse::<DocumentMut>()?;
 
     if let Some(name) = set_name {
         // The name was not set elsewhere, so set it here

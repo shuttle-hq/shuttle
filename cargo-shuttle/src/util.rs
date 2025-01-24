@@ -281,7 +281,7 @@ where
 {
     while let Some(Ok(msg)) = rx.next().await {
         if let Message::Text(s) = msg {
-            return Ok(Some(s));
+            return Ok(Some(s.to_string()));
         }
     }
 

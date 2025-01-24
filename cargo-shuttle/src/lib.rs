@@ -27,11 +27,10 @@ use indicatif::ProgressBar;
 use indoc::formatdoc;
 use reqwest::header::HeaderMap;
 use shuttle_api_client::ShuttleApiClient;
-use shuttle_common::tables::get_projects_table_beta;
 use shuttle_common::{
     constants::{
-        headers::X_CARGO_SHUTTLE_VERSION, API_URL_DEFAULT_BETA, EXAMPLES_REPO, EXECUTABLE_DIRNAME,
-        RUNTIME_NAME, STORAGE_DIRNAME, TEMPLATES_SCHEMA_VERSION,
+        headers::X_CARGO_SHUTTLE_VERSION, API_URL_DEFAULT_BETA, EXAMPLES_REPO, RUNTIME_NAME,
+        STORAGE_DIRNAME, TEMPLATES_SCHEMA_VERSION,
     },
     models::{
         auth::{KeyMessage, TokenMessage},
@@ -45,7 +44,10 @@ use shuttle_common::{
         project::ProjectUpdateRequestBeta,
         resource::ResourceTypeBeta,
     },
-    tables::{deployments_table_beta, get_certificates_table_beta, get_resource_tables_beta},
+    tables::{
+        deployments_table_beta, get_certificates_table_beta, get_projects_table_beta,
+        get_resource_tables_beta,
+    },
 };
 use strum::{EnumMessage, VariantArray};
 use tokio::io::{AsyncBufReadExt, BufReader};
@@ -1666,9 +1668,6 @@ impl Shuttle {
             .context("adding override `!.git/`")?
             .add("!target/")
             .context("adding override `!target/`")?
-            // these should always be ignored when unpacked in deployment, so ignore them here as well
-            .add(&format!("!{EXECUTABLE_DIRNAME}/"))
-            .context(format!("adding override `!{EXECUTABLE_DIRNAME}/`"))?
             .add(&format!("!{STORAGE_DIRNAME}/"))
             .context(format!("adding override `!{STORAGE_DIRNAME}/`"))?
             .build()

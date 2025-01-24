@@ -1,7 +1,5 @@
 //! Shared constants used across Shuttle crates
 
-/// LEGACY: Where executables are moved to in order to persist across deploys, relative to workspace root
-pub const EXECUTABLE_DIRNAME: &str = ".shuttle-executables";
 /// Used by plugins for local file storage.
 pub const STORAGE_DIRNAME: &str = ".shuttle-storage";
 
@@ -19,11 +17,8 @@ pub const EXAMPLES_README: &str =
 pub const EXAMPLES_TEMPLATES_TOML: &str =
     "https://raw.githubusercontent.com/shuttle-hq/shuttle-examples/main/templates.toml";
 
-// Crate name for checking cargo metadata
+/// Crate name for checking cargo metadata
 pub const RUNTIME_NAME: &str = "shuttle-runtime";
-
-/// Current version field in requests to provisioner
-pub const RESOURCE_SCHEMA_VERSION: u32 = 1;
 
 /// Current version field in `examples/templates.toml`
 pub const TEMPLATES_SCHEMA_VERSION: u32 = 1;

@@ -1,14 +1,12 @@
 [patch.crates-io]
 shuttle-codegen = { path = "BASE/codegen" }
 shuttle-common = { path = "BASE/common" }
-shuttle-proto = { path = "BASE/proto" }
 shuttle-runtime = { path = "BASE/runtime" }
 shuttle-service = { path = "BASE/service" }
 
 shuttle-aws-rds = { path = "BASE/resources/aws-rds" }
 shuttle-openai = { path = "BASE/resources/openai" }
 shuttle-opendal = { path = "BASE/resources/opendal" }
-shuttle-persist = { path = "BASE/resources/persist" }
 shuttle-qdrant = { path = "BASE/resources/qdrant" }
 shuttle-shared-db = { path = "BASE/resources/shared-db" }
 shuttle-turso = { path = "BASE/resources/turso" }

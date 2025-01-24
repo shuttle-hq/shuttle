@@ -1,9 +1,7 @@
 //! Types representing various errors that can occur in the process of building and deploying a service.
 
-use thiserror::Error;
-
 /// An error that can occur in the process of building and deploying a service.
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 pub enum Error {
     /// An Input/Output error.
     #[error("IO error: {0}")]

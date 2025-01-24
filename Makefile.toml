@@ -101,27 +101,6 @@ if ! git diff --exit-code common/types.ts; then
 fi
 '''
 
-[tasks.proto]
-# To generate: cargo make proto
-# To validate: cargo make proto validate
-# Requires `protoc` to be installed
-install_crate = { crate_name = "proto-gen", binary = "proto-gen", test_arg = "-V", version = "0.2.7" }
-script = '''
-OP="generate"
-if [ "$1" = "validate" ]; then
-    OP="validate"
-fi
-proto-gen \
-    --generate-transport --build-client --build-server --format \
-    $OP \
-    -d proto \
-    -o proto/src/generated \
-    -f proto/logger.proto \
-    -f proto/provisioner.proto \
-    -f proto/resource-recorder.proto \
-    -f proto/runtime.proto
-'''
-
 [tasks.changelog]
 # Provide the version to generate for
 # Example: cargo make changelog 0.37.0
@@ -168,7 +147,7 @@ feature_flags = array "--all-features"
 ###### Crates that have mutually exclusive features define
 ###### their own set of feature flags to test:
 if eq ${path} "resources/shared-db"
-    feature_flags = array "-F mongodb" "-F postgres" "-F postgres,sqlx" "-F postgres,sqlx-native-tls" "-F postgres,diesel-async" "-F postgres,diesel-async-bb8" "-F postgres,diesel-async-deadpool" "-F opendal-postgres"
+    feature_flags = array "-F postgres" "-F postgres,sqlx" "-F postgres,sqlx-native-tls" "-F postgres,diesel-async" "-F postgres,diesel-async-bb8" "-F postgres,diesel-async-deadpool" "-F opendal-postgres"
 elseif eq ${path} "services/shuttle-axum"
     feature_flags = array "-F axum" "-F axum-0-7"
 elseif eq ${path} "services/shuttle-serenity"
@@ -195,4 +174,10 @@ end
 
 
 end
+'''
+
+# Recursive cargo clean plus more
+[tasks.deep-clean]
+script = '''
+find . -type d \( -name target -or -name node_modules \) | xargs rm -rf
 '''

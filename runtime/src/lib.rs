@@ -4,8 +4,6 @@
     html_favicon_url = "https://raw.githubusercontent.com/shuttle-hq/shuttle/main/assets/favicon.ico"
 )]
 
-/// shuttle.rs runtime
-mod alpha;
 /// Built-in plugins
 mod plugins;
 /// shuttle.dev runtime

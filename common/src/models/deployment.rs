@@ -1,32 +1,55 @@
-use chrono::{DateTime, Local, SecondsFormat, Utc};
-use comfy_table::{
-    modifiers::UTF8_ROUND_CORNERS,
-    presets::{NOTHING, UTF8_BORDERS_ONLY, UTF8_FULL},
-    Attribute, Cell, CellAlignment, Color, ContentArrangement, Table,
-};
-use crossterm::style::Stylize;
+use std::{collections::HashMap, path::PathBuf};
+
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, fmt::Display, str::FromStr};
-use uuid::Uuid;
+use strum::{Display, EnumString};
 
-use crate::deployment::{DeploymentStateBeta, State};
+#[cfg(feature = "display")]
+use crossterm::style::Stylize;
 
-/// Max length of strings in the git metadata
-pub const GIT_STRINGS_MAX_LENGTH: usize = 80;
-/// Max HTTP body size for a deployment POST request
-pub const CREATE_SERVICE_BODY_LIMIT: usize = 50_000_000;
-const GIT_OPTION_NONE_TEXT: &str = "N/A";
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Display, Serialize, EnumString)]
+#[serde(rename_all = "lowercase")]
+#[strum(serialize_all = "lowercase")]
+#[strum(ascii_case_insensitive)]
+#[typeshare::typeshare]
+pub enum DeploymentStateBeta {
+    Pending,
+    Building,
+    Running,
+    #[strum(serialize = "in progress")]
+    InProgress,
+    Stopped,
+    Stopping,
+    Failed,
+    /// Fallback
+    Unknown,
+}
 
-#[derive(Deserialize, Serialize, Debug)]
-pub struct Response {
-    pub id: Uuid,
-    pub service_id: String,
-    pub state: State,
-    pub last_update: DateTime<Utc>,
-    pub git_commit_id: Option<String>,
-    pub git_commit_msg: Option<String>,
-    pub git_branch: Option<String>,
-    pub git_dirty: Option<bool>,
+impl DeploymentStateBeta {
+    /// We return a &str rather than a Color here, since `comfy-table` re-exports
+    /// crossterm::style::Color and we depend on both `comfy-table` and `crossterm`
+    /// we may end up with two different versions of Color.
+    #[cfg(feature = "display")]
+    pub fn get_color(&self) -> &str {
+        match self {
+            Self::Pending => "dark_yellow",
+            Self::Building => "yellow",
+            Self::InProgress => "cyan",
+            Self::Running => "green",
+            Self::Stopped => "dark_blue",
+            Self::Stopping => "blue",
+            Self::Failed => "red",
+            Self::Unknown => "grey",
+        }
+    }
+    #[cfg(feature = "display")]
+    pub fn to_string_colored(&self) -> String {
+        use std::str::FromStr;
+        // Unwrap is safe because Color::from_str returns the color white if the argument is not a Color.
+        self.to_string()
+            .with(crossterm::style::Color::from_str(self.get_color()).unwrap())
+            .to_string()
+    }
 }
 
 #[derive(Deserialize, Serialize)]
@@ -48,24 +71,7 @@ pub struct DeploymentResponseBeta {
     pub build_meta: Option<BuildMetaBeta>,
 }
 
-impl Display for Response {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{} deployment '{}' is {}",
-            self.last_update
-                .format("%Y-%m-%dT%H:%M:%SZ")
-                .to_string()
-                .dim(),
-            self.id,
-            self.state
-                .to_string()
-                // Unwrap is safe because Color::from_str returns the color white if the argument is not a Color.
-                .with(crossterm::style::Color::from_str(self.state.get_color()).unwrap())
-        )
-    }
-}
-
+#[cfg(feature = "display")]
 impl DeploymentResponseBeta {
     pub fn to_string_summary_colored(&self) -> String {
         // TODO: make this look nicer
@@ -86,203 +92,11 @@ impl DeploymentResponseBeta {
     }
 }
 
-impl State {
-    /// We return a &str rather than a Color here, since `comfy-table` re-exports
-    /// crossterm::style::Color and we depend on both `comfy-table` and `crossterm`
-    /// we may end up with two different versions of Color.
-    pub fn get_color(&self) -> &str {
-        match self {
-            State::Queued | State::Building | State::Built | State::Loading => "cyan",
-            State::Running => "green",
-            State::Completed | State::Stopped => "blue",
-            State::Crashed => "red",
-            State::Unknown => "yellow",
-        }
-    }
-}
-
-pub fn deployments_table_beta(deployments: &[DeploymentResponseBeta], raw: bool) -> String {
-    let mut table = Table::new();
-    table
-        .load_preset(if raw { NOTHING } else { UTF8_BORDERS_ONLY })
-        .set_content_arrangement(ContentArrangement::Disabled)
-        .set_header(vec!["Deployment ID", "Status", "Date", "Git revision"]);
-
-    for deploy in deployments.iter() {
-        let datetime: DateTime<Local> = DateTime::from(deploy.created_at);
-        table.add_row(vec![
-            Cell::new(&deploy.id).add_attribute(Attribute::Bold),
-            Cell::new(&deploy.state)
-                // Unwrap is safe because Color::from_str returns the color white if str is not a Color.
-                .fg(Color::from_str(deploy.state.get_color()).unwrap()),
-            Cell::new(datetime.to_rfc3339_opts(SecondsFormat::Secs, false)),
-            Cell::new(
-                deploy
-                    .build_meta
-                    .as_ref()
-                    .map(ToString::to_string)
-                    .unwrap_or_default(),
-            ),
-        ]);
-    }
-
-    table.to_string()
-}
-
-pub fn get_deployments_table(
-    deployments: &[Response],
-    service_name: &str,
-    page: u32,
-    raw: bool,
-    page_hint: bool,
-) -> String {
-    if deployments.is_empty() {
-        // The page starts at 1 in the CLI.
-        let mut s = if page <= 1 {
-            "No deployments are linked to this service\n".to_string()
-        } else {
-            "No more deployments are linked to this service\n".to_string()
-        };
-        if !raw {
-            s = s.yellow().bold().to_string();
-        }
-
-        s
-    } else {
-        let mut table = Table::new();
-
-        if raw {
-            table
-                .load_preset(NOTHING)
-                .set_content_arrangement(ContentArrangement::Disabled)
-                .set_header(vec![
-                    Cell::new("Deployment ID").set_alignment(CellAlignment::Left),
-                    Cell::new("Status").set_alignment(CellAlignment::Left),
-                    Cell::new("Last updated").set_alignment(CellAlignment::Left),
-                    Cell::new("Commit ID").set_alignment(CellAlignment::Left),
-                    Cell::new("Commit Message").set_alignment(CellAlignment::Left),
-                    Cell::new("Branch").set_alignment(CellAlignment::Left),
-                    Cell::new("Dirty").set_alignment(CellAlignment::Left),
-                ]);
-        } else {
-            table
-                .load_preset(UTF8_FULL)
-                .apply_modifier(UTF8_ROUND_CORNERS)
-                .set_content_arrangement(ContentArrangement::DynamicFullWidth)
-                .set_header(vec![
-                    Cell::new("Deployment ID")
-                        .set_alignment(CellAlignment::Center)
-                        .add_attribute(Attribute::Bold),
-                    Cell::new("Status")
-                        .set_alignment(CellAlignment::Center)
-                        .add_attribute(Attribute::Bold),
-                    Cell::new("Last updated")
-                        .set_alignment(CellAlignment::Center)
-                        .add_attribute(Attribute::Bold),
-                    Cell::new("Commit ID")
-                        .set_alignment(CellAlignment::Center)
-                        .add_attribute(Attribute::Bold),
-                    Cell::new("Commit Message")
-                        .set_alignment(CellAlignment::Center)
-                        .add_attribute(Attribute::Bold),
-                    Cell::new("Branch")
-                        .set_alignment(CellAlignment::Center)
-                        .add_attribute(Attribute::Bold),
-                    Cell::new("Dirty")
-                        .set_alignment(CellAlignment::Center)
-                        .add_attribute(Attribute::Bold),
-                ]);
-        }
-
-        for deploy in deployments.iter() {
-            let truncated_commit_id = deploy
-                .git_commit_id
-                .as_ref()
-                .map_or(String::from(GIT_OPTION_NONE_TEXT), |val| {
-                    val.chars().take(7).collect()
-                });
-
-            let truncated_commit_msg = deploy
-                .git_commit_msg
-                .as_ref()
-                .map_or(String::from(GIT_OPTION_NONE_TEXT), |val| {
-                    val.chars().take(24).collect::<String>()
-                });
-
-            if raw {
-                table.add_row(vec![
-                    Cell::new(deploy.id),
-                    Cell::new(&deploy.state),
-                    Cell::new(deploy.last_update.format("%Y-%m-%dT%H:%M:%SZ")),
-                    Cell::new(truncated_commit_id),
-                    Cell::new(truncated_commit_msg),
-                    Cell::new(
-                        deploy
-                            .git_branch
-                            .as_ref()
-                            .map_or(GIT_OPTION_NONE_TEXT, |val| val as &str),
-                    ),
-                    Cell::new(
-                        deploy
-                            .git_dirty
-                            .map_or(String::from(GIT_OPTION_NONE_TEXT), |val| val.to_string()),
-                    ),
-                ]);
-            } else {
-                table.add_row(vec![
-                    Cell::new(deploy.id),
-                    Cell::new(&deploy.state)
-                        // Unwrap is safe because Color::from_str returns the color white if str is not a Color.
-                        .fg(Color::from_str(deploy.state.get_color()).unwrap())
-                        .set_alignment(CellAlignment::Center),
-                    Cell::new(deploy.last_update.format("%Y-%m-%dT%H:%M:%SZ"))
-                        .set_alignment(CellAlignment::Center),
-                    Cell::new(truncated_commit_id),
-                    Cell::new(truncated_commit_msg),
-                    Cell::new(
-                        deploy
-                            .git_branch
-                            .as_ref()
-                            .map_or(GIT_OPTION_NONE_TEXT, |val| val as &str),
-                    ),
-                    Cell::new(
-                        deploy
-                            .git_dirty
-                            .map_or(String::from(GIT_OPTION_NONE_TEXT), |val| val.to_string()),
-                    )
-                    .set_alignment(CellAlignment::Center),
-                ]);
-            }
-        }
-
-        let formatted_table = format!("\nMost recent deployments for {service_name}\n{table}\n");
-        if page_hint {
-            format!(
-                "{formatted_table}More deployments are available on the next page using `--page {}`\n",
-                page + 1
-            )
-        } else {
-            formatted_table
-        }
-    }
-}
-
 #[derive(Deserialize, Serialize)]
 #[typeshare::typeshare]
 pub struct UploadArchiveResponseBeta {
     /// The S3 object version ID of the uploaded object
     pub archive_version_id: String,
-}
-
-#[derive(Default, Deserialize, Serialize)]
-pub struct DeploymentRequest {
-    /// Tar archive
-    pub data: Vec<u8>,
-    pub no_test: bool,
-    pub git_commit_id: Option<String>,
-    pub git_commit_msg: Option<String>,
-    pub git_branch: Option<String>,
-    pub git_dirty: Option<bool>,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -353,6 +167,9 @@ impl Default for BuildArgsRustBeta {
     }
 }
 
+/// Max length of strings in the git metadata
+pub const GIT_STRINGS_MAX_LENGTH: usize = 80;
+
 #[derive(Default, Deserialize, Serialize)]
 #[typeshare::typeshare]
 pub struct BuildMetaBeta {
@@ -362,6 +179,7 @@ pub struct BuildMetaBeta {
     pub git_dirty: Option<bool>,
 }
 
+#[cfg(feature = "display")]
 impl std::fmt::Display for BuildMetaBeta {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if let Some(true) = self.git_dirty {
@@ -385,4 +203,60 @@ pub struct DeploymentRequestImageBeta {
     /// TODO: Remove this in favour of a separate secrets uploading action.
     pub secrets: Option<HashMap<String, String>>,
     // TODO: credentials fields for private repos??
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeploymentMetadata {
+    pub env: Environment,
+    pub project_name: String,
+    /// Path to a folder that persists between deployments
+    pub storage_path: PathBuf,
+}
+
+/// The environment this project is running in
+#[derive(
+    Clone, Copy, Debug, Default, Display, EnumString, PartialEq, Eq, Serialize, Deserialize,
+)]
+#[serde(rename_all = "lowercase")]
+#[strum(serialize_all = "lowercase")]
+pub enum Environment {
+    #[default]
+    Local,
+    #[strum(serialize = "production")] // Keep this around for a while for backward compat
+    Deployment,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::str::FromStr;
+
+    #[test]
+    fn test_state_deser() {
+        assert_eq!(
+            DeploymentStateBeta::Building,
+            DeploymentStateBeta::from_str("Building").unwrap()
+        );
+        assert_eq!(
+            DeploymentStateBeta::Building,
+            DeploymentStateBeta::from_str("BuilDing").unwrap()
+        );
+        assert_eq!(
+            DeploymentStateBeta::Building,
+            DeploymentStateBeta::from_str("building").unwrap()
+        );
+    }
+
+    #[test]
+    fn test_env_deser() {
+        assert_eq!(Environment::Local, Environment::from_str("local").unwrap());
+        assert_eq!(
+            Environment::Deployment,
+            Environment::from_str("production").unwrap()
+        );
+        assert!(Environment::from_str("somewhere_else").is_err());
+        assert_eq!(format!("{:?}", Environment::Local), "Local".to_owned());
+        assert_eq!(format!("{}", Environment::Local), "local".to_owned());
+        assert_eq!(Environment::Local.to_string(), "local".to_owned());
+    }
 }

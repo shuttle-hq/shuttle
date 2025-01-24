@@ -7,4 +7,4 @@ If you feel we are missing a resource you would like, then feel to create a feat
 
 ## Writing your own plugins
 
-Check out [custom resource examples](https://github.com/shuttle-hq/shuttle-examples/tree/main/custom-resource) or the plugins in this directory for how to implement the `ResourceBuilder` trait.
+Check out [custom resource examples](https://github.com/shuttle-hq/shuttle-examples/tree/main/custom-resource) or the plugins in this directory for how to implement the `ResourceInputBuilder` trait.

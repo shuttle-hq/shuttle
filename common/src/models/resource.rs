@@ -53,7 +53,16 @@ pub struct ResourceListResponseBeta {
 }
 
 #[derive(
-    Clone, Copy, Debug, strum::EnumString, strum::Display, Deserialize, Serialize, Eq, PartialEq,
+    Clone,
+    Copy,
+    Debug,
+    Deserialize,
+    Serialize,
+    Eq,
+    PartialEq,
+    strum::AsRefStr,
+    strum::Display,
+    strum::EnumString,
 )]
 #[typeshare::typeshare]
 // is a flat enum instead of nested enum to allow typeshare

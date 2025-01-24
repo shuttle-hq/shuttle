@@ -19,18 +19,61 @@ shuttle-service = { workspace = true }
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 hyper = { workspace = true, features = ["http1", "server", "tcp"] }
+log = { version = "0.4", optional = true, default-features = false }
+opentelemetry = { version = "0.27.0", optional = true, default-features = false, features = ["logs", "metrics", "trace", "tracing"] }
+opentelemetry-otlp = { version = "0.27.0", optional = true, default-features = false, features = [
+    "http-proto",
+    "logs",
+    "metrics",
+    "reqwest-client",
+    "trace",
+] }
+# NOTE: If the version of `opentelemetry_sdk` is changed/updated, remember up update the
+# `telemetry.sdk.version` value in `src/trace.rs:373`
+opentelemetry_sdk = { version = "=0.27.1", optional = true, default-features = false, features = [
+    "http",
+    "logs",
+    "metrics",
+    "rt-tokio",
+    "trace",
+    "spec_unstable_logs_enabled",
+] }
+opentelemetry-semantic-conventions = { version = "0.27.0", optional = true, default-features = false, features = ["semconv_experimental"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 strfmt = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
-tracing = { workspace = true }
-tracing-subscriber = { workspace = true, optional = true }
+tracing = { workspace = true, features = ["attributes", "std"] }
+tracing-core = { version = "0.1", optional = true, default-features = false, features = ["std"] }
+tracing-log = { version = "0.2", optional = true, default-features = false, features = ["log-tracer", "std"] }
+tracing-opentelemetry = { version = "0.28.0", optional = true, default-features = false, features = ["metrics"] }
+tracing-subscriber = { workspace = true, optional = true, default-features = false }
 
 [features]
 default = ["setup-tracing"]
 api-client-tracing = ["shuttle-api-client/tracing"]
 
 setup-tracing = [
-    "tracing-subscriber/default",
+    "tracing-subscriber/ansi",
     "tracing-subscriber/env-filter",
+    "tracing-subscriber/fmt",
+    "tracing-subscriber/smallvec",
+    "tracing-subscriber/std",
+    "tracing-subscriber/tracing-log",
+]
+setup-otel-exporter = [
+    "setup-tracing",
+    "dep:log",
+    "dep:opentelemetry",
+    "dep:opentelemetry-otlp",
+    "dep:opentelemetry_sdk",
+    "dep:opentelemetry-semantic-conventions",
+    "dep:tracing-core",
+    "dep:tracing-log",
+    "dep:tracing-opentelemetry",
+    "tracing-subscriber/alloc",
+    "tracing-subscriber/parking_lot",
+    "tracing-subscriber/registry",
+    "tracing-subscriber/tracing",
+    "tracing-subscriber/tracing-serde",
 ]

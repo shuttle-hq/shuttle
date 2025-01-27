@@ -8,10 +8,11 @@ alpha release is used, `0.2.0-alpha.5`.
 #### Application Service
 
 ```rust,ignore
-use rama::{http, Service, service::service_fn};
+use rama::service::service_fn;
+use std::convert::Infallible;
 
-async fn hello_world() -> &'static str {
-    "Hello, world!"
+async fn hello_world() -> Result<&'static str, Infallible> {
+    Ok("Hello, world!")
 }
 
 #[shuttle_runtime::main]
@@ -25,11 +26,14 @@ async fn main() -> Result<impl shuttle_rama::ShuttleService, shuttle_rama::Shutt
 #### Transport Service
 
 ```rust,ignore
-use rama::{net, Service, service::service_fn};
+use rama::{net, service::service_fn};
 use std::convert::Infallible;
 use tokio::io::AsyncWriteExt;
 
-async fn hello_world(mut stream: impl net::stream::Socket + net::Stream + Unpin) -> Result<(), Infallible> {
+async fn hello_world<S>(mut stream: S) -> Result<(), Infallible>
+where
+    S: net::stream::Socket + net::stream::Stream + Unpin,
+{
     println!(
         "Incoming connection from: {}",
         stream
@@ -60,8 +64,8 @@ async fn hello_world(mut stream: impl net::stream::Socket + net::Stream + Unpin)
 
 #[shuttle_runtime::main]
 async fn main() -> Result<impl shuttle_rama::ShuttleService, shuttle_rama::ShuttleError> {
-    Ok(shuttle_rama::RamaService::transport(
-        service_fn(hello_world),
-    ))
+    Ok(shuttle_rama::RamaService::transport(service_fn(
+        hello_world,
+    )))
 }
 ```

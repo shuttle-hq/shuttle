@@ -16,16 +16,15 @@ headers = { workspace = true }
 http = { workspace = true }
 percent-encoding = { workspace = true }
 reqwest = { workspace = true, features = ["json"] }
-reqwest-middleware = "0.2.5"
+reqwest-middleware = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 tokio = { workspace = true, features = ["macros", "signal", "rt-multi-thread"] }
 tokio-tungstenite = { workspace = true }
 url = { workspace = true }
 
-task-local-extensions = { version = "0.1.4", optional = true }
 tracing = { workspace = true, features = ["default"], optional = true }
 
 [features]
 default = ["tracing"]
-tracing = ["dep:tracing", "dep:task-local-extensions"]
+tracing = ["dep:tracing"]

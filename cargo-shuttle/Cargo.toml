@@ -18,32 +18,28 @@ bollard = { workspace = true }
 cargo_metadata = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true, features = ["env"] }
-clap_complete = "4.3.1"
-clap_mangen = "0.2.15"
+clap_complete = { workspace = true }
+clap_mangen = { workspace = true }
 crossterm = { workspace = true }
-dialoguer = { version = "0.11", default-features = false, features = [
-  "password",
-] }
+dialoguer = { workspace = true, features = ["password"] }
 dirs = { workspace = true }
 dunce = { workspace = true }
 futures = { workspace = true }
-git2 = { version = "0.19.0", default-features = false }
-gix = { version = "0.67.0", default-features = false, features = [
+git2 = { workspace = true }
+gix = { workspace = true, features = [
   "blocking-http-transport-reqwest-rust-tls",
   "worktree-mutation",
 ] }
-globset = "0.4.13"
-# TODO: make local provisioner server use these:
-# http = "1"
-# http-body-util = "0.1"
-# hyper-1 = { package = "hyper", version = "1.0", features = ["full"] }
-# hyper-util = { version = "0.1.10", features = ["full"] }
-hyper = { workspace = true }
-ignore = "0.4.20"
-indicatif = "0.17.3"
-indoc = "2.0.1"
+globset = { workspace = true }
+http-body = { workspace = true }
+http-body-util = { workspace = true }
+hyper = { workspace = true, features = ["http1", "server"] }
+hyper-util = { workspace = true }
+ignore = { workspace = true }
+indicatif = { workspace = true }
+indoc = { workspace = true }
 portpicker = { workspace = true }
-regex = "1.9.5"
+regex = { workspace = true }
 reqwest = { workspace = true }
 semver = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
@@ -66,10 +62,10 @@ tracing-subscriber = { workspace = true, features = [
   "fmt",
 ] }
 url = { workspace = true }
-walkdir = "2.3.3"
-webbrowser = "1.0.1"
-zip = "2.2.0"
+walkdir = { workspace = true }
+webbrowser = { workspace = true }
+zip = { workspace = true }
 
 [dev-dependencies]
-assert_cmd = "2.0.6"
-rexpect = "0.6.0"
+assert_cmd = { workspace = true }
+rexpect = { workspace = true }

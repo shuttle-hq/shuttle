@@ -4,77 +4,33 @@ version = "0.51.0"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Common library for the shuttle platform (https://www.shuttle.rs/)"
+description = "Common library for the Shuttle platform (shuttle.dev)"
+homepage = "https://www.shuttle.dev"
 # Base MSRV for the Shuttle crates. If some other crate has a higher MSRV, set it in that crate.
 rust-version = "1.81"
 
 [dependencies]
-anyhow = { workspace = true }
-async-trait = { workspace = true, optional = true }
 axum = { workspace = true, features = ["json"], optional = true }
-bytes = { workspace = true, optional = true }
 chrono = { workspace = true }
 comfy-table = { workspace = true, optional = true }
 crossterm = { workspace = true, optional = true }
-headers = { workspace = true, optional = true }
 http = { workspace = true }
-http-body = { workspace = true, optional = true }
-jsonwebtoken = { workspace = true, optional = true }
-opentelemetry = { workspace = true, optional = true }
-opentelemetry-http = { workspace = true, optional = true }
-pin-project = { workspace = true, optional = true }
-reqwest = { workspace = true, optional = true }
 semver = { workspace = true }
 serde = { workspace = true, features = ["derive", "std"] }
 serde_json = { workspace = true }
-sqlx = { workspace = true, optional = true }
 strum = { workspace = true, features = ["derive"] }
-thiserror = { workspace = true }
-tonic = { workspace = true, optional = true }
-tower = { workspace = true, optional = true }
 tracing = { workspace = true, features = ["std"], optional = true }
-tracing-opentelemetry = { workspace = true, optional = true }
-tracing-subscriber = { workspace = true, optional = true }
 typeshare = { workspace = true }
-url = { workspace = true, features = ["serde"] }
-uuid = { workspace = true, features = ["v4", "serde"], optional = true }
 zeroize = { workspace = true }
-wiremock = { workspace = true, optional = true }
-
-[dev-dependencies]
-proptest = "1.1.0"
 
 [features]
-axum = ["dep:axum"]
-claims = [
-    "axum",
-    "bytes",
-    "chrono/clock",
-    "headers",
-    "http-body",
-    "jsonwebtoken",
-    "models",
-    "opentelemetry",
-    "opentelemetry-http",
-    "pin-project",
-    "tower",
-    "tracing",
-    "tracing-opentelemetry",
-]
-display = ["chrono/clock", "comfy-table", "crossterm"]
-extract_propagation = [
-    "opentelemetry",
-    "opentelemetry-http",
-    "pin-project",
-    "tower",
-    "tracing-opentelemetry",
-]
-models = ["async-trait", "reqwest", "service"]
-sqlx = ["dep:sqlx", "sqlx/sqlite", "sqlx/postgres"]
-service = ["chrono/serde", "display", "tracing", "tracing-subscriber", "uuid"]
-test-utils = ["wiremock"]
-tonic = ["dep:tonic"]
-tracing = ["dep:tracing"]
+# main features
+models = ["chrono/serde", "dep:tracing"]
+
+# additional sub-features
+axum = ["dep:axum", "dep:tracing"]
+display = ["chrono/clock", "dep:crossterm"]
+tables = ["models", "display", "dep:comfy-table"]
 
 [package.metadata.docs.rs]
 all-features = true

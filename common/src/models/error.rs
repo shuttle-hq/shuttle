@@ -1,15 +1,15 @@
 use std::fmt::{Display, Formatter};
 
-use crossterm::style::Stylize;
 use http::StatusCode;
 use serde::{Deserialize, Serialize};
-use thiserror::Error;
-use tracing::{error, warn};
+
+#[cfg(feature = "display")]
+use crossterm::style::Stylize;
 
 #[cfg(feature = "axum")]
 impl axum::response::IntoResponse for ApiError {
     fn into_response(self) -> axum::response::Response {
-        warn!("{}", self.message);
+        tracing::warn!("{}", self.message);
 
         (self.status(), axum::Json(self)).into_response()
     }
@@ -32,11 +32,12 @@ impl ApiError {
 
     /// Creates an internal error without exposing sensitive information to the user.
     #[inline(always)]
+    #[allow(unused_variables)]
     pub fn internal_safe<E>(message: &str, error: E) -> Self
     where
         E: std::error::Error + 'static,
     {
-        error!(error = &error as &dyn std::error::Error, "{message}");
+        tracing::error!(error = &error as &dyn std::error::Error, "{message}");
 
         // Return the raw error during debug builds
         #[cfg(debug_assertions)]
@@ -139,7 +140,7 @@ where
             Ok(value) => Ok(value),
             Err(error) => Err({
                 let message = message();
-                warn!(
+                tracing::warn!(
                     error = &error as &dyn std::error::Error,
                     "bad request: {message}"
                 );
@@ -158,7 +159,7 @@ where
             Ok(value) => Ok(value),
             Err(error) => Err({
                 let message = message();
-                warn!(
+                tracing::warn!(
                     error = &error as &dyn std::error::Error,
                     "not found: {message}"
                 );
@@ -210,127 +211,16 @@ impl<T> ErrorContext<T> for Option<T> {
 
 impl Display for ApiError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(
+        #[cfg(feature = "display")]
+        return write!(
             f,
             "{}\nMessage: {}",
             self.status().to_string().bold(),
             self.message.to_string().red()
-        )
+        );
+        #[cfg(not(feature = "display"))]
+        return write!(f, "{}\nMessage: {}", self.status(), self.message);
     }
 }
 
 impl std::error::Error for ApiError {}
-
-// Note: The string "Invalid project name" is used by cargo-shuttle to determine what type of error was returned.
-// Changing it is breaking.
-#[derive(Debug, Clone, PartialEq, Error)]
-#[error(
-    "Invalid project name. Project names must:
-    1. only contain lowercase alphanumeric characters or dashes `-`.
-    2. not start or end with a dash.
-    3. not be empty.
-    4. be shorter than 64 characters.
-    5. not contain any profanities.
-    6. not be a reserved word."
-)]
-pub struct InvalidProjectName;
-
-impl From<InvalidProjectName> for ApiError {
-    fn from(err: InvalidProjectName) -> Self {
-        Self::bad_request(err)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Error)]
-#[error("Invalid team name. Must not be more than 30 characters long.")]
-pub struct InvalidTeamName;
-
-impl From<InvalidTeamName> for ApiError {
-    fn from(err: InvalidTeamName) -> Self {
-        Self::bad_request(err)
-    }
-}
-
-#[derive(Debug, Error)]
-#[error("Project is not ready. Try to restart it")]
-pub struct ProjectNotReady;
-
-#[derive(Debug, Error)]
-#[error("Project is running but is not responding correctly. Try to restart it")]
-pub struct ProjectUnavailable;
-
-#[derive(Debug, Error)]
-#[error("Project '{0}' not found. Make sure you are the owner of this project. Run the `project start` command to create a new project.")]
-pub struct ProjectNotFound(pub String);
-
-impl From<ProjectNotFound> for ApiError {
-    fn from(err: ProjectNotFound) -> Self {
-        Self {
-            message: err.to_string(),
-            status_code: StatusCode::NOT_FOUND.as_u16(),
-        }
-    }
-}
-
-#[derive(Debug, Error)]
-#[error("{0} See https://docs.shuttle.dev/platform-update/platform-update for more information and steps to upgrade.")]
-pub struct Deprecated(pub String);
-
-impl From<Deprecated> for ApiError {
-    fn from(err: Deprecated) -> Self {
-        Self {
-            message: err.to_string(),
-            status_code: StatusCode::FORBIDDEN.as_u16(),
-        }
-    }
-}
-
-#[derive(Debug, Error)]
-#[error("Could not automatically delete the following resources: {0:?}. Please reach out to Shuttle support for help.")]
-pub struct ProjectHasResources(pub Vec<String>);
-
-impl From<ProjectHasResources> for ApiError {
-    fn from(err: ProjectHasResources) -> Self {
-        Self::bad_request(err)
-    }
-}
-
-#[derive(Debug, Error)]
-#[error("Could not automatically stop the running deployment for the project. Please reach out to Shuttle support for help.")]
-pub struct ProjectHasRunningDeployment;
-
-impl From<ProjectHasRunningDeployment> for ApiError {
-    fn from(err: ProjectHasRunningDeployment) -> Self {
-        Self::bad_request(err)
-    }
-}
-
-#[derive(Debug, Error)]
-#[error("Project currently has a deployment that is busy building. Use `cargo shuttle deployment list` to see it and wait for it to finish")]
-pub struct ProjectHasBuildingDeployment;
-
-impl From<ProjectHasBuildingDeployment> for ApiError {
-    fn from(err: ProjectHasBuildingDeployment) -> Self {
-        Self::bad_request(err)
-    }
-}
-
-#[derive(Debug, Error)]
-#[error("Tried to get project into a ready state for deletion but failed. Please reach out to Shuttle support for help.")]
-pub struct ProjectCorrupted;
-
-impl From<ProjectCorrupted> for ApiError {
-    fn from(err: ProjectCorrupted) -> Self {
-        Self::bad_request(err)
-    }
-}
-
-#[derive(Debug, Error)]
-#[error("Invalid custom domain")]
-pub struct InvalidCustomDomain;
-
-impl From<InvalidCustomDomain> for ApiError {
-    fn from(err: InvalidCustomDomain) -> Self {
-        Self::bad_request(err)
-    }
-}

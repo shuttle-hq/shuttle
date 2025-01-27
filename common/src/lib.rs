@@ -1,31 +1,10 @@
-#[cfg(feature = "service")]
-pub mod certificate;
-#[cfg(feature = "claims")]
-pub mod claims;
 pub mod constants;
-pub mod database;
-#[cfg(feature = "service")]
-pub mod deployment;
-#[cfg(feature = "service")]
-pub type DeploymentId = uuid::Uuid;
-#[cfg(feature = "extract_propagation")]
-pub mod extract_propagation;
-#[cfg(feature = "claims")]
-pub mod limits;
-#[cfg(feature = "service")]
-pub mod log;
-#[cfg(feature = "service")]
-pub use log::LogItem;
-#[cfg(feature = "service")]
-pub use log::LogItemBeta;
 #[cfg(feature = "models")]
 pub mod models;
-pub mod resource;
 pub mod secrets;
-pub use secrets::{Secret, SecretStore};
+#[cfg(feature = "tables")]
+pub mod tables;
 pub mod templates;
-#[cfg(feature = "tracing")]
-pub mod tracing;
 
 use std::fmt::Debug;
 
@@ -57,7 +36,7 @@ pub enum DatabaseResource {
 pub struct DatabaseInfo {
     engine: String,
     role_name: String,
-    role_password: Secret<String>,
+    role_password: secrets::Secret<String>,
     database_name: String,
     port: String,
     // aliases to parse older versions of this struct
@@ -80,7 +59,7 @@ impl DatabaseInfo {
         Self {
             engine,
             role_name,
-            role_password: Secret::new(role_password),
+            role_password: secrets::Secret::new(role_password),
             database_name,
             port,
             hostname_shuttle,
@@ -219,18 +198,6 @@ pub struct ContainerResponse {
     /// The port that the container exposes to the host.
     /// Is a string for parity with the Docker respose.
     pub host_port: String,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct VersionInfo {
-    /// Version of gateway
-    pub gateway: semver::Version,
-    /// Latest version of cargo-shuttle compatible with this gateway.
-    pub cargo_shuttle: semver::Version,
-    /// Latest version of shuttle-deployer compatible with this gateway.
-    pub deployer: semver::Version,
-    /// Latest version of shuttle-runtime compatible with the above deployer.
-    pub runtime: semver::Version,
 }
 
 /// Check if two versions are compatible based on the rule used by cargo:

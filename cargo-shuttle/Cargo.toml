@@ -4,15 +4,13 @@ version = "0.51.0"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "CLI for the Shuttle platform (https://www.shuttle.dev/)"
+description = "CLI for the Shuttle platform (shuttle.dev)"
 homepage = "https://www.shuttle.dev"
-default-run = "cargo-shuttle"
+default-run = "shuttle"
 
 [dependencies]
 shuttle-api-client = { workspace = true, default-features = true }
-shuttle-common = { workspace = true, features = ["models"] }
-shuttle-proto = { workspace = true, features = ["provisioner", "runtime-client"] }
-shuttle-service = { workspace = true, features = ["builder", "runner"] }
+shuttle-common = { workspace = true, features = ["models", "tables"] }
 
 anyhow = { workspace = true }
 async-trait = { workspace = true }
@@ -23,10 +21,11 @@ clap = { workspace = true, features = ["env"] }
 clap_complete = "4.3.1"
 clap_mangen = "0.2.15"
 crossterm = { workspace = true }
-dialoguer = { version = "0.11", default-features = false, features = ["password"] }
+dialoguer = { version = "0.11", default-features = false, features = [
+  "password",
+] }
 dirs = { workspace = true }
 dunce = { workspace = true }
-flate2 = { workspace = true }
 futures = { workspace = true }
 git2 = { version = "0.19.0", default-features = false }
 gix = { version = "0.67.0", default-features = false, features = [
@@ -34,8 +33,6 @@ gix = { version = "0.67.0", default-features = false, features = [
   "worktree-mutation",
 ] }
 globset = "0.4.13"
-headers = { workspace = true }
-home = { workspace = true }
 # TODO: make local provisioner server use these:
 # http = "1"
 # http-body-util = "0.1"
@@ -48,18 +45,20 @@ indoc = "2.0.1"
 portpicker = { workspace = true }
 regex = "1.9.5"
 reqwest = { workspace = true }
-rmp-serde = { workspace = true }
 semver = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 strum = { workspace = true }
-tar = { workspace = true }
 tempfile = { workspace = true }
-tokio = { workspace = true, features = ["rt-multi-thread"] }
+tokio = { workspace = true, features = [
+  "rt-multi-thread",
+  "process",
+  "sync",
+  "time",
+] }
 tokio-tungstenite = { workspace = true }
 toml = { workspace = true }
 toml_edit = { workspace = true }
-tonic = { workspace = true }
 tracing = { workspace = true, features = ["default"] }
 tracing-subscriber = { workspace = true, features = [
   "default",
@@ -67,7 +66,6 @@ tracing-subscriber = { workspace = true, features = [
   "fmt",
 ] }
 url = { workspace = true }
-uuid = { workspace = true, features = ["v4"] }
 walkdir = "2.3.3"
 webbrowser = "1.0.1"
 zip = "2.2.0"
@@ -75,5 +73,3 @@ zip = "2.2.0"
 [dev-dependencies]
 assert_cmd = "2.0.6"
 rexpect = "0.6.0"
-# Publication of this crate will fail if this is changed to a workspace dependency
-shuttle-common-tests = { path = "../common-tests" }

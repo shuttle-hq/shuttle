@@ -14,7 +14,7 @@ export interface ApiError {
 	status_code: number;
 }
 
-export interface BuildArgsRustBeta {
+export interface BuildArgsRust {
 	/** Version of shuttle-runtime used by this crate */
 	shuttle_runtime_version?: string;
 	/** Use the built in cargo chef setup for caching */
@@ -33,7 +33,7 @@ export interface BuildArgsRustBeta {
 	mold: boolean;
 }
 
-export interface BuildMetaBeta {
+export interface BuildMeta {
 	git_commit_id?: string;
 	git_commit_msg?: string;
 	git_branch?: string;
@@ -51,8 +51,8 @@ export interface CertificateListResponse {
 	certificates: CertificateResponse[];
 }
 
-/** Holds the data for building a database connection string on the Beta platform. */
-export interface DatabaseInfoBeta {
+/** Holds the data for building a database connection string. */
+export interface DatabaseInfo {
 	engine: string;
 	role_name: string;
 	role_password: string;
@@ -70,7 +70,7 @@ export interface DeleteCertificateRequest {
 	subject: string;
 }
 
-export enum DeploymentStateBeta {
+export enum DeploymentState {
 	Pending = "pending",
 	Building = "building",
 	Running = "running",
@@ -82,55 +82,55 @@ export enum DeploymentStateBeta {
 	Unknown = "unknown",
 }
 
-export interface DeploymentResponseBeta {
+export interface DeploymentResponse {
 	id: string;
-	state: DeploymentStateBeta;
+	state: DeploymentState;
 	created_at: string;
 	updated_at: string;
 	/** URIs where this deployment can currently be reached (only relevant for Running state) */
 	uris: string[];
 	build_id?: string;
-	build_meta?: BuildMetaBeta;
+	build_meta?: BuildMeta;
 }
 
-export interface DeploymentListResponseBeta {
-	deployments: DeploymentResponseBeta[];
+export interface DeploymentListResponse {
+	deployments: DeploymentResponse[];
 }
 
-export type BuildArgsBeta = 
-	| { type: "Rust", content: BuildArgsRustBeta }
+export type BuildArgs = 
+	| { type: "Rust", content: BuildArgsRust }
 	| { type: "Unknown", content?: undefined };
 
-export interface DeploymentRequestBuildArchiveBeta {
+export interface DeploymentRequestBuildArchive {
 	/** The S3 object version ID of the archive to use */
 	archive_version_id: string;
-	build_args?: BuildArgsBeta;
+	build_args?: BuildArgs;
 	/**
 	 * Secrets to add before this deployment.
 	 * TODO: Remove this in favour of a separate secrets uploading action.
 	 */
 	secrets?: Record<string, string>;
-	build_meta?: BuildMetaBeta;
+	build_meta?: BuildMeta;
 }
 
-export interface DeploymentRequestImageBeta {
+export interface DeploymentRequestImage {
 	image: string;
 	/** TODO: Remove this in favour of a separate secrets uploading action. */
 	secrets?: Record<string, string>;
 }
 
-export interface LogItemBeta {
+export interface LogItem {
 	timestamp: string;
 	/** Which container / log stream this line came from */
 	source: string;
 	line: string;
 }
 
-export interface LogsResponseBeta {
-	logs: LogItemBeta[];
+export interface LogsResponse {
+	logs: LogItem[];
 }
 
-export interface ProjectCreateRequestBeta {
+export interface ProjectCreateRequest {
 	name: string;
 }
 
@@ -143,7 +143,7 @@ export enum ComputeTier {
 	XXL = "xxl",
 }
 
-export interface ProjectResponseBeta {
+export interface ProjectResponse {
 	id: string;
 	/** Project owner */
 	user_id: string;
@@ -151,22 +151,22 @@ export interface ProjectResponseBeta {
 	created_at: string;
 	compute_tier?: ComputeTier;
 	/** State of the current deployment if one exists (something has been deployed). */
-	deployment_state?: DeploymentStateBeta;
+	deployment_state?: DeploymentState;
 	/** URIs where running deployments can be reached */
 	uris: string[];
 }
 
-export interface ProjectListResponseBeta {
-	projects: ProjectResponseBeta[];
+export interface ProjectListResponse {
+	projects: ProjectResponse[];
 }
 
 /** Set wanted field(s) to Some to update those parts of the project */
-export interface ProjectUpdateRequestBeta {
+export interface ProjectUpdateRequest {
 	name?: string;
 	compute_tier?: ComputeTier;
 }
 
-export enum ResourceTypeBeta {
+export enum ResourceType {
 	DatabaseSharedPostgres = "database::shared::postgres",
 	DatabaseAwsRdsPostgres = "database::aws_rds::postgres",
 	DatabaseAwsRdsMySql = "database::aws_rds::mysql",
@@ -177,9 +177,9 @@ export enum ResourceTypeBeta {
 	Container = "container",
 }
 
-export interface ProvisionResourceRequestBeta {
+export interface ProvisionResourceRequest {
 	/** The type of this resource */
-	type: ResourceTypeBeta;
+	type: ResourceType;
 	/**
 	 * The config used when creating this resource.
 	 * Use `Self::r#type` to know how to parse this data.
@@ -197,8 +197,8 @@ export enum ResourceState {
 	Deleted = "deleted",
 }
 
-export interface ResourceResponseBeta {
-	type: ResourceTypeBeta;
+export interface ResourceResponse {
+	type: ResourceType;
 	state: ResourceState;
 	/** The config used when creating this resource. Use the `r#type` to know how to parse this data. */
 	config: any;
@@ -206,8 +206,8 @@ export interface ResourceResponseBeta {
 	output: any;
 }
 
-export interface ResourceListResponseBeta {
-	resources: ResourceResponseBeta[];
+export interface ResourceListResponse {
+	resources: ResourceResponse[];
 }
 
 export enum SubscriptionType {
@@ -229,7 +229,7 @@ export interface SubscriptionRequest {
 	quantity: number;
 }
 
-export interface UploadArchiveResponseBeta {
+export interface UploadArchiveResponse {
 	/** The S3 object version ID of the uploaded object */
 	archive_version_id: string;
 }
@@ -257,9 +257,9 @@ export interface UserResponse {
 	has_access_to_beta?: boolean;
 }
 
-export type DeploymentRequestBeta = 
+export type DeploymentRequest = 
 	/** Build an image from the source code in an attached zip archive */
-	| { type: "BuildArchive", content: DeploymentRequestBuildArchiveBeta }
+	| { type: "BuildArchive", content: DeploymentRequestBuildArchive }
 	/** Use this image directly. Can be used to skip the build step. */
-	| { type: "Image", content: DeploymentRequestImageBeta };
+	| { type: "Image", content: DeploymentRequestImage };
 

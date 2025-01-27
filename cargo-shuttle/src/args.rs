@@ -14,7 +14,7 @@ use clap::{
 use clap_complete::Shell;
 use shuttle_common::{
     constants::{EXAMPLES_REPO, SHUTTLE_CONSOLE_URL},
-    models::resource::ResourceTypeBeta,
+    models::resource::ResourceType,
 };
 
 #[derive(Parser)]
@@ -209,7 +209,7 @@ pub enum ResourceCommand {
         /// Type of the resource to delete.
         /// Use the string in the 'Type' column as displayed in the `resource list` command.
         /// For example, 'database::shared::postgres'.
-        resource_type: ResourceTypeBeta,
+        resource_type: ResourceType,
         #[command(flatten)]
         confirmation: ConfirmationArgs,
     },
@@ -219,7 +219,7 @@ pub enum ResourceCommand {
         /// Type of the resource to dump.
         /// Use the string in the 'Type' column as displayed in the `resource list` command.
         /// For example, 'database::shared::postgres'.
-        resource_type: ResourceTypeBeta,
+        resource_type: ResourceType,
     },
 }
 

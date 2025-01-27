@@ -5,14 +5,14 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[typeshare::typeshare]
-pub struct LogItemBeta {
+pub struct LogItem {
     pub timestamp: DateTime<Utc>,
     /// Which container / log stream this line came from
     pub source: String,
     pub line: String,
 }
 
-impl LogItemBeta {
+impl LogItem {
     pub fn new(timestamp: DateTime<Utc>, source: String, line: String) -> Self {
         Self {
             timestamp,
@@ -23,7 +23,7 @@ impl LogItemBeta {
 }
 
 #[cfg(feature = "display")]
-impl std::fmt::Display for LogItemBeta {
+impl std::fmt::Display for LogItem {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let datetime: chrono::DateTime<chrono::Local> = DateTime::from(self.timestamp);
 
@@ -41,8 +41,8 @@ impl std::fmt::Display for LogItemBeta {
 
 #[derive(Debug, Serialize, Deserialize)]
 #[typeshare::typeshare]
-pub struct LogsResponseBeta {
-    pub logs: Vec<LogItemBeta>,
+pub struct LogsResponse {
+    pub logs: Vec<LogItem>,
 }
 
 #[cfg(test)]
@@ -60,7 +60,7 @@ mod tests {
 
     #[test]
     fn test_timezone_formatting() {
-        let item = LogItemBeta::new(
+        let item = LogItem::new(
             Utc::now(),
             "test".to_string(),
             r#"{"message": "Building"}"#.to_owned(),

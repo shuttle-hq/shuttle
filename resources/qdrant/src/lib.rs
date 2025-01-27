@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use shuttle_service::{
     error::{CustomError, Error},
-    resource::{ProvisionResourceRequestBeta, ResourceTypeBeta},
+    resource::{ProvisionResourceRequest, ResourceType},
     ContainerRequest, ContainerResponse, Environment, IntoResource, ResourceFactory,
     ResourceInputBuilder,
 };
@@ -37,7 +37,7 @@ impl Qdrant {
 #[derive(Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum MaybeRequest {
-    Request(ProvisionResourceRequestBeta),
+    Request(ProvisionResourceRequest),
     NotRequest(QdrantClientConfigWrap),
 }
 
@@ -64,8 +64,8 @@ impl ResourceInputBuilder for Qdrant {
                     url: local_url,
                     api_key: self.api_key,
                 })),
-                None => Ok(MaybeRequest::Request(ProvisionResourceRequestBeta {
-                    r#type: ResourceTypeBeta::Container,
+                None => Ok(MaybeRequest::Request(ProvisionResourceRequest {
+                    r#type: ResourceType::Container,
                     config: serde_json::to_value(ContainerRequest {
                         project_name: md.project_name,
                         container_name: "qdrant".to_string(),

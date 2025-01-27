@@ -12,7 +12,7 @@ use crossterm::style::Stylize;
 #[strum(serialize_all = "lowercase")]
 #[strum(ascii_case_insensitive)]
 #[typeshare::typeshare]
-pub enum DeploymentStateBeta {
+pub enum DeploymentState {
     Pending,
     Building,
     Running,
@@ -25,7 +25,7 @@ pub enum DeploymentStateBeta {
     Unknown,
 }
 
-impl DeploymentStateBeta {
+impl DeploymentState {
     #[cfg(feature = "display")]
     pub fn get_color_crossterm(&self) -> crossterm::style::Color {
         use crossterm::style::Color;
@@ -66,25 +66,25 @@ impl DeploymentStateBeta {
 
 #[derive(Deserialize, Serialize)]
 #[typeshare::typeshare]
-pub struct DeploymentListResponseBeta {
-    pub deployments: Vec<DeploymentResponseBeta>,
+pub struct DeploymentListResponse {
+    pub deployments: Vec<DeploymentResponse>,
 }
 
 #[derive(Deserialize, Serialize)]
 #[typeshare::typeshare]
-pub struct DeploymentResponseBeta {
+pub struct DeploymentResponse {
     pub id: String,
-    pub state: DeploymentStateBeta,
+    pub state: DeploymentState,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     /// URIs where this deployment can currently be reached (only relevant for Running state)
     pub uris: Vec<String>,
     pub build_id: Option<String>,
-    pub build_meta: Option<BuildMetaBeta>,
+    pub build_meta: Option<BuildMeta>,
 }
 
 #[cfg(feature = "display")]
-impl DeploymentResponseBeta {
+impl DeploymentResponse {
     pub fn to_string_summary_colored(&self) -> String {
         // TODO: make this look nicer
         format!(
@@ -106,7 +106,7 @@ impl DeploymentResponseBeta {
 
 #[derive(Deserialize, Serialize)]
 #[typeshare::typeshare]
-pub struct UploadArchiveResponseBeta {
+pub struct UploadArchiveResponse {
     /// The S3 object version ID of the uploaded object
     pub archive_version_id: String,
 }
@@ -114,38 +114,38 @@ pub struct UploadArchiveResponseBeta {
 #[derive(Deserialize, Serialize)]
 #[serde(tag = "type", content = "content")]
 #[typeshare::typeshare]
-pub enum DeploymentRequestBeta {
+pub enum DeploymentRequest {
     /// Build an image from the source code in an attached zip archive
-    BuildArchive(DeploymentRequestBuildArchiveBeta),
-    // TODO?: Add GitRepo(DeploymentRequestGitRepoBeta)
+    BuildArchive(DeploymentRequestBuildArchive),
+    // TODO?: Add GitRepo(DeploymentRequestGitRepo)
     /// Use this image directly. Can be used to skip the build step.
-    Image(DeploymentRequestImageBeta),
+    Image(DeploymentRequestImage),
 }
 
 #[derive(Default, Deserialize, Serialize)]
 #[typeshare::typeshare]
-pub struct DeploymentRequestBuildArchiveBeta {
+pub struct DeploymentRequestBuildArchive {
     /// The S3 object version ID of the archive to use
     pub archive_version_id: String,
-    pub build_args: Option<BuildArgsBeta>,
+    pub build_args: Option<BuildArgs>,
     /// Secrets to add before this deployment.
     /// TODO: Remove this in favour of a separate secrets uploading action.
     pub secrets: Option<HashMap<String, String>>,
-    pub build_meta: Option<BuildMetaBeta>,
+    pub build_meta: Option<BuildMeta>,
 }
 
 #[derive(Deserialize, Serialize, Default)]
 #[serde(tag = "type", content = "content")]
 #[typeshare::typeshare]
-pub enum BuildArgsBeta {
-    Rust(BuildArgsRustBeta),
+pub enum BuildArgs {
+    Rust(BuildArgsRust),
     #[default]
     Unknown,
 }
 
 #[derive(Deserialize, Serialize)]
 #[typeshare::typeshare]
-pub struct BuildArgsRustBeta {
+pub struct BuildArgsRust {
     /// Version of shuttle-runtime used by this crate
     pub shuttle_runtime_version: Option<String>,
     /// Use the built in cargo chef setup for caching
@@ -164,7 +164,7 @@ pub struct BuildArgsRustBeta {
     pub mold: bool,
 }
 
-impl Default for BuildArgsRustBeta {
+impl Default for BuildArgsRust {
     fn default() -> Self {
         Self {
             shuttle_runtime_version: Default::default(),
@@ -184,7 +184,7 @@ pub const GIT_STRINGS_MAX_LENGTH: usize = 80;
 
 #[derive(Default, Deserialize, Serialize)]
 #[typeshare::typeshare]
-pub struct BuildMetaBeta {
+pub struct BuildMeta {
     pub git_commit_id: Option<String>,
     pub git_commit_msg: Option<String>,
     pub git_branch: Option<String>,
@@ -192,7 +192,7 @@ pub struct BuildMetaBeta {
 }
 
 #[cfg(feature = "display")]
-impl std::fmt::Display for BuildMetaBeta {
+impl std::fmt::Display for BuildMeta {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if let Some(true) = self.git_dirty {
             write!(f, "(dirty) ")?;
@@ -210,7 +210,7 @@ impl std::fmt::Display for BuildMetaBeta {
 
 #[derive(Default, Deserialize, Serialize)]
 #[typeshare::typeshare]
-pub struct DeploymentRequestImageBeta {
+pub struct DeploymentRequestImage {
     pub image: String,
     /// TODO: Remove this in favour of a separate secrets uploading action.
     pub secrets: Option<HashMap<String, String>>,
@@ -246,16 +246,16 @@ mod tests {
     #[test]
     fn test_state_deser() {
         assert_eq!(
-            DeploymentStateBeta::Building,
-            DeploymentStateBeta::from_str("Building").unwrap()
+            DeploymentState::Building,
+            DeploymentState::from_str("Building").unwrap()
         );
         assert_eq!(
-            DeploymentStateBeta::Building,
-            DeploymentStateBeta::from_str("BuilDing").unwrap()
+            DeploymentState::Building,
+            DeploymentState::from_str("BuilDing").unwrap()
         );
         assert_eq!(
-            DeploymentStateBeta::Building,
-            DeploymentStateBeta::from_str("building").unwrap()
+            DeploymentState::Building,
+            DeploymentState::from_str("building").unwrap()
         );
     }
 

@@ -11,7 +11,7 @@ use hyper::{body::Bytes, server::conn::http1, service::service_fn, Response};
 use hyper_util::rt::TokioIo;
 use shuttle_api_client::ShuttleApiClient;
 use shuttle_common::{
-    models::resource::{ResourceInputBeta, ResourceState, ResourceTypeBeta},
+    models::resource::{ResourceInput, ResourceState, ResourceType},
     secrets::Secret,
 };
 use shuttle_service::{Environment, ResourceFactory, Service};
@@ -133,7 +133,7 @@ pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + S
 
     trace!("Getting secrets");
     let secrets: BTreeMap<String, String> = match client
-        .get_secrets_beta(&project_id)
+        .get_secrets(&project_id)
         .await
         .and_then(|r| serde_json::from_value(r.output).context("failed to deserialize secrets"))
     {
@@ -161,8 +161,7 @@ pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + S
     let values = match resources
         .iter()
         .map(|bytes| {
-            serde_json::from_slice::<ResourceInputBeta>(bytes)
-                .context("deserializing resource input")
+            serde_json::from_slice::<ResourceInput>(bytes).context("deserializing resource input")
         })
         .collect::<anyhow::Result<Vec<_>>>()
     {
@@ -178,12 +177,12 @@ pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + S
         .zip(values)
         // ignore non-Shuttle resource items
         .filter_map(|(bytes, value)| match value {
-            ResourceInputBeta::Shuttle(shuttle_resource) => Some((bytes, shuttle_resource)),
-            ResourceInputBeta::Custom(_) => None,
+            ResourceInput::Shuttle(shuttle_resource) => Some((bytes, shuttle_resource)),
+            ResourceInput::Custom(_) => None,
         })
     {
         // Secrets don't need to be requested here since we already got them above.
-        if shuttle_resource.r#type == ResourceTypeBeta::Secrets {
+        if shuttle_resource.r#type == ResourceType::Secrets {
             *bytes = serde_json::to_vec(&secrets).expect("to serialize struct");
             continue;
         }
@@ -192,7 +191,7 @@ pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + S
         loop {
             trace!("Checking state of {:?}", shuttle_resource.r#type);
             match client
-                .provision_resource_beta(&project_id, shuttle_resource.clone())
+                .provision_resource(&project_id, shuttle_resource.clone())
                 .await
             {
                 Ok(res) => {

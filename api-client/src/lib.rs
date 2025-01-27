@@ -11,16 +11,14 @@ use shuttle_common::models::certificate::{
     AddCertificateRequest, CertificateListResponse, CertificateResponse, DeleteCertificateRequest,
 };
 use shuttle_common::models::deployment::{
-    DeploymentListResponseBeta, DeploymentRequestBeta, DeploymentResponseBeta,
-    UploadArchiveResponseBeta,
+    DeploymentListResponse, DeploymentRequest, DeploymentResponse, UploadArchiveResponse,
 };
-use shuttle_common::models::log::LogsResponseBeta;
+use shuttle_common::models::log::LogsResponse;
 use shuttle_common::models::project::{
-    ProjectCreateRequestBeta, ProjectListResponseBeta, ProjectResponseBeta,
-    ProjectUpdateRequestBeta,
+    ProjectCreateRequest, ProjectListResponse, ProjectResponse, ProjectUpdateRequest,
 };
 use shuttle_common::models::resource::{
-    ProvisionResourceRequestBeta, ResourceListResponseBeta, ResourceResponseBeta, ResourceTypeBeta,
+    ProvisionResourceRequest, ResourceListResponse, ResourceResponse, ResourceType,
 };
 use shuttle_common::models::{team, user};
 use tokio::net::TcpStream;
@@ -86,7 +84,7 @@ impl ShuttleApiClient {
             .with_context(|| "failed to connect to auth endpoint")
     }
 
-    pub async fn check_project_name_beta(&self, project_name: &str) -> Result<bool> {
+    pub async fn check_project_name(&self, project_name: &str) -> Result<bool> {
         let url = format!("{}/projects/{project_name}/name", self.api_url);
 
         self.client
@@ -99,24 +97,24 @@ impl ShuttleApiClient {
             .context("parsing name check response")
     }
 
-    pub async fn get_current_user_beta(&self) -> Result<user::UserResponse> {
+    pub async fn get_current_user(&self) -> Result<user::UserResponse> {
         self.get_json("/users/me".to_owned()).await
     }
 
-    pub async fn deploy_beta(
+    pub async fn deploy(
         &self,
         project: &str,
-        deployment_req: DeploymentRequestBeta,
-    ) -> Result<DeploymentResponseBeta> {
+        deployment_req: DeploymentRequest,
+    ) -> Result<DeploymentResponse> {
         let path = format!("/projects/{project}/deployments");
         self.post_json(path, Some(deployment_req)).await
     }
 
-    pub async fn upload_archive_beta(
+    pub async fn upload_archive(
         &self,
         project: &str,
         data: Vec<u8>,
-    ) -> Result<UploadArchiveResponseBeta> {
+    ) -> Result<UploadArchiveResponse> {
         let path = format!("/projects/{project}/archives");
 
         let url = format!("{}{}", self.api_url, path);
@@ -132,26 +130,19 @@ impl ShuttleApiClient {
             .await
     }
 
-    pub async fn redeploy_beta(
-        &self,
-        project: &str,
-        deployment_id: &str,
-    ) -> Result<DeploymentResponseBeta> {
+    pub async fn redeploy(&self, project: &str, deployment_id: &str) -> Result<DeploymentResponse> {
         let path = format!("/projects/{project}/deployments/{deployment_id}/redeploy");
 
         self.post_json(path, Option::<()>::None).await
     }
 
-    pub async fn stop_service_beta(&self, project: &str) -> Result<String> {
+    pub async fn stop_service(&self, project: &str) -> Result<String> {
         let path = format!("/projects/{project}/deployments");
 
         self.delete_json(path).await
     }
 
-    pub async fn get_service_resources_beta(
-        &self,
-        project: &str,
-    ) -> Result<ResourceListResponseBeta> {
+    pub async fn get_service_resources(&self, project: &str) -> Result<ResourceListResponse> {
         self.get_json(format!("/projects/{project}/resources"))
             .await
     }
@@ -159,7 +150,7 @@ impl ShuttleApiClient {
     async fn _dump_service_resource(
         &self,
         project: &str,
-        resource_type: &ResourceTypeBeta,
+        resource_type: &ResourceType,
     ) -> Result<Vec<u8>> {
         let r#type = resource_type.to_string();
         let r#type = utf8_percent_encode(&r#type, percent_encoding::NON_ALPHANUMERIC).to_owned();
@@ -179,10 +170,10 @@ impl ShuttleApiClient {
         Ok(bytes.to_vec())
     }
 
-    pub async fn delete_service_resource_beta(
+    pub async fn delete_service_resource(
         &self,
         project: &str,
-        resource_type: &ResourceTypeBeta,
+        resource_type: &ResourceType,
     ) -> Result<String> {
         let r#type = resource_type.to_string();
         let r#type = utf8_percent_encode(&r#type, percent_encoding::NON_ALPHANUMERIC).to_owned();
@@ -190,24 +181,24 @@ impl ShuttleApiClient {
         self.delete_json(format!("/projects/{project}/resources/{}", r#type))
             .await
     }
-    pub async fn provision_resource_beta(
+    pub async fn provision_resource(
         &self,
         project: &str,
-        req: ProvisionResourceRequestBeta,
-    ) -> Result<ResourceResponseBeta> {
+        req: ProvisionResourceRequest,
+    ) -> Result<ResourceResponse> {
         self.post_json(format!("/projects/{project}/resources"), Some(req))
             .await
     }
-    pub async fn get_secrets_beta(&self, project: &str) -> Result<ResourceResponseBeta> {
+    pub async fn get_secrets(&self, project: &str) -> Result<ResourceResponse> {
         self.get_json(format!("/projects/{project}/resources/secrets"))
             .await
     }
 
-    pub async fn list_certificates_beta(&self, project: &str) -> Result<CertificateListResponse> {
+    pub async fn list_certificates(&self, project: &str) -> Result<CertificateListResponse> {
         self.get_json(format!("/projects/{project}/certificates"))
             .await
     }
-    pub async fn add_certificate_beta(
+    pub async fn add_certificate(
         &self,
         project: &str,
         subject: String,
@@ -218,7 +209,7 @@ impl ShuttleApiClient {
         )
         .await
     }
-    pub async fn delete_certificate_beta(&self, project: &str, subject: String) -> Result<String> {
+    pub async fn delete_certificate(&self, project: &str, subject: String) -> Result<String> {
         self.delete_json_with_body(
             format!("/projects/{project}/certificates"),
             DeleteCertificateRequest { subject },
@@ -226,65 +217,65 @@ impl ShuttleApiClient {
         .await
     }
 
-    pub async fn create_project_beta(&self, name: &str) -> Result<ProjectResponseBeta> {
+    pub async fn create_project(&self, name: &str) -> Result<ProjectResponse> {
         self.post_json(
             "/projects",
-            Some(ProjectCreateRequestBeta {
+            Some(ProjectCreateRequest {
                 name: name.to_string(),
             }),
         )
         .await
     }
 
-    pub async fn get_project_beta(&self, project: &str) -> Result<ProjectResponseBeta> {
+    pub async fn get_project(&self, project: &str) -> Result<ProjectResponse> {
         self.get_json(format!("/projects/{project}")).await
     }
 
-    pub async fn get_projects_list_beta(&self) -> Result<ProjectListResponseBeta> {
+    pub async fn get_projects_list(&self) -> Result<ProjectListResponse> {
         self.get_json("/projects".to_owned()).await
     }
 
-    pub async fn update_project_beta(
+    pub async fn update_project(
         &self,
         project: &str,
-        req: ProjectUpdateRequestBeta,
-    ) -> Result<ProjectResponseBeta> {
+        req: ProjectUpdateRequest,
+    ) -> Result<ProjectResponse> {
         self.put_json(format!("/projects/{project}"), Some(req))
             .await
     }
 
-    pub async fn delete_project_beta(&self, project: &str) -> Result<String> {
+    pub async fn delete_project(&self, project: &str) -> Result<String> {
         self.delete_json(format!("/projects/{project}")).await
     }
 
     async fn _get_teams_list(&self) -> Result<Vec<team::Response>> {
         self.get_json("/teams".to_string()).await
     }
-    async fn _get_team_projects_list_beta(&self, team_id: &str) -> Result<ProjectListResponseBeta> {
+    async fn _get_team_projects_list(&self, team_id: &str) -> Result<ProjectListResponse> {
         self.get_json(format!("/teams/{team_id}/projects")).await
     }
 
-    pub async fn get_deployment_logs_beta(
+    pub async fn get_deployment_logs(
         &self,
         project: &str,
         deployment_id: &str,
-    ) -> Result<LogsResponseBeta> {
+    ) -> Result<LogsResponse> {
         let path = format!("/projects/{project}/deployments/{deployment_id}/logs");
 
         self.get_json(path).await
     }
-    pub async fn get_project_logs_beta(&self, project: &str) -> Result<LogsResponseBeta> {
+    pub async fn get_project_logs(&self, project: &str) -> Result<LogsResponse> {
         let path = format!("/projects/{project}/logs");
 
         self.get_json(path).await
     }
 
-    pub async fn get_deployments_beta(
+    pub async fn get_deployments(
         &self,
         project: &str,
         page: i32,
         per_page: i32,
-    ) -> Result<DeploymentListResponseBeta> {
+    ) -> Result<DeploymentListResponse> {
         let path = format!(
             "/projects/{project}/deployments?page={}&per_page={}",
             page.saturating_sub(1).max(0),
@@ -293,20 +284,20 @@ impl ShuttleApiClient {
 
         self.get_json(path).await
     }
-    pub async fn get_current_deployment_beta(
+    pub async fn get_current_deployment(
         &self,
         project: &str,
-    ) -> Result<Option<DeploymentResponseBeta>> {
+    ) -> Result<Option<DeploymentResponse>> {
         let path = format!("/projects/{project}/deployments/current");
 
         self.get_json(path).await
     }
 
-    pub async fn get_deployment_beta(
+    pub async fn get_deployment(
         &self,
         project: &str,
         deployment_id: &str,
-    ) -> Result<DeploymentResponseBeta> {
+    ) -> Result<DeploymentResponse> {
         let path = format!("/projects/{project}/deployments/{deployment_id}");
 
         self.get_json(path).await

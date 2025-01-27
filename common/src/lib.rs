@@ -6,8 +6,6 @@ pub mod secrets;
 pub mod tables;
 pub mod templates;
 
-use std::fmt::Debug;
-
 use serde::{Deserialize, Serialize};
 
 ////// Resource Input/Output types
@@ -29,98 +27,21 @@ pub enum DatabaseResource {
 }
 
 /// Holds the data for building a database connection string.
-///
-/// Use [`Self::connection_string_shuttle`] when running on Shuttle,
-/// otherwise [`Self::connection_string_public`] for the public URI.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DatabaseInfo {
-    engine: String,
-    role_name: String,
-    role_password: secrets::Secret<String>,
-    database_name: String,
-    port: String,
-    // aliases to parse older versions of this struct
-    #[serde(alias = "address_private")]
-    hostname_shuttle: String,
-    #[serde(alias = "address_public")]
-    hostname_public: String,
-}
-
-impl DatabaseInfo {
-    pub fn new(
-        engine: String,
-        role_name: String,
-        role_password: String,
-        database_name: String,
-        port: String,
-        hostname_shuttle: String,
-        hostname_public: String,
-    ) -> Self {
-        Self {
-            engine,
-            role_name,
-            role_password: secrets::Secret::new(role_password),
-            database_name,
-            port,
-            hostname_shuttle,
-            hostname_public,
-        }
-    }
-    /// For connecting to the db from inside the Shuttle network
-    pub fn connection_string_shuttle(&self) -> String {
-        format!(
-            "{}://{}:{}@{}:{}/{}",
-            self.engine,
-            self.role_name,
-            self.role_password.expose(),
-            self.hostname_shuttle,
-            self.port,
-            self.database_name,
-        )
-    }
-    /// For connecting to the db from the Internet
-    pub fn connection_string_public(&self, show_password: bool) -> String {
-        format!(
-            "{}://{}:{}@{}:{}/{}",
-            self.engine,
-            self.role_name,
-            if show_password {
-                self.role_password.expose()
-            } else {
-                self.role_password.redacted()
-            },
-            self.hostname_public,
-            self.port,
-            self.database_name,
-        )
-    }
-
-    pub fn role_name(&self) -> String {
-        self.role_name.to_string()
-    }
-
-    pub fn database_name(&self) -> String {
-        self.database_name.to_string()
-    }
-}
-
-/// Holds the data for building a database connection string on the Beta platform.
 #[derive(Clone, Serialize, Deserialize)]
 #[typeshare::typeshare]
-pub struct DatabaseInfoBeta {
+pub struct DatabaseInfo {
     engine: String,
     role_name: String,
     role_password: String,
     database_name: String,
     port: String,
-    #[serde(alias = "hostname_shuttle")] // compatibility to parse from a `DatabaseInfo`
     hostname: String,
     /// The RDS instance name, which is required for deleting provisioned RDS instances, it's
     /// optional because it isn't needed for shared PG deletion.
     instance_name: Option<String>,
 }
 
-impl DatabaseInfoBeta {
+impl DatabaseInfo {
     pub fn new(
         engine: String,
         role_name: String,
@@ -172,7 +93,7 @@ impl DatabaseInfoBeta {
 }
 
 // Don't leak password in Debug
-impl std::fmt::Debug for DatabaseInfoBeta {
+impl std::fmt::Debug for DatabaseInfo {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "DatabaseInfo {{ {:?} }}", self.connection_string(false))
     }

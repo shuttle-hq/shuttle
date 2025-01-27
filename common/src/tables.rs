@@ -7,15 +7,15 @@ use comfy_table::{
 use crate::{
     models::{
         certificate::CertificateResponse,
-        deployment::DeploymentResponseBeta,
-        project::ProjectResponseBeta,
-        resource::{ResourceResponseBeta, ResourceTypeBeta},
+        deployment::DeploymentResponse,
+        project::ProjectResponse,
+        resource::{ResourceResponse, ResourceType},
     },
     secrets::SecretStore,
-    DatabaseInfoBeta,
+    DatabaseInfo,
 };
 
-pub fn get_certificates_table_beta(certs: &[CertificateResponse], raw: bool) -> String {
+pub fn get_certificates_table(certs: &[CertificateResponse], raw: bool) -> String {
     let mut table = Table::new();
     table
         .load_preset(if raw { NOTHING } else { UTF8_BORDERS_ONLY })
@@ -33,7 +33,7 @@ pub fn get_certificates_table_beta(certs: &[CertificateResponse], raw: bool) -> 
     table.to_string()
 }
 
-pub fn deployments_table_beta(deployments: &[DeploymentResponseBeta], raw: bool) -> String {
+pub fn deployments_table(deployments: &[DeploymentResponse], raw: bool) -> String {
     let mut table = Table::new();
     table
         .load_preset(if raw { NOTHING } else { UTF8_BORDERS_ONLY })
@@ -59,7 +59,7 @@ pub fn deployments_table_beta(deployments: &[DeploymentResponseBeta], raw: bool)
     table.to_string()
 }
 
-pub fn get_projects_table_beta(projects: &[ProjectResponseBeta], raw: bool) -> String {
+pub fn get_projects_table(projects: &[ProjectResponse], raw: bool) -> String {
     let mut table = Table::new();
     table
         .load_preset(if raw { NOTHING } else { UTF8_BORDERS_ONLY })
@@ -87,8 +87,8 @@ pub fn get_projects_table_beta(projects: &[ProjectResponseBeta], raw: bool) -> S
     table.to_string()
 }
 
-pub fn get_resource_tables_beta(
-    resources: &[ResourceResponseBeta],
+pub fn get_resource_tables(
+    resources: &[ResourceResponse],
     service_name: &str,
     raw: bool,
     show_secrets: bool,
@@ -97,25 +97,25 @@ pub fn get_resource_tables_beta(
         return "No resources are linked to this service\n".to_string();
     }
     let mut output = Vec::new();
-    output.push(get_secrets_table_beta(
+    output.push(get_secrets_table(
         &resources
             .iter()
-            .filter(|r| matches!(r.r#type, ResourceTypeBeta::Secrets))
+            .filter(|r| matches!(r.r#type, ResourceType::Secrets))
             .map(Clone::clone)
             .collect::<Vec<_>>(),
         service_name,
         raw,
     ));
-    output.push(get_databases_table_beta(
+    output.push(get_databases_table(
         &resources
             .iter()
             .filter(|r| {
                 matches!(
                     r.r#type,
-                    ResourceTypeBeta::DatabaseSharedPostgres
-                        | ResourceTypeBeta::DatabaseAwsRdsMariaDB
-                        | ResourceTypeBeta::DatabaseAwsRdsMySql
-                        | ResourceTypeBeta::DatabaseAwsRdsPostgres
+                    ResourceType::DatabaseSharedPostgres
+                        | ResourceType::DatabaseAwsRdsMariaDB
+                        | ResourceType::DatabaseAwsRdsMySql
+                        | ResourceType::DatabaseAwsRdsPostgres
                 )
             })
             .map(Clone::clone)
@@ -127,8 +127,8 @@ pub fn get_resource_tables_beta(
     output.join("\n")
 }
 
-fn get_databases_table_beta(
-    databases: &[ResourceResponseBeta],
+fn get_databases_table(
+    databases: &[ResourceResponse],
     service_name: &str,
     raw: bool,
     show_secrets: bool,
@@ -144,7 +144,7 @@ fn get_databases_table_beta(
         .set_header(vec!["Type", "Connection string"]);
 
     for database in databases {
-        let connection_string = serde_json::from_value::<DatabaseInfoBeta>(database.output.clone())
+        let connection_string = serde_json::from_value::<DatabaseInfo>(database.output.clone())
             .expect("resource data to be a valid database")
             .connection_string(show_secrets);
 
@@ -160,11 +160,7 @@ fn get_databases_table_beta(
     format!("These databases are linked to {service_name}\n{table}\n{show_secret_hint}")
 }
 
-fn get_secrets_table_beta(
-    secrets: &[ResourceResponseBeta],
-    service_name: &str,
-    raw: bool,
-) -> String {
+fn get_secrets_table(secrets: &[ResourceResponse], service_name: &str, raw: bool) -> String {
     let Some(secrets) = secrets.first() else {
         return String::new();
     };

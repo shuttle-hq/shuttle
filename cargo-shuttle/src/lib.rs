@@ -889,11 +889,11 @@ impl Shuttle {
 
     async fn logs_beta(&self, args: LogsArgs) -> Result<()> {
         if args.follow {
-            eprintln!("Streamed logs are not yet supported on the new platform.");
+            eprintln!("Streamed logs are not yet supported on the shuttle.dev platform.");
             return Ok(());
         }
         if args.tail.is_some() | args.head.is_some() {
-            eprintln!("Fetching log ranges are not yet supported on the new platform.");
+            eprintln!("Fetching log ranges are not yet supported on the shuttle.dev platform.");
             return Ok(());
         }
         let client = self.client.as_ref().unwrap();
@@ -904,12 +904,12 @@ impl Shuttle {
             let id = if args.latest {
                 // Find latest deployment (not always an active one)
                 let deployments = client.get_deployments_beta(pid, 1, 1).await?.deployments;
-                let Some(most_recent) = deployments.first() else {
+                let Some(most_recent) = deployments.into_iter().next() else {
                     println!("No deployments found");
                     return Ok(());
                 };
                 eprintln!("Getting logs from: {}", most_recent.id);
-                most_recent.id.to_string()
+                most_recent.id
             } else if let Some(id) = args.id {
                 id
             } else {

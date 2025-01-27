@@ -468,20 +468,20 @@ pub struct LogsArgs {
     #[arg(short, long)]
     /// View logs from the most recent deployment (which is not always the latest running one)
     pub latest: bool,
-    #[arg(short, long)]
+    #[arg(short, long, hide = true)]
     /// Follow log output
     pub follow: bool,
     /// Don't display timestamps and log origin tags
     #[arg(long)]
     pub raw: bool,
     /// View the first N log lines
-    #[arg(long, group = "output_mode")]
+    #[arg(long, group = "output_mode", hide = true)]
     pub head: Option<u32>,
     /// View the last N log lines
-    #[arg(long, group = "output_mode")]
+    #[arg(long, group = "output_mode", hide = true)]
     pub tail: Option<u32>,
     /// View all log lines
-    #[arg(long, group = "output_mode")]
+    #[arg(long, group = "output_mode", hide = true)]
     pub all: bool,
     /// Get logs from all deployments instead of one deployment
     #[arg(long)]

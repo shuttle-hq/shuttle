@@ -75,7 +75,7 @@ impl IntoResource<String> for OutputWrapper {
     async fn into_resource(self) -> Result<String, Error> {
         Ok(match self.0 {
             DatabaseResource::ConnectionString(s) => s,
-            DatabaseResource::Info(info) => info.connection_string_shuttle(),
+            DatabaseResource::Info(info) => info.connection_string(true),
         })
     }
 }

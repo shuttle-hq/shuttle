@@ -20,7 +20,7 @@ use tracing::{debug, info, trace};
 
 use crate::__internals::{Loader, Runner};
 
-struct RuntimeEnvArgs {
+struct RuntimeEnvVars {
     /// Are we running in a Shuttle deployment?
     shuttle: bool,
     project_id: String,
@@ -38,7 +38,7 @@ struct RuntimeEnvArgs {
     api_key: Option<String>,
 }
 
-impl RuntimeEnvArgs {
+impl RuntimeEnvVars {
     /// Uses primitive parsing instead of clap for reduced dependency weight.
     /// # Panics
     /// if any required arg is missing or does not parse
@@ -70,7 +70,7 @@ impl RuntimeEnvArgs {
 
 pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + Send + 'static) {
     debug!("Parsing environment variables");
-    let RuntimeEnvArgs {
+    let RuntimeEnvVars {
         shuttle,
         project_id,
         project_name,
@@ -80,7 +80,7 @@ pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + S
         healthz_port,
         api_url,
         api_key,
-    } = RuntimeEnvArgs::parse();
+    } = RuntimeEnvVars::parse();
 
     let service_addr = SocketAddr::new(ip, port);
     let client = ShuttleApiClient::new(api_url, api_key, None, None);

@@ -1416,15 +1416,6 @@ impl Shuttle {
             self.track_deployment_status_and_print_logs_on_fail(pid, &deployment.id, args.raw)
                 .await?;
 
-            if args.no_follow {
-                println!("{}", deployment.to_string_colored());
-                return Ok(());
-            }
-
-            // TODO?: Make it print logs on fail
-            self.track_deployment_status_beta(pid, &deployment.id)
-                .await?;
-
             return Ok(());
         }
 
@@ -1536,28 +1527,6 @@ impl Shuttle {
 
         self.track_deployment_status_and_print_logs_on_fail(pid, &deployment.id, args.raw)
             .await?;
-
-        if args.no_follow {
-            println!("{}", deployment.to_string_colored());
-            return Ok(());
-        }
-
-        if self
-            .track_deployment_status_beta(pid, &deployment.id)
-            .await?
-        {
-            for log in client
-                .get_deployment_logs_beta(pid, &deployment.id)
-                .await?
-                .logs
-            {
-                if args.raw {
-                    println!("{}", log.line);
-                } else {
-                    println!("{log}");
-                }
-            }
-        }
 
         Ok(())
     }

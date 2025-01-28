@@ -18,8 +18,9 @@ async fn non_interactive_basic_init() {
     let temp_dir_path = temp_dir.path().to_owned();
 
     let args = ShuttleArgs::parse_from([
-        "cargo-shuttle",
+        "shuttle",
         "init",
+        "--offline",
         "--api-key",
         "dh9z58jttoes3qvt",
         "--force-name",
@@ -29,7 +30,7 @@ async fn non_interactive_basic_init() {
         "none",
         temp_dir_path.to_str().unwrap(),
     ]);
-    Shuttle::new(cargo_shuttle::Binary::CargoShuttle)
+    Shuttle::new(cargo_shuttle::Binary::Shuttle)
         .unwrap()
         .run(args, true)
         .await
@@ -50,8 +51,9 @@ async fn non_interactive_rocket_init() {
     let temp_dir_path = temp_dir.path().to_owned();
 
     let args = ShuttleArgs::parse_from([
-        "cargo-shuttle",
+        "shuttle",
         "init",
+        "--offline",
         "--api-key",
         "dh9z58jttoes3qvt",
         "--force-name",
@@ -61,7 +63,7 @@ async fn non_interactive_rocket_init() {
         "rocket",
         temp_dir_path.to_str().unwrap(),
     ]);
-    Shuttle::new(cargo_shuttle::Binary::CargoShuttle)
+    Shuttle::new(cargo_shuttle::Binary::Shuttle)
         .unwrap()
         .run(args, true)
         .await
@@ -80,8 +82,9 @@ async fn non_interactive_init_with_from_url() {
     let temp_dir_path = temp_dir.path().to_owned();
 
     let args = ShuttleArgs::parse_from([
-        "cargo-shuttle",
+        "shuttle",
         "init",
+        "--offline",
         "--api-key",
         "dh9z58jttoes3qvt",
         "--force-name",
@@ -93,7 +96,7 @@ async fn non_interactive_init_with_from_url() {
         "tower/hello-world",
         temp_dir_path.to_str().unwrap(),
     ]);
-    Shuttle::new(cargo_shuttle::Binary::CargoShuttle)
+    Shuttle::new(cargo_shuttle::Binary::Shuttle)
         .unwrap()
         .run(args, true)
         .await
@@ -114,8 +117,9 @@ async fn non_interactive_init_with_from_gh() {
     let temp_dir_path = temp_dir.path().to_owned();
 
     let args = ShuttleArgs::parse_from([
-        "cargo-shuttle",
+        "shuttle",
         "init",
+        "--offline",
         "--api-key",
         "dh9z58jttoes3qvt",
         "--force-name",
@@ -127,7 +131,7 @@ async fn non_interactive_init_with_from_gh() {
         "tower/hello-world",
         temp_dir_path.to_str().unwrap(),
     ]);
-    Shuttle::new(cargo_shuttle::Binary::CargoShuttle)
+    Shuttle::new(cargo_shuttle::Binary::Shuttle)
         .unwrap()
         .run(args, true)
         .await
@@ -148,8 +152,9 @@ async fn non_interactive_init_with_from_repo_name() {
     let temp_dir_path = temp_dir.path().to_owned();
 
     let args = ShuttleArgs::parse_from([
-        "cargo-shuttle",
+        "shuttle",
         "init",
+        "--offline",
         "--api-key",
         "dh9z58jttoes3qvt",
         "--force-name",
@@ -161,7 +166,7 @@ async fn non_interactive_init_with_from_repo_name() {
         "tower/hello-world",
         temp_dir_path.to_str().unwrap(),
     ]);
-    Shuttle::new(cargo_shuttle::Binary::CargoShuttle)
+    Shuttle::new(cargo_shuttle::Binary::Shuttle)
         .unwrap()
         .run(args, true)
         .await
@@ -182,8 +187,9 @@ async fn non_interactive_init_with_from_local_path() {
     let temp_dir_path = temp_dir.path().to_owned();
 
     let args = ShuttleArgs::parse_from([
-        "cargo-shuttle",
+        "shuttle",
         "init",
+        "--offline",
         "--api-key",
         "dh9z58jttoes3qvt",
         "--force-name",
@@ -195,7 +201,7 @@ async fn non_interactive_init_with_from_local_path() {
         "tower/hello-world",
         temp_dir_path.to_str().unwrap(),
     ]);
-    Shuttle::new(cargo_shuttle::Binary::CargoShuttle)
+    Shuttle::new(cargo_shuttle::Binary::Shuttle)
         .unwrap()
         .run(args, true)
         .await
@@ -216,8 +222,9 @@ async fn non_interactive_init_from_local_path_with_workspace() {
     let temp_dir_path = temp_dir.path().to_owned();
 
     let args = ShuttleArgs::parse_from([
-        "cargo-shuttle",
+        "shuttle",
         "init",
+        "--offline",
         "--api-key",
         "dh9z58jttoes3qvt",
         "--force-name",
@@ -229,7 +236,7 @@ async fn non_interactive_init_from_local_path_with_workspace() {
         "rocket/workspace",
         temp_dir_path.to_str().unwrap(),
     ]);
-    Shuttle::new(cargo_shuttle::Binary::CargoShuttle)
+    Shuttle::new(cargo_shuttle::Binary::Shuttle)
         .unwrap()
         .run(args, true)
         .await
@@ -251,7 +258,7 @@ fn interactive_rocket_init() -> Result<(), Box<dyn std::error::Error>> {
     std::thread::sleep(std::time::Duration::from_millis(500));
     let temp_dir_path = temp_dir.path().to_owned();
 
-    let bin_path = assert_cmd::cargo::cargo_bin("cargo-shuttle");
+    let bin_path = assert_cmd::cargo::cargo_bin("shuttle");
     let mut command = Command::new(bin_path);
     command.args([
         "--offline",
@@ -262,7 +269,6 @@ fn interactive_rocket_init() -> Result<(), Box<dyn std::error::Error>> {
     ]);
     let mut session = rexpect::session::spawn_command(command, Some(EXPECT_TIMEOUT_MS))?;
 
-    session.exp_string("What do you want to name your project?")?;
     session.exp_string("Project name")?;
     session.send_line("my-project")?;
     session.exp_string("Where should we create this project?")?;
@@ -271,7 +277,7 @@ fn interactive_rocket_init() -> Result<(), Box<dyn std::error::Error>> {
     session.exp_string("Which one do you want to use?")?;
     session.send_line("\t\t")?;
     session.exp_string("Creating project")?;
-    session.exp_string("container on Shuttle?")?;
+    session.exp_string("Create a project on Shuttle with the name")?;
     session.send("n")?;
     session.flush()?;
     session.exp_string("no")?;
@@ -288,7 +294,7 @@ fn interactive_rocket_init_manually_choose_template() -> Result<(), Box<dyn std:
     std::thread::sleep(std::time::Duration::from_millis(500));
     let temp_dir_path = temp_dir.path().to_owned();
 
-    let bin_path = assert_cmd::cargo::cargo_bin("cargo-shuttle");
+    let bin_path = assert_cmd::cargo::cargo_bin("shuttle");
     let mut command = Command::new(bin_path);
     command.args([
         "--offline",
@@ -299,7 +305,6 @@ fn interactive_rocket_init_manually_choose_template() -> Result<(), Box<dyn std:
     ]);
     let mut session = rexpect::session::spawn_command(command, Some(EXPECT_TIMEOUT_MS))?;
 
-    session.exp_string("What do you want to name your project?")?;
     session.exp_string("Project name")?;
     session.send_line("my-project")?;
     session.exp_string("Where should we create this project?")?;
@@ -308,7 +313,7 @@ fn interactive_rocket_init_manually_choose_template() -> Result<(), Box<dyn std:
     session.exp_string("Which one do you want to use?")?;
     session.send_line("\t\t")?;
     session.exp_string("Creating project")?;
-    session.exp_string("container on Shuttle?")?;
+    session.exp_string("Create a project on Shuttle with the name")?;
     session.send("n")?;
     session.flush()?;
     session.exp_string("no")?;
@@ -325,7 +330,7 @@ fn interactive_rocket_init_dont_prompt_framework() -> Result<(), Box<dyn std::er
     std::thread::sleep(std::time::Duration::from_millis(500));
     let temp_dir_path = temp_dir.path().to_owned();
 
-    let bin_path = assert_cmd::cargo::cargo_bin("cargo-shuttle");
+    let bin_path = assert_cmd::cargo::cargo_bin("shuttle");
     let mut command = Command::new(bin_path);
     command.args([
         "--offline",
@@ -338,14 +343,13 @@ fn interactive_rocket_init_dont_prompt_framework() -> Result<(), Box<dyn std::er
     ]);
     let mut session = rexpect::session::spawn_command(command, Some(EXPECT_TIMEOUT_MS))?;
 
-    session.exp_string("What do you want to name your project?")?;
     session.exp_string("Project name")?;
     session.send_line("my-project")?;
     session.exp_string("Where should we create this project?")?;
     session.exp_string("Directory")?;
     session.send_line(temp_dir_path.join("my-project").to_str().unwrap())?;
     session.exp_string("Creating project")?;
-    session.exp_string("container on Shuttle?")?;
+    session.exp_string("Create a project on Shuttle with the name")?;
     session.send("n")?;
     session.flush()?;
     session.exp_string("no")?;
@@ -362,7 +366,7 @@ fn interactive_rocket_init_dont_prompt_name() -> Result<(), Box<dyn std::error::
     std::thread::sleep(std::time::Duration::from_millis(500));
     let temp_dir_path = temp_dir.path().to_owned();
 
-    let bin_path = assert_cmd::cargo::cargo_bin("cargo-shuttle");
+    let bin_path = assert_cmd::cargo::cargo_bin("shuttle");
     let mut command = Command::new(bin_path);
     command.args([
         "--offline",
@@ -381,7 +385,7 @@ fn interactive_rocket_init_dont_prompt_name() -> Result<(), Box<dyn std::error::
     session.exp_string("Which one do you want to use?")?;
     session.send_line("\t\t")?;
     session.exp_string("Creating project")?;
-    session.exp_string("container on Shuttle?")?;
+    session.exp_string("Create a project on Shuttle with the name")?;
     session.send("n")?;
     session.flush()?;
     session.exp_string("no")?;
@@ -400,7 +404,7 @@ fn interactive_rocket_init_prompt_path_dirty_dir() -> Result<(), Box<dyn std::er
 
     std::fs::write(temp_dir_path.join("minion"), "🍌").unwrap();
 
-    let bin_path = assert_cmd::cargo::cargo_bin("cargo-shuttle");
+    let bin_path = assert_cmd::cargo::cargo_bin("shuttle");
     let mut command = Command::new(bin_path);
     command.args([
         "--offline",
@@ -430,7 +434,7 @@ fn interactive_rocket_init_prompt_path_dirty_dir() -> Result<(), Box<dyn std::er
     session.flush()?;
     session.exp_string("yes")?;
     session.exp_string("Creating project")?;
-    session.exp_string("container on Shuttle?")?;
+    session.exp_string("Create a project on Shuttle with the name")?;
     session.send("n")?;
     session.flush()?;
     session.exp_string("no")?;

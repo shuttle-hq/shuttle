@@ -89,7 +89,7 @@ pub async fn check_and_warn_runtime_version(path: &Path) -> Result<Option<String
                 writedoc! {
                     &mut warning,
                     "
-                    Hint: A newer version of cargo-shuttle is available.
+                    Hint: A newer version of Shuttle CLI is available.
                           Check out the installation docs for how to update: {}
                     ",
                     SHUTTLE_INSTALL_DOCS_URL,
@@ -168,7 +168,7 @@ pub async fn check_version(runtime_path: &Path) -> Result<()> {
             shuttle_runtime: runtime_version,
             cargo_shuttle: my_version,
         })
-        .context("shuttle-runtime and cargo-shuttle have incompatible versions")
+        .context("shuttle-runtime and Shuttle CLI have incompatible versions")
     }
 }
 
@@ -182,7 +182,7 @@ impl std::fmt::Display for VersionMismatchError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(
             f,
-            "shuttle-runtime {} and cargo-shuttle {} are incompatible",
+            "shuttle-runtime {} and Shuttle CLI {} are incompatible",
             self.shuttle_runtime, self.cargo_shuttle
         )
     }
@@ -281,7 +281,7 @@ where
 {
     while let Some(Ok(msg)) = rx.next().await {
         if let Message::Text(s) = msg {
-            return Ok(Some(s));
+            return Ok(Some(s.to_string()));
         }
     }
 

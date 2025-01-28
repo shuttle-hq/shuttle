@@ -1,1 +1,0 @@
-mod permit_tests;

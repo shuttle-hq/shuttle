@@ -2,6 +2,8 @@
 use shuttle_runtime::{CustomError, Error};
 use std::net::SocketAddr;
 
+pub use tower;
+
 /// A wrapper type for [tower::Service] so we can implement [shuttle_runtime::Service] for it.
 pub struct TowerService<T>(pub T);
 

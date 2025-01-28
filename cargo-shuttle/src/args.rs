@@ -192,7 +192,7 @@ pub enum DeploymentCommand {
     /// Redeploy a previous deployment (if possible)
     Redeploy {
         /// ID of deployment to redeploy
-        id: String,
+        id: Option<String>,
     },
     /// Stop running deployment(s)
     Stop,

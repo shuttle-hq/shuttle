@@ -1418,10 +1418,21 @@ impl Shuttle {
         Ok(())
     }
 
-    async fn deployment_redeploy(&self, deployment_id: String) -> Result<()> {
+    async fn deployment_redeploy(&self, deployment_id: Option<String>) -> Result<()> {
         let client = self.client.as_ref().unwrap();
 
         let pid = self.ctx.project_id();
+        let deployment_id = match deployment_id {
+            Some(id) => id,
+            None => {
+                let d = client.get_current_deployment_beta(pid).await?;
+                let Some(d) = d else {
+                    println!("No deployment found");
+                    return Ok(());
+                };
+                d.id
+            }
+        };
         let deployment = client.redeploy_beta(pid, &deployment_id).await?;
 
         self.track_deployment_status_and_print_logs_on_fail(pid, &deployment.id, false)

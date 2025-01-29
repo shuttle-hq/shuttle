@@ -988,14 +988,24 @@ impl Shuttle {
         Ok(())
     }
 
-    async fn deployment_redeploy(&self, deployment_id: String) -> Result<()> {
+    async fn deployment_redeploy(&self, deployment_id: Option<String>) -> Result<()> {
         let client = self.client.as_ref().unwrap();
 
         let pid = self.ctx.project_id();
+        let deployment_id = match deployment_id {
+            Some(id) => id,
+            None => {
+                let d = client.get_current_deployment_beta(pid).await?;
+                let Some(d) = d else {
+                    println!("No deployment found");
+                    return Ok(());
+                };
+                d.id
+            }
+        };
         let deployment = client.redeploy_beta(pid, &deployment_id).await?;
 
-        // TODO?: Make it print logs on fail
-        self.track_deployment_status_beta(pid, &deployment.id)
+        self.track_deployment_status_and_print_logs_on_fail(pid, &deployment.id, false)
             .await?;
 
         Ok(())
@@ -1403,8 +1413,7 @@ impl Shuttle {
                 return Ok(());
             }
 
-            // TODO?: Make it print logs on fail
-            self.track_deployment_status_beta(pid, &deployment.id)
+            self.track_deployment_status_and_print_logs_on_fail(pid, &deployment.id, args.raw)
                 .await?;
 
             return Ok(());
@@ -1516,22 +1525,8 @@ impl Shuttle {
             return Ok(());
         }
 
-        if self
-            .track_deployment_status_beta(pid, &deployment.id)
-            .await?
-        {
-            for log in client
-                .get_deployment_logs_beta(pid, &deployment.id)
-                .await?
-                .logs
-            {
-                if args.raw {
-                    println!("{}", log.line);
-                } else {
-                    println!("{log}");
-                }
-            }
-        }
+        self.track_deployment_status_and_print_logs_on_fail(pid, &deployment.id, args.raw)
+            .await?;
 
         Ok(())
     }
@@ -1563,6 +1558,30 @@ impl Shuttle {
         .await?;
 
         Ok(failed)
+    }
+
+    async fn track_deployment_status_and_print_logs_on_fail(
+        &self,
+        proj_id: &str,
+        depl_id: &str,
+        raw: bool,
+    ) -> Result<()> {
+        let client = self.client.as_ref().unwrap();
+        if self.track_deployment_status_beta(proj_id, depl_id).await? {
+            for log in client
+                .get_deployment_logs_beta(proj_id, depl_id)
+                .await?
+                .logs
+            {
+                if raw {
+                    println!("{}", log.line);
+                } else {
+                    println!("{log}");
+                }
+            }
+        }
+
+        Ok(())
     }
 
     async fn project_create_beta(&self) -> Result<()> {

@@ -52,6 +52,12 @@ pub enum ProjectTelemetrySinkConfig {
     GrafanaCloud(GrafanaCloudConfig),
 }
 
+impl ProjectTelemetrySinkConfig {
+    pub fn as_db_type(&self) -> String {
+        format!("project::telemetry::{}::config", self.as_ref())
+    }
+}
+
 #[derive(Eq, Clone, PartialEq, Serialize, Deserialize)]
 #[typeshare::typeshare]
 pub struct BetterstackConfig {

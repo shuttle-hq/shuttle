@@ -31,9 +31,7 @@ opentelemetry-otlp = { version = "0.27.0", optional = true, default-features = f
     "reqwest-client",
     "trace",
 ] }
-# NOTE: If the version of `opentelemetry_sdk` is changed/updated, remember up update the
-# `telemetry.sdk.version` value in `src/trace.rs:373`
-opentelemetry_sdk = { version = "=0.27.1", optional = true, default-features = false, features = [
+opentelemetry_sdk = { version = "0.27.0", optional = true, default-features = false, features = [
     "http",
     "logs",
     "metrics",

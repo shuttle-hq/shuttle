@@ -23,13 +23,13 @@ impl From<Vec<ProjectTelemetrySinkConfig>> for ProjectTelemetryConfigResponse {
 
         for sink in value {
             match sink {
-                ProjectTelemetrySinkConfig::Betterstack { .. } => {
+                ProjectTelemetrySinkConfig::Betterstack(_) => {
                     instance.betterstack = Some(TelemetrySinkStatus { enabled: true })
                 }
-                ProjectTelemetrySinkConfig::Datadog { .. } => {
+                ProjectTelemetrySinkConfig::Datadog(_) => {
                     instance.datadog = Some(TelemetrySinkStatus { enabled: true })
                 }
-                ProjectTelemetrySinkConfig::GrafanaCloud { .. } => {
+                ProjectTelemetrySinkConfig::GrafanaCloud(_) => {
                     instance.grafana_cloud = Some(TelemetrySinkStatus { enabled: true })
                 }
             }
@@ -40,7 +40,7 @@ impl From<Vec<ProjectTelemetrySinkConfig>> for ProjectTelemetryConfigResponse {
 }
 
 /// The user-supplied config required to export telemetry to a given external sink
-#[derive(Eq, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Eq, Clone, PartialEq, Serialize, Deserialize, strum::AsRefStr)]
 #[serde(tag = "type", content = "content")]
 #[typeshare::typeshare]
 pub enum ProjectTelemetrySinkConfig {
@@ -55,17 +55,17 @@ pub enum ProjectTelemetrySinkConfig {
 #[derive(Eq, Clone, PartialEq, Serialize, Deserialize)]
 #[typeshare::typeshare]
 pub struct BetterstackConfig {
-    source_token: String,
+    pub source_token: String,
 }
 #[derive(Eq, Clone, PartialEq, Serialize, Deserialize)]
 #[typeshare::typeshare]
 pub struct DatadogConfig {
-    api_key: String,
+    pub api_key: String,
 }
 #[derive(Eq, Clone, PartialEq, Serialize, Deserialize)]
 #[typeshare::typeshare]
 pub struct GrafanaCloudConfig {
-    token: String,
-    endpoint: String,
-    instance_id: String,
+    pub token: String,
+    pub endpoint: String,
+    pub instance_id: String,
 }

@@ -41,7 +41,8 @@ impl From<Vec<ProjectTelemetrySinkConfig>> for ProjectTelemetryConfigResponse {
 
 /// The user-supplied config required to export telemetry to a given external sink
 #[derive(Eq, Clone, PartialEq, Serialize, Deserialize, strum::AsRefStr)]
-#[serde(tag = "type", content = "content")]
+#[serde(tag = "type", content = "content", rename_all = "snake_case")]
+#[strum(serialize_all = "snake_case")]
 #[typeshare::typeshare]
 pub enum ProjectTelemetrySinkConfig {
     /// [Betterstack](https://betterstack.com/docs/logs/open-telemetry/)

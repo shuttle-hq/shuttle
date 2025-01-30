@@ -293,9 +293,9 @@ export type DeploymentRequest =
 /** The user-supplied config required to export telemetry to a given external sink */
 export type ProjectTelemetrySinkConfig = 
 	/** [Betterstack](https://betterstack.com/docs/logs/open-telemetry/) */
-	| { type: "Betterstack", content: BetterstackConfig }
+	| { type: "betterstack", content: BetterstackConfig }
 	/** [Datadog](https://docs.datadoghq.com/opentelemetry/collector_exporter/otel_collector_datadog_exporter) */
-	| { type: "Datadog", content: DatadogConfig }
+	| { type: "datadog", content: DatadogConfig }
 	/** [Grafana Cloud](https://grafana.com/docs/grafana-cloud/send-data/otlp/) */
-	| { type: "GrafanaCloud", content: GrafanaCloudConfig };
+	| { type: "grafana_cloud", content: GrafanaCloudConfig };
 

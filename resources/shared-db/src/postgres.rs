@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use shuttle_service::{
-    resource::{ProvisionResourceRequestBeta, ResourceTypeBeta},
+    resource::{ProvisionResourceRequest, ResourceType},
     DatabaseResource, DbInput, Environment, Error, IntoResource, ResourceFactory,
     ResourceInputBuilder,
 };
@@ -37,7 +37,7 @@ impl Postgres {
 #[derive(Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum MaybeRequest {
-    Request(ProvisionResourceRequestBeta),
+    Request(ProvisionResourceRequest),
     NotRequest(DatabaseResource),
 }
 
@@ -49,16 +49,16 @@ impl ResourceInputBuilder for Postgres {
     async fn build(self, factory: &ResourceFactory) -> Result<Self::Input, Error> {
         let md = factory.get_metadata();
         Ok(match md.env {
-            Environment::Deployment => MaybeRequest::Request(ProvisionResourceRequestBeta {
-                r#type: ResourceTypeBeta::DatabaseSharedPostgres,
+            Environment::Deployment => MaybeRequest::Request(ProvisionResourceRequest {
+                r#type: ResourceType::DatabaseSharedPostgres,
                 config: serde_json::to_value(self.0).unwrap(),
             }),
             Environment::Local => match self.0.local_uri {
                 Some(local_uri) => {
                     MaybeRequest::NotRequest(DatabaseResource::ConnectionString(local_uri))
                 }
-                None => MaybeRequest::Request(ProvisionResourceRequestBeta {
-                    r#type: ResourceTypeBeta::DatabaseSharedPostgres,
+                None => MaybeRequest::Request(ProvisionResourceRequest {
+                    r#type: ResourceType::DatabaseSharedPostgres,
                     config: serde_json::to_value(self.0).unwrap(),
                 }),
             },
@@ -75,7 +75,7 @@ impl IntoResource<String> for OutputWrapper {
     async fn into_resource(self) -> Result<String, Error> {
         Ok(match self.0 {
             DatabaseResource::ConnectionString(s) => s,
-            DatabaseResource::Info(info) => info.connection_string_shuttle(),
+            DatabaseResource::Info(info) => info.connection_string(true),
         })
     }
 }

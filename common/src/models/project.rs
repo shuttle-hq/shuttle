@@ -7,17 +7,17 @@ use crossterm::style::Stylize;
 #[cfg(feature = "display")]
 use std::fmt::Write;
 
-use super::deployment::DeploymentStateBeta;
+use super::deployment::DeploymentState;
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 #[typeshare::typeshare]
-pub struct ProjectCreateRequestBeta {
+pub struct ProjectCreateRequest {
     pub name: String,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 #[typeshare::typeshare]
-pub struct ProjectResponseBeta {
+pub struct ProjectResponse {
     pub id: String,
     /// Project owner
     pub user_id: String,
@@ -25,12 +25,12 @@ pub struct ProjectResponseBeta {
     pub created_at: DateTime<Utc>,
     pub compute_tier: Option<ComputeTier>,
     /// State of the current deployment if one exists (something has been deployed).
-    pub deployment_state: Option<DeploymentStateBeta>,
+    pub deployment_state: Option<DeploymentState>,
     /// URIs where running deployments can be reached
     pub uris: Vec<String>,
 }
 
-impl ProjectResponseBeta {
+impl ProjectResponse {
     #[cfg(feature = "display")]
     pub fn to_string_colored(&self) -> String {
         let mut s = String::new();
@@ -65,14 +65,14 @@ impl ProjectResponseBeta {
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 #[typeshare::typeshare]
-pub struct ProjectListResponseBeta {
-    pub projects: Vec<ProjectResponseBeta>,
+pub struct ProjectListResponse {
+    pub projects: Vec<ProjectResponse>,
 }
 
 /// Set wanted field(s) to Some to update those parts of the project
 #[derive(Debug, Default, Deserialize, Serialize, Clone, PartialEq)]
 #[typeshare::typeshare]
-pub struct ProjectUpdateRequestBeta {
+pub struct ProjectUpdateRequest {
     pub name: Option<String>,
     pub compute_tier: Option<ComputeTier>,
 }

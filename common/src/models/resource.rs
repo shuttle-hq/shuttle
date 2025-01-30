@@ -3,9 +3,9 @@ use serde_json::Value;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[typeshare::typeshare]
-pub struct ProvisionResourceRequestBeta {
+pub struct ProvisionResourceRequest {
     /// The type of this resource
-    pub r#type: ResourceTypeBeta,
+    pub r#type: ResourceType,
     /// The config used when creating this resource.
     /// Use `Self::r#type` to know how to parse this data.
     pub config: Value,
@@ -14,8 +14,8 @@ pub struct ProvisionResourceRequestBeta {
 /// Helper for deserializing
 #[derive(Deserialize)]
 #[serde(untagged)] // Try deserializing as a Shuttle resource, fall back to a custom value
-pub enum ResourceInputBeta {
-    Shuttle(ProvisionResourceRequestBeta),
+pub enum ResourceInput {
+    Shuttle(ProvisionResourceRequest),
     Custom(Value),
 }
 
@@ -37,8 +37,8 @@ pub enum ResourceState {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[typeshare::typeshare]
-pub struct ResourceResponseBeta {
-    pub r#type: ResourceTypeBeta,
+pub struct ResourceResponse {
+    pub r#type: ResourceType,
     pub state: ResourceState,
     /// The config used when creating this resource. Use the `r#type` to know how to parse this data.
     pub config: Value,
@@ -48,8 +48,8 @@ pub struct ResourceResponseBeta {
 
 #[derive(Debug, Serialize, Deserialize)]
 #[typeshare::typeshare]
-pub struct ResourceListResponseBeta {
-    pub resources: Vec<ResourceResponseBeta>,
+pub struct ResourceListResponse {
+    pub resources: Vec<ResourceResponse>,
 }
 
 #[derive(
@@ -66,7 +66,7 @@ pub struct ResourceListResponseBeta {
 )]
 #[typeshare::typeshare]
 // is a flat enum instead of nested enum to allow typeshare
-pub enum ResourceTypeBeta {
+pub enum ResourceType {
     #[strum(to_string = "database::shared::postgres")]
     #[serde(rename = "database::shared::postgres")]
     DatabaseSharedPostgres,
@@ -98,13 +98,13 @@ mod test {
     #[test]
     fn to_string_and_back() {
         let inputs = [
-            ResourceTypeBeta::DatabaseSharedPostgres,
-            ResourceTypeBeta::Secrets,
-            ResourceTypeBeta::Container,
+            ResourceType::DatabaseSharedPostgres,
+            ResourceType::Secrets,
+            ResourceType::Container,
         ];
 
         for input in inputs {
-            let actual = ResourceTypeBeta::from_str(input.as_ref()).unwrap();
+            let actual = ResourceType::from_str(input.as_ref()).unwrap();
             assert_eq!(input, actual, ":{} should map back to itself", input);
         }
     }

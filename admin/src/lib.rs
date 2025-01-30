@@ -69,7 +69,7 @@ async fn gc(client: Client, mut project_ids: Vec<String>, stop_deployments: bool
     );
     tokio::time::sleep(tokio::time::Duration::from_millis(5000)).await;
     for pid in project_ids {
-        println!("{}", client.inner.stop_service_beta(&pid).await.unwrap());
+        println!("{}", client.inner.stop_service(&pid).await.unwrap());
         // prevent api rate limiting
         tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
     }

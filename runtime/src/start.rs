@@ -3,8 +3,9 @@ use crate::{
     rt,
 };
 
-// uses simple arg parsing logic instead of clap to reduce dependency weight
-fn parse_args() -> anyhow::Result<()> {
+/// Uses simple arg parsing logic instead of clap to reduce dependency weight.
+/// The rest of the args are parsed in `RuntimeEnvVars`.
+fn initial_args_and_env_check() -> anyhow::Result<()> {
     if std::env::args().any(|arg| arg == "--port") {
         anyhow::bail!("Outdated argument detected (--port). Upgrade your Shuttle CLI.");
     }
@@ -35,7 +36,7 @@ pub async fn start(
         package_version
     );
 
-    if let Err(e) = parse_args() {
+    if let Err(e) = initial_args_and_env_check() {
         eprintln!("ERROR: Runtime failed to parse args: {e}");
         let help_str = "[HINT]: Run your Shuttle app with `shuttle run`";
         let wrapper_str = "-".repeat(help_str.len());

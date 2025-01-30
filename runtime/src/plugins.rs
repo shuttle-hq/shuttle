@@ -1,7 +1,7 @@
 use crate::async_trait;
 use serde::{Deserialize, Serialize};
 use shuttle_service::{
-    resource::{ProvisionResourceRequestBeta, ResourceTypeBeta},
+    resource::{ProvisionResourceRequest, ResourceType},
     DeploymentMetadata, Error, IntoResource, ResourceFactory, ResourceInputBuilder, SecretStore,
 };
 
@@ -66,12 +66,12 @@ pub struct SecretsOutputWrapper(SecretStore);
 
 #[async_trait]
 impl ResourceInputBuilder for Secrets {
-    type Input = ProvisionResourceRequestBeta;
+    type Input = ProvisionResourceRequest;
     type Output = SecretsOutputWrapper;
 
     async fn build(self, _factory: &ResourceFactory) -> Result<Self::Input, Error> {
-        Ok(ProvisionResourceRequestBeta {
-            r#type: ResourceTypeBeta::Secrets,
+        Ok(ProvisionResourceRequest {
+            r#type: ResourceType::Secrets,
             config: serde_json::Value::Null,
         })
     }

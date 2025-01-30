@@ -14,6 +14,10 @@ export interface ApiError {
 	status_code: number;
 }
 
+export interface BetterstackConfig {
+	source_token: string;
+}
+
 export interface BuildArgsRust {
 	/** Version of shuttle-runtime used by this crate */
 	shuttle_runtime_version?: string;
@@ -64,6 +68,10 @@ export interface DatabaseInfo {
 	 * optional because it isn't needed for shared PG deletion.
 	 */
 	instance_name?: string;
+}
+
+export interface DatadogConfig {
+	api_key: string;
 }
 
 export interface DeleteCertificateRequest {
@@ -119,6 +127,12 @@ export interface DeploymentRequestImage {
 	secrets?: Record<string, string>;
 }
 
+export interface GrafanaCloudConfig {
+	token: string;
+	endpoint: string;
+	instance_id: string;
+}
+
 export interface LogItem {
 	timestamp: string;
 	/** Which container / log stream this line came from */
@@ -158,6 +172,19 @@ export interface ProjectResponse {
 
 export interface ProjectListResponse {
 	projects: ProjectResponse[];
+}
+
+/** Status of a telemetry export configuration for an external sink */
+export interface TelemetrySinkStatus {
+	/** Indicates that the associated project is configured to export telemetry data to this sink */
+	enabled: boolean;
+}
+
+/** A safe-for-display representation of the current telemetry export configuration for a given project */
+export interface ProjectTelemetryConfigResponse {
+	betterstack?: TelemetrySinkStatus;
+	datadog?: TelemetrySinkStatus;
+	grafana_cloud?: TelemetrySinkStatus;
 }
 
 /** Set wanted field(s) to Some to update those parts of the project */
@@ -262,4 +289,13 @@ export type DeploymentRequest =
 	| { type: "BuildArchive", content: DeploymentRequestBuildArchive }
 	/** Use this image directly. Can be used to skip the build step. */
 	| { type: "Image", content: DeploymentRequestImage };
+
+/** The user-supplied config required to export telemetry to a given external sink */
+export type ProjectTelemetrySinkConfig = 
+	/** [Betterstack](https://betterstack.com/docs/logs/open-telemetry/) */
+	| { type: "Betterstack", content: BetterstackConfig }
+	/** [Datadog](https://docs.datadoghq.com/opentelemetry/collector_exporter/otel_collector_datadog_exporter) */
+	| { type: "Datadog", content: DatadogConfig }
+	/** [Grafana Cloud](https://grafana.com/docs/grafana-cloud/send-data/otlp/) */
+	| { type: "GrafanaCloud", content: GrafanaCloudConfig };
 

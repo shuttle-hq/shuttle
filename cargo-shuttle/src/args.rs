@@ -190,7 +190,10 @@ pub enum DeploymentCommand {
         tracking_args: DeploymentTrackingArgs,
     },
     /// Stop running deployment(s)
-    Stop,
+    Stop {
+        #[command(flatten)]
+        tracking_args: DeploymentTrackingArgs,
+    },
 }
 
 #[derive(Subcommand)]

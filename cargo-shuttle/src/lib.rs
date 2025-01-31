@@ -246,7 +246,7 @@ impl Shuttle {
                 DeploymentCommand::Redeploy { id, tracking_args } => {
                     self.deployment_redeploy(id, tracking_args).await
                 }
-                DeploymentCommand::Stop => self.stop().await,
+                DeploymentCommand::Stop { tracking_args } => self.stop(tracking_args).await,
             },
             Command::Resource(cmd) => match cmd {
                 ResourceCommand::List {
@@ -847,11 +847,16 @@ impl Shuttle {
         })
     }
 
-    async fn stop(&self) -> Result<()> {
+    async fn stop(&self, tracking_args: DeploymentTrackingArgs) -> Result<()> {
         let client = self.client.as_ref().unwrap();
         let pid = self.ctx.project_id();
         let res = client.stop_service(pid).await?;
         println!("{res}");
+
+        if tracking_args.no_follow {
+            return Ok(());
+        }
+
         wait_with_spinner(2000, |_, pb| async move {
             let deployment = client.get_current_deployment(pid).await?;
 

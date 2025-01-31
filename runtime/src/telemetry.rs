@@ -16,15 +16,12 @@ use opentelemetry_sdk::{
     logs::{LogRecord, Logger, LoggerProvider},
     metrics::{MeterProviderBuilder, PeriodicReader, SdkMeterProvider, Temporality},
     propagation::TraceContextPropagator,
+    resource::{Resource, ResourceDetector, TelemetryResourceDetector},
     runtime,
     trace::TracerProvider,
-    Resource,
 };
 use opentelemetry_semantic_conventions::{
-    attribute::{
-        CODE_FILEPATH, CODE_LINENO, SERVICE_NAME, SERVICE_VERSION, TELEMETRY_SDK_LANGUAGE,
-        TELEMETRY_SDK_NAME, TELEMETRY_SDK_VERSION,
-    },
+    attribute::{CODE_FILEPATH, CODE_LINENO, SERVICE_NAME, SERVICE_VERSION},
     SCHEMA_URL,
 };
 use tracing::Event as TracingEvent;
@@ -367,32 +364,35 @@ pub(crate) fn log_level_as_severity(level: log::Level) -> Severity {
 pub fn resource(crate_name: &'static str, package_version: &'static str) -> Resource {
     let project_name = std::env::var("SHUTTLE_PROJECT_NAME").ok();
 
-    Resource::from_schema_url(
-        [
-            Some(KeyValue::new(
-                SERVICE_NAME,
-                project_name.clone().unwrap_or_else(|| crate_name.into()),
-            )),
-            Some(KeyValue::new(SERVICE_VERSION, package_version)),
-            Some(KeyValue::new(TELEMETRY_SDK_NAME, "opentelemetry")),
-            Some(KeyValue::new(TELEMETRY_SDK_VERSION, "0.27.1")),
-            Some(KeyValue::new(TELEMETRY_SDK_LANGUAGE, "rust")),
-            Some(KeyValue::new("shuttle.project.crate.name", crate_name)),
-            Some(KeyValue::new(
-                "shuttle.deployment.env",
-                std::env::var("SHUTTLE_ENV")
+    // `TelemetryResourceDetector::detect()` automatically provides:
+    //   - telemetry.sdk.name
+    //   - telemetry.sdk.version
+    //   - telemetry.sdk.language
+    TelemetryResourceDetector
+        .detect(Default::default())
+        .merge(Box::new(Resource::from_schema_url(
+            [
+                Some(KeyValue::new(
+                    SERVICE_NAME,
+                    project_name.clone().unwrap_or_else(|| crate_name.into()),
+                )),
+                Some(KeyValue::new(SERVICE_VERSION, package_version)),
+                Some(KeyValue::new("shuttle.project.crate.name", crate_name)),
+                Some(KeyValue::new(
+                    "shuttle.deployment.env",
+                    std::env::var("SHUTTLE_ENV")
+                        .ok()
+                        .unwrap_or("unknown".into()),
+                )),
+                std::env::var("SHUTTLE_PROJECT_ID")
                     .ok()
-                    .unwrap_or("unknown".into()),
-            )),
-            std::env::var("SHUTTLE_PROJECT_ID")
-                .ok()
-                .map(|value| KeyValue::new("shuttle.project.id", value)),
-            project_name.map(|value| KeyValue::new("shuttle.project.name", value)),
-        ]
-        .into_iter()
-        .flatten(),
-        SCHEMA_URL,
-    )
+                    .map(|value| KeyValue::new("shuttle.project.id", value)),
+                project_name.map(|value| KeyValue::new("shuttle.project.name", value)),
+            ]
+            .into_iter()
+            .flatten(),
+            SCHEMA_URL,
+        )))
 }
 
 pub fn init_log_subscriber(endpoint: &Option<String>, resource: Resource) -> LoggerProvider {

@@ -174,19 +174,6 @@ export interface ProjectListResponse {
 	projects: ProjectResponse[];
 }
 
-/** Status of a telemetry export configuration for an external sink */
-export interface TelemetrySinkStatus {
-	/** Indicates that the associated project is configured to export telemetry data to this sink */
-	enabled: boolean;
-}
-
-/** A safe-for-display representation of the current telemetry export configuration for a given project */
-export interface ProjectTelemetryConfigResponse {
-	betterstack?: TelemetrySinkStatus;
-	datadog?: TelemetrySinkStatus;
-	grafana_cloud?: TelemetrySinkStatus;
-}
-
 /** Set wanted field(s) to Some to update those parts of the project */
 export interface ProjectUpdateRequest {
 	name?: string;
@@ -256,6 +243,19 @@ export interface SubscriptionRequest {
 	quantity: number;
 }
 
+/** Status of a telemetry export configuration for an external sink */
+export interface TelemetrySinkStatus {
+	/** Indicates that the associated project is configured to export telemetry data to this sink */
+	enabled: boolean;
+}
+
+/** A safe-for-display representation of the current telemetry export configuration for a given project */
+export interface TelemetryConfigResponse {
+	betterstack?: TelemetrySinkStatus;
+	datadog?: TelemetrySinkStatus;
+	grafana_cloud?: TelemetrySinkStatus;
+}
+
 export interface UploadArchiveResponse {
 	/** The S3 object version ID of the uploaded object */
 	archive_version_id: string;
@@ -291,7 +291,7 @@ export type DeploymentRequest =
 	| { type: "Image", content: DeploymentRequestImage };
 
 /** The user-supplied config required to export telemetry to a given external sink */
-export type ProjectTelemetrySinkConfig = 
+export type TelemetrySinkConfig = 
 	/** [Betterstack](https://betterstack.com/docs/logs/open-telemetry/) */
 	| { type: "betterstack", content: BetterstackConfig }
 	/** [Datadog](https://docs.datadoghq.com/opentelemetry/collector_exporter/otel_collector_datadog_exporter) */

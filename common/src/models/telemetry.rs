@@ -40,10 +40,15 @@ impl From<Vec<ProjectTelemetrySinkConfig>> for ProjectTelemetryConfigResponse {
 }
 
 /// The user-supplied config required to export telemetry to a given external sink
-#[derive(Eq, Clone, PartialEq, Serialize, Deserialize, strum::AsRefStr)]
+#[derive(
+    Eq, Clone, PartialEq, Serialize, Deserialize, strum::AsRefStr, strum::EnumDiscriminants,
+)]
 #[serde(tag = "type", content = "content", rename_all = "snake_case")]
 #[strum(serialize_all = "snake_case")]
 #[typeshare::typeshare]
+#[strum_discriminants(derive(Serialize, Deserialize, strum::AsRefStr))]
+#[strum_discriminants(serde(rename_all = "snake_case"))]
+#[strum_discriminants(strum(serialize_all = "snake_case"))]
 pub enum ProjectTelemetrySinkConfig {
     /// [Betterstack](https://betterstack.com/docs/logs/open-telemetry/)
     Betterstack(BetterstackConfig),
@@ -75,4 +80,44 @@ pub struct GrafanaCloudConfig {
     pub token: String,
     pub endpoint: String,
     pub instance_id: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sink_config_enum() {
+        assert_eq!(
+            "betterstack",
+            ProjectTelemetrySinkConfig::Betterstack(BetterstackConfig {
+                source_token: "".into()
+            })
+            .as_ref()
+        );
+        assert_eq!(
+            "project::telemetry::betterstack::config",
+            ProjectTelemetrySinkConfig::Betterstack(BetterstackConfig {
+                source_token: "".into()
+            })
+            .as_db_type()
+        );
+
+        assert_eq!(
+            "betterstack",
+            ProjectTelemetrySinkConfigDiscriminants::Betterstack.as_ref()
+        );
+        assert_eq!(
+            "grafana_cloud",
+            ProjectTelemetrySinkConfigDiscriminants::GrafanaCloud.as_ref()
+        );
+        assert_eq!(
+            "\"betterstack\"",
+            serde_json::to_string(&ProjectTelemetrySinkConfigDiscriminants::Betterstack).unwrap()
+        );
+        assert_eq!(
+            "\"grafana_cloud\"",
+            serde_json::to_string(&ProjectTelemetrySinkConfigDiscriminants::GrafanaCloud).unwrap()
+        );
+    }
 }

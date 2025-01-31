@@ -330,7 +330,7 @@ pub struct DeployArgs {
 }
 #[derive(Args, Default)]
 pub struct DeploymentTrackingArgs {
-    /// Don't follow the deployment status, exit after the deployment begins
+    /// Don't follow the deployment status, exit after the operation begins
     #[arg(long, visible_alias = "nf")]
     pub no_follow: bool,
     /// Don't display timestamps and log origin tags

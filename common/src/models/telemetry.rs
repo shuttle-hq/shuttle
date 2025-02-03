@@ -64,6 +64,12 @@ impl TelemetrySinkConfig {
     }
 }
 
+impl TelemetrySinkConfigDiscriminants {
+    pub fn as_db_type(&self) -> String {
+        format!("project::telemetry::{}::config", self.as_ref())
+    }
+}
+
 #[derive(Eq, Clone, PartialEq, Serialize, Deserialize)]
 #[typeshare::typeshare]
 pub struct BetterstackConfig {

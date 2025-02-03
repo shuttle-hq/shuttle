@@ -1,8 +1,5 @@
 use clap::{Parser, Subcommand};
-use shuttle_common::{
-    constants::API_URL_DEFAULT_BETA,
-    models::{project::ComputeTier, user::UserId},
-};
+use shuttle_common::{constants::API_URL_DEFAULT_BETA, models::project::ComputeTier};
 
 #[derive(Parser, Debug)]
 pub struct Args {
@@ -22,7 +19,7 @@ pub struct Args {
 pub enum Command {
     ChangeProjectOwner {
         project_name: String,
-        new_user_id: UserId,
+        new_user_id: String,
     },
 
     UpdateCompute {

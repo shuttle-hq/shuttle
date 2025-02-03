@@ -1,8 +1,6 @@
 use serde::{Deserialize, Serialize};
 use strum::{Display, EnumString};
 
-use super::user::UserId;
-
 /// Minimal team information
 #[derive(Debug, Default, Serialize, Deserialize, PartialEq)]
 pub struct Response {
@@ -20,7 +18,7 @@ pub struct Response {
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct MemberResponse {
     /// User ID
-    pub id: UserId,
+    pub id: String,
 
     /// Role of the user in the team
     pub role: MemberRole,

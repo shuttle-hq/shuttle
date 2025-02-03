@@ -37,6 +37,13 @@ pub enum Command {
     /// Renew all custom domain certificates
     RenewCerts,
 
+    SetBetaAccess {
+        user_id: String,
+    },
+    UnsetBetaAccess {
+        user_id: String,
+    },
+
     /// Garbage collect free tier projects
     Gc {
         /// days since last deployment to filter by

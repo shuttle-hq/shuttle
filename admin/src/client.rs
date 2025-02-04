@@ -42,6 +42,25 @@ impl Client {
             .await
     }
 
+    pub async fn set_beta_access(&self, user_id: &str, access: bool) -> Result<()> {
+        let resp = if access {
+            self.inner
+                .put(format!("/admin/users/{user_id}/beta"), Option::<()>::None)
+                .await?
+        } else {
+            self.inner
+                .delete(format!("/admin/users/{user_id}/beta"), Option::<()>::None)
+                .await?
+        };
+
+        if !resp.status().is_success() {
+            dbg!(resp);
+            panic!("request failed");
+        }
+
+        Ok(())
+    }
+
     pub async fn gc_free_tier(&self, days: u32) -> Result<Vec<String>> {
         let path = format!("/admin/gc/free/{days}");
         self.inner.get_json(&path).await

@@ -7,10 +7,6 @@ use crossterm::style::Stylize;
 #[cfg(feature = "display")]
 use std::fmt::Write;
 
-/// In normal cases, a string with the format `user_<ULID>`.
-/// This is a soft rule and the string can be something different.
-pub type UserId = String;
-
 #[derive(Deserialize, Serialize, Debug)]
 #[typeshare::typeshare]
 pub struct UserResponse {

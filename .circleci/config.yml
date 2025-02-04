@@ -435,6 +435,8 @@ workflows:
           target: x86_64-unknown-linux-gnu
           resource_class: xlarge
           filters:
+            branches:
+              ignore: /.*/
             tags:
               only: /v[\d\.]+/
       - build-binaries-linux:
@@ -442,6 +444,8 @@ workflows:
           target: x86_64-unknown-linux-musl
           resource_class: xlarge
           filters:
+            branches:
+              ignore: /.*/
             tags:
               only: /v[\d\.]+/
       - build-binaries-linux:
@@ -449,14 +453,20 @@ workflows:
           target: aarch64-unknown-linux-musl
           resource_class: arm.xlarge
           filters:
+            branches:
+              ignore: /.*/
             tags:
               only: /v[\d\.]+/
       - build-binaries-windows:
           filters:
+            branches:
+              ignore: /.*/
             tags:
               only: /v[\d\.]+/
       - build-binaries-mac:
           filters:
+            branches:
+              ignore: /.*/
             tags:
               only: /v[\d\.]+/
       - publish-github-release-draft:
@@ -471,6 +481,8 @@ workflows:
       - approve-publish-crates:
           type: approval
           filters:
+            branches:
+              ignore: /.*/
             tags:
               only: /v[\d\.]+/
       - publish-crate:

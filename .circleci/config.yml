@@ -436,29 +436,29 @@ workflows:
           resource_class: xlarge
           filters:
             tags:
-              only: /.*/
+              only: /v[\d\.]+/
       - build-binaries-linux:
           name: build-binaries-x86_64-musl
           target: x86_64-unknown-linux-musl
           resource_class: xlarge
           filters:
             tags:
-              only: /.*/
+              only: /v[\d\.]+/
       - build-binaries-linux:
           name: build-binaries-aarch64
           target: aarch64-unknown-linux-musl
           resource_class: arm.xlarge
           filters:
             tags:
-              only: /.*/
+              only: /v[\d\.]+/
       - build-binaries-windows:
           filters:
             tags:
-              only: /.*/
+              only: /v[\d\.]+/
       - build-binaries-mac:
           filters:
             tags:
-              only: /.*/
+              only: /v[\d\.]+/
       - publish-github-release-draft:
           requires:
             - build-binaries-x86_64-gnu
@@ -472,7 +472,7 @@ workflows:
           type: approval
           filters:
             tags:
-              only: /.*/
+              only: /v[\d\.]+/
       - publish-crate:
           matrix:
             parameters:

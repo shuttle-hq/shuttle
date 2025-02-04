@@ -7,7 +7,37 @@ See [conventional commits](https://www.conventionalcommits.org/) for commit guid
 
 **For proper release notes with more details such as upgrading guidelines, check out the [releases page](https://github.com/shuttle-hq/shuttle/releases).**
 
-## [0.51.0](https://github.com/shuttle-hq/shuttle/compare/v0.50.0..0.51.0) - 2025-01-10
+## [0.52.0](https://github.com/shuttle-hq/shuttle/compare/v0.51.0..0.52.0) - 2025-02-04
+
+### Features
+
+- Project telemetry config models ([#1972](https://github.com/shuttle-hq/shuttle/issues/1972)) - ([2b11e13](https://github.com/shuttle-hq/shuttle/commit/2b11e13a8a8911f979ffed5edd8829f7b182fd84))
+- Allow --no-follow and --raw on redeploy and stop ([#1973](https://github.com/shuttle-hq/shuttle/issues/1973)) - ([aa1254d](https://github.com/shuttle-hq/shuttle/commit/aa1254d83343e9ece92ec241f03f12319dc4b164))
+- Stabilise redeploy command ([#1966](https://github.com/shuttle-hq/shuttle/issues/1966)) - ([2ca415e](https://github.com/shuttle-hq/shuttle/commit/2ca415eec8d23b221f775f9545222bfaa400efdd))
+- New scripts for switching api environments ([#1970](https://github.com/shuttle-hq/shuttle/issues/1970)) - ([139ff14](https://github.com/shuttle-hq/shuttle/commit/139ff1460ce996c7ab32b07961e78c00bf3735f9))
+- Upgrade axum,http,hyper,reqwest,tokio ([#1964](https://github.com/shuttle-hq/shuttle/issues/1964)) - ([c2d9a2c](https://github.com/shuttle-hq/shuttle/commit/c2d9a2c5a13f382281eee77380bd32f42dcae102))
+- User project telemetry ([#1961](https://github.com/shuttle-hq/shuttle/issues/1961)) - ([1b478d5](https://github.com/shuttle-hq/shuttle/commit/1b478d5e15253fe51f094654a4e140df3943392c))
+- Re-export service framework crates ([#1956](https://github.com/shuttle-hq/shuttle/issues/1956)) - ([45a5e0d](https://github.com/shuttle-hq/shuttle/commit/45a5e0d81acdfe5ae2b6fce972009e95aebeca15))
+- Legacy platform force deployment ([#1957](https://github.com/shuttle-hq/shuttle/issues/1957)) - ([5e5a2ac](https://github.com/shuttle-hq/shuttle/commit/5e5a2ac5c143bcefcdb4639e4a9c37690597a818))
+
+### Refactor
+
+- Improve values of default otel `Resource` ([#1968](https://github.com/shuttle-hq/shuttle/issues/1968)) - ([f225ecb](https://github.com/shuttle-hq/shuttle/commit/f225ecb8a136666550954a3cbc96b7ae384fa1cd))
+
+### Miscellaneous Tasks
+
+- 0.52.0 - ([09daf77](https://github.com/shuttle-hq/shuttle/commit/09daf7731007954e837cc66f087d92c0b82da6c4))
+- Use `TelemetryResourceDetector` for telemetry sdk values when creating default resource ([#1974](https://github.com/shuttle-hq/shuttle/issues/1974)) - ([90cb292](https://github.com/shuttle-hq/shuttle/commit/90cb292001d3eb2c7e98979772d6b8c14a73ac58))
+- Rename all beta models ([#1969](https://github.com/shuttle-hq/shuttle/issues/1969)) - ([b4dee33](https://github.com/shuttle-hq/shuttle/commit/b4dee339afb8b7fa2141666af75975eaa3d33349))
+- Remove legacy code ([#1962](https://github.com/shuttle-hq/shuttle/issues/1962)) - ([c4e8b8a](https://github.com/shuttle-hq/shuttle/commit/c4e8b8a284470edbed4cfabc9a992e9550c70cf9))
+
+### Miscellaneous
+
+- Cargo update - ([808fc1f](https://github.com/shuttle-hq/shuttle/commit/808fc1f16fee59182538a4236e59c879e284f60f))
+- Bump examples - ([7f99776](https://github.com/shuttle-hq/shuttle/commit/7f99776992988d4edc799036119ddab86c3fb47e))
+- Admin cert command ([#1971](https://github.com/shuttle-hq/shuttle/issues/1971)) - ([82ddbce](https://github.com/shuttle-hq/shuttle/commit/82ddbceb36cbd5456c32935f3327fa35f4e9c034))
+
+## [0.51.0](https://github.com/shuttle-hq/shuttle/compare/v0.50.0..v0.51.0) - 2025-01-10
 
 ### Features
 
@@ -19,13 +49,8 @@ See [conventional commits](https://www.conventionalcommits.org/) for commit guid
 ### Miscellaneous Tasks
 
 - *(shuttle-salvo)* Bump salvo version ([#1953](https://github.com/shuttle-hq/shuttle/issues/1953)) - ([bd6d7cb](https://github.com/shuttle-hq/shuttle/commit/bd6d7cb5211fbee993054ed242a847f905af2d52))
-- V0.51.0 - ([3d26735](https://github.com/shuttle-hq/shuttle/commit/3d26735049b8fe9e6dd0283e2fc3f3c3a14287a2))
+- V0.51.0 ([#1954](https://github.com/shuttle-hq/shuttle/issues/1954)) - ([c6e1368](https://github.com/shuttle-hq/shuttle/commit/c6e13689f4452435fac91b8e8e3bebb6a12cc12b))
 - Move ApiKey type to backends, remove AccountTier sqlx::Type ([#1923](https://github.com/shuttle-hq/shuttle/issues/1923)) - ([ef1ee64](https://github.com/shuttle-hq/shuttle/commit/ef1ee646ca511a7fdcb8162e64d67988dc9af070))
-
-### Miscellaneous
-
-- Bump examples - ([82d9e72](https://github.com/shuttle-hq/shuttle/commit/82d9e72bb0c401300fa1b86aa21e38a0baa3620e))
-- Cargo update - ([b00e689](https://github.com/shuttle-hq/shuttle/commit/b00e689b1b0e71f8b0b4e7ad5fe6004a82dc796e))
 
 ## [0.50.0](https://github.com/shuttle-hq/shuttle/compare/v0.49.0..v0.50.0) - 2025-01-07
 

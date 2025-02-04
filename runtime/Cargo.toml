@@ -4,7 +4,8 @@ version = "0.51.0"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Runtime to run a service on the Shuttle platform"
+description = "Runtime to run a service on the Shuttle platform (https://www.shuttle.dev)"
+homepage = "https://www.shuttle.dev"
 
 [lib]
 doctest = false
@@ -12,34 +13,68 @@ doctest = false
 [dependencies]
 shuttle-api-client = { workspace = true }
 shuttle-codegen = { workspace = true }
-shuttle-common = { workspace = true, features = ["extract_propagation"] }
-shuttle-proto = { workspace = true, features = ["runtime"] }
+shuttle-common = { workspace = true }
 shuttle-service = { workspace = true }
 
 anyhow = { workspace = true }
 async-trait = { workspace = true }
-hyper = { workspace = true, features = ["http1", "server", "tcp"] }
+http-body = { workspace = true }
+http-body-util = { workspace = true }
+hyper = { workspace = true, features = ["http1", "server"] }
+hyper-util = { workspace = true }
+log = { version = "0.4", optional = true, default-features = false }
+opentelemetry = { version = "0.27.0", optional = true, default-features = false, features = ["logs", "metrics", "trace", "tracing"] }
+opentelemetry-otlp = { version = "0.27.0", optional = true, default-features = false, features = [
+    "http-proto",
+    "logs",
+    "metrics",
+    "reqwest-client",
+    "trace",
+] }
+opentelemetry_sdk = { version = "0.27.0", optional = true, default-features = false, features = [
+    "http",
+    "logs",
+    "metrics",
+    "rt-tokio",
+    "trace",
+    "spec_unstable_logs_enabled",
+] }
+opentelemetry-semantic-conventions = { version = "0.27.0", optional = true, default-features = false, features = ["semconv_experimental"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 strfmt = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
-tokio-util = { workspace = true }
-tokio-stream = { workspace = true }
-tonic = { workspace = true }
-tracing = { workspace = true }
-tracing-subscriber = { workspace = true, optional = true }
-
-[dev-dependencies]
-portpicker = { workspace = true }
-shuttle-service = { workspace = true, features = ["builder", "runner"] }
-shuttle-proto = { workspace = true, features = ["provisioner"] }
-uuid = { workspace = true }
+tracing = { workspace = true, features = ["attributes", "std"] }
+tracing-core = { version = "0.1", optional = true, default-features = false, features = ["std"] }
+tracing-log = { version = "0.2", optional = true, default-features = false, features = ["log-tracer", "std"] }
+tracing-opentelemetry = { version = "0.28.0", optional = true, default-features = false, features = ["metrics"] }
+tracing-subscriber = { workspace = true, optional = true, default-features = false }
 
 [features]
 default = ["setup-tracing"]
 api-client-tracing = ["shuttle-api-client/tracing"]
 
 setup-tracing = [
-    "tracing-subscriber/default",
+    "tracing-subscriber/ansi",
     "tracing-subscriber/env-filter",
+    "tracing-subscriber/fmt",
+    "tracing-subscriber/smallvec",
+    "tracing-subscriber/std",
+    "tracing-subscriber/tracing-log",
+]
+setup-otel-exporter = [
+    "setup-tracing",
+    "dep:log",
+    "dep:opentelemetry",
+    "dep:opentelemetry-otlp",
+    "dep:opentelemetry_sdk",
+    "dep:opentelemetry-semantic-conventions",
+    "dep:tracing-core",
+    "dep:tracing-log",
+    "dep:tracing-opentelemetry",
+    "tracing-subscriber/alloc",
+    "tracing-subscriber/parking_lot",
+    "tracing-subscriber/registry",
+    "tracing-subscriber/tracing",
+    "tracing-subscriber/tracing-serde",
 ]

@@ -1,6 +1,8 @@
 #![doc = include_str!("../README.md")]
 use std::net::SocketAddr;
 
+pub use actix_web;
+
 /// A wrapper type for a closure that returns an [actix_web::web::ServiceConfig] so we can implement
 /// [shuttle_runtime::Service] for it.
 #[derive(Clone)]

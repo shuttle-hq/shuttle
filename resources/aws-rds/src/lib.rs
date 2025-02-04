@@ -3,8 +3,7 @@
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use shuttle_service::{
-    database,
-    resource::{ProvisionResourceRequest, ShuttleResourceOutput, Type},
+    resource::{ProvisionResourceRequest, ResourceType},
     DatabaseResource, DbInput, Environment, Error, IntoResource, ResourceFactory,
     ResourceInputBuilder,
 };
@@ -32,7 +31,7 @@ pub enum MaybeRequest {
 }
 
 macro_rules! aws_engine {
-    ($feature:expr, $struct_ident:ident) => {
+    ($feature:expr, $struct_ident:ident, $res_type:ident) => {
         paste::paste! {
             #[cfg(feature = $feature)]
             #[derive(Default)]
@@ -65,28 +64,18 @@ macro_rules! aws_engine {
                 async fn build(self, factory: &ResourceFactory) -> Result<Self::Input, Error> {
                     let md = factory.get_metadata();
                     Ok(match md.env {
-                        Environment::Deployment => MaybeRequest::Request(ProvisionResourceRequest::new(
-                            Type::Database(
-                                database::Type::AwsRds(
-                                    database::AwsRdsEngine::$struct_ident
-                                )
-                            ),
-                            serde_json::to_value(&self.0).unwrap(),
-                            serde_json::Value::Null,
-                        )),
+                        Environment::Deployment => MaybeRequest::Request(ProvisionResourceRequest {
+                            r#type: ResourceType::$res_type,
+                            config: serde_json::to_value(self.0).unwrap(),
+                        }),
                         Environment::Local => match self.0.local_uri {
                             Some(local_uri) => {
                                 MaybeRequest::NotRequest(DatabaseResource::ConnectionString(local_uri))
                             }
-                            None => MaybeRequest::Request(ProvisionResourceRequest::new(
-                                Type::Database(
-                                    database::Type::AwsRds(
-                                        database::AwsRdsEngine::$struct_ident
-                                    )
-                                ),
-                                serde_json::to_value(&self.0).unwrap(),
-                                serde_json::Value::Null,
-                            )),
+                            None => MaybeRequest::Request(ProvisionResourceRequest {
+                                r#type: ResourceType::$res_type,
+                                config: serde_json::to_value(self.0).unwrap(),
+                            }),
                         },
                     })
                 }
@@ -95,29 +84,20 @@ macro_rules! aws_engine {
     };
 }
 
-aws_engine!("postgres", Postgres);
-
-aws_engine!("mysql", MySql);
-
-aws_engine!("mariadb", MariaDB);
+aws_engine!("postgres", Postgres, DatabaseAwsRdsPostgres);
+aws_engine!("mysql", MySql, DatabaseAwsRdsMySql);
+aws_engine!("mariadb", MariaDB, DatabaseAwsRdsMariaDB);
 
 #[derive(Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum OutputWrapper {
-    Alpha(ShuttleResourceOutput<DatabaseResource>),
-    Beta(DatabaseResource),
-}
+#[serde(transparent)]
+pub struct OutputWrapper(DatabaseResource);
 
 #[async_trait]
 impl IntoResource<String> for OutputWrapper {
     async fn into_resource(self) -> Result<String, Error> {
-        let output = match self {
-            Self::Alpha(o) => o.output,
-            Self::Beta(o) => o,
-        };
-        Ok(match output {
+        Ok(match self.0 {
             DatabaseResource::ConnectionString(s) => s,
-            DatabaseResource::Info(info) => info.connection_string_shuttle(),
+            DatabaseResource::Info(info) => info.connection_string(true),
         })
     }
 }

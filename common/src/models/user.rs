@@ -1,13 +1,11 @@
-use std::fmt::Write;
-
 use chrono::{DateTime, Utc};
-use crossterm::style::Stylize;
 use serde::{Deserialize, Serialize};
 use strum::{Display, EnumString};
 
-/// In normal cases, a string with the format `user_<ULID>`.
-/// This is a soft rule and the string can be something different.
-pub type UserId = String;
+#[cfg(feature = "display")]
+use crossterm::style::Stylize;
+#[cfg(feature = "display")]
+use std::fmt::Write;
 
 #[derive(Deserialize, Serialize, Debug)]
 #[typeshare::typeshare]
@@ -21,6 +19,7 @@ pub struct UserResponse {
 }
 
 impl UserResponse {
+    #[cfg(feature = "display")]
     pub fn to_string_colored(&self) -> String {
         let mut s = String::new();
         writeln!(&mut s, "{}", "Account info:".bold()).unwrap();
@@ -42,11 +41,21 @@ impl UserResponse {
 }
 
 #[derive(
-    Clone, Copy, Debug, Default, Deserialize, Serialize, Eq, PartialEq, Ord, PartialOrd, EnumString,
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    Deserialize,
+    Serialize,
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    EnumString,
+    strum::Display,
 )]
 #[serde(rename_all = "lowercase")]
-#[cfg_attr(feature = "display", derive(strum::Display))]
-#[cfg_attr(feature = "display", strum(serialize_all = "lowercase"))]
+#[strum(serialize_all = "lowercase")]
 #[typeshare::typeshare]
 pub enum AccountTier {
     #[default]

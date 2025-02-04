@@ -1,27 +1,26 @@
 use std::{
     collections::BTreeMap,
-    convert::Infallible,
     iter::FromIterator,
     net::{IpAddr, Ipv4Addr, SocketAddr},
     process::exit,
 };
 
 use anyhow::Context;
-use hyper::{
-    service::{make_service_fn, service_fn},
-    Body, Response, Server,
-};
+use http_body_util::Empty;
+use hyper::{body::Bytes, server::conn::http1, service::service_fn, Response};
+use hyper_util::rt::TokioIo;
 use shuttle_api_client::ShuttleApiClient;
 use shuttle_common::{
-    resource::{ProvisionResourceRequestBeta, ResourceInput, ResourceState, ResourceTypeBeta},
+    models::resource::{ResourceInput, ResourceState, ResourceType},
     secrets::Secret,
 };
 use shuttle_service::{Environment, ResourceFactory, Service};
+use tokio::net::TcpListener;
 use tracing::{debug, info, trace};
 
 use crate::__internals::{Loader, Runner};
 
-struct BetaEnvArgs {
+struct RuntimeEnvVars {
     /// Are we running in a Shuttle deployment?
     shuttle: bool,
     project_id: String,
@@ -39,7 +38,7 @@ struct BetaEnvArgs {
     api_key: Option<String>,
 }
 
-impl BetaEnvArgs {
+impl RuntimeEnvVars {
     /// Uses primitive parsing instead of clap for reduced dependency weight.
     /// # Panics
     /// if any required arg is missing or does not parse
@@ -71,7 +70,7 @@ impl BetaEnvArgs {
 
 pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + Send + 'static) {
     debug!("Parsing environment variables");
-    let BetaEnvArgs {
+    let RuntimeEnvVars {
         shuttle,
         project_id,
         project_name,
@@ -81,7 +80,7 @@ pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + S
         healthz_port,
         api_url,
         api_key,
-    } = BetaEnvArgs::parse();
+    } = RuntimeEnvVars::parse();
 
     let service_addr = SocketAddr::new(ip, port);
     let client = ShuttleApiClient::new(api_url, api_key, None, None);
@@ -89,22 +88,40 @@ pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + S
     // start a health check server if requested
     if let Some(healthz_port) = healthz_port {
         trace!("Starting health check server on port {healthz_port}");
+        let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), healthz_port);
         tokio::spawn(async move {
             // light hyper server
-            let make_service = make_service_fn(|_conn| async {
-                Ok::<_, Infallible>(service_fn(|_req| async move {
-                    trace!("Receivied health check");
-                    // TODO: A hook into the `Service` trait can be added here
-                    trace!("Responding to health check");
-                    Result::<Response<Body>, hyper::Error>::Ok(Response::new(Body::empty()))
-                }))
-            });
-            let server = Server::bind(&SocketAddr::new(Ipv4Addr::LOCALHOST.into(), healthz_port))
-                .serve(make_service);
+            let Ok(listener) = TcpListener::bind(&addr).await else {
+                eprintln!("ERROR: Failed to bind to health check port");
+                exit(201);
+            };
 
-            if let Err(e) = server.await {
-                eprintln!("ERROR: Health check error: {e}");
-                exit(200);
+            loop {
+                let Ok((stream, _)) = listener.accept().await else {
+                    eprintln!("ERROR: Health check listener error");
+                    exit(202);
+                };
+                let io = TokioIo::new(stream);
+
+                tokio::task::spawn(async move {
+                    if let Err(err) = http1::Builder::new()
+                        .serve_connection(
+                            io,
+                            service_fn(|_req| async move {
+                                trace!("Received health check");
+                                // TODO: A hook into the `Service` trait can be added here
+                                trace!("Responding to health check");
+                                Result::<Response<Empty<Bytes>>, hyper::Error>::Ok(Response::new(
+                                    Empty::new(),
+                                ))
+                            }),
+                        )
+                        .await
+                    {
+                        eprintln!("ERROR: Health check error: {err}");
+                        exit(200);
+                    }
+                });
             }
         });
     }
@@ -116,7 +133,7 @@ pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + S
 
     trace!("Getting secrets");
     let secrets: BTreeMap<String, String> = match client
-        .get_secrets_beta(&project_id)
+        .get_secrets(&project_id)
         .await
         .and_then(|r| serde_json::from_value(r.output).context("failed to deserialize secrets"))
     {
@@ -130,7 +147,7 @@ pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + S
     // Sort secrets by key
     let secrets = BTreeMap::from_iter(secrets.into_iter().map(|(k, v)| (k, Secret::new(v))));
 
-    // TODO: rework resourcefactory
+    // TODO: rework `ResourceFactory`
     let factory = ResourceFactory::new(project_name, secrets.clone(), env);
     let mut resources = match loader.load(factory).await {
         Ok(r) => r,
@@ -160,14 +177,12 @@ pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + S
         .zip(values)
         // ignore non-Shuttle resource items
         .filter_map(|(bytes, value)| match value {
-            ResourceInput::Shuttle(shuttle_resource) => {
-                Some((bytes, ProvisionResourceRequestBeta::from(shuttle_resource)))
-            }
+            ResourceInput::Shuttle(shuttle_resource) => Some((bytes, shuttle_resource)),
             ResourceInput::Custom(_) => None,
         })
     {
         // Secrets don't need to be requested here since we already got them above.
-        if shuttle_resource.r#type == ResourceTypeBeta::Secrets {
+        if shuttle_resource.r#type == ResourceType::Secrets {
             *bytes = serde_json::to_vec(&secrets).expect("to serialize struct");
             continue;
         }
@@ -176,7 +191,7 @@ pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + S
         loop {
             trace!("Checking state of {:?}", shuttle_resource.r#type);
             match client
-                .provision_resource_beta(&project_id, shuttle_resource.clone())
+                .provision_resource(&project_id, shuttle_resource.clone())
                 .await
             {
                 Ok(res) => {

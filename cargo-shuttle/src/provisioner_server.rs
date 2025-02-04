@@ -1,7 +1,9 @@
-use std::{collections::HashMap, io::stdout, time::Duration};
+use std::{
+    collections::HashMap, convert::Infallible, io::stdout, net::SocketAddr, process::exit,
+    sync::Arc, time::Duration,
+};
 
-use anyhow::Result;
-use async_trait::async_trait;
+use anyhow::{bail, Context, Result};
 use bollard::{
     container::{Config, CreateContainerOptions, StartContainerOptions},
     exec::{CreateExecOptions, CreateExecResults},
@@ -16,19 +18,25 @@ use crossterm::{
     QueueableCommand,
 };
 use futures::StreamExt;
+use http_body_util::{combinators::BoxBody, BodyExt, Empty, Full};
+use hyper::{
+    body::{self, Bytes},
+    server::conn::http1,
+    service::service_fn,
+    Method, Request as HyperRequest, Response,
+};
+use hyper_util::rt::TokioIo;
 use portpicker::pick_unused_port;
 use shuttle_common::{
-    database::{self, AwsRdsEngine, SharedEngine},
-    ContainerRequest, ContainerResponse, Secret,
+    models::resource::{
+        self, ProvisionResourceRequest, ResourceResponse, ResourceState, ResourceType,
+    },
+    secrets::Secret,
+    tables::get_resource_tables,
+    ContainerRequest, ContainerResponse, DatabaseInfo, DbInput,
 };
-use shuttle_proto::provisioner::{
-    provisioner_server::Provisioner, DatabaseDeletionResponse, DatabaseDumpRequest,
-    DatabaseDumpResponse, DatabaseRequest, DatabaseResponse, Ping, Pong,
-};
-use shuttle_service::database::Type;
-use tokio::time::sleep;
-use tonic::{Request, Response, Status};
-use tracing::{error, trace};
+use tokio::{net::TcpListener, time::sleep};
+use tracing::{debug, error, trace};
 
 /// A provisioner for local runs
 /// It uses Docker to create Databases
@@ -96,7 +104,7 @@ impl LocalProvisioner {
         image: &str,
         port: &str,
         env: Option<Vec<String>>,
-    ) -> Result<ContainerInspectResponse, Status> {
+    ) -> Result<ContainerInspectResponse> {
         match self.docker.inspect_container(container_name, None).await {
             Ok(container) => {
                 trace!("found container {container_name}");
@@ -148,7 +156,7 @@ impl LocalProvisioner {
                 error!(
                     "Make sure Docker is installed and running. For more help: https://docs.shuttle.dev/docs/local-run#docker-engines"
                 );
-                Err(Status::internal(error.to_string()))
+                Err(anyhow::anyhow!("{}", error))
             }
         }
     }
@@ -156,14 +164,17 @@ impl LocalProvisioner {
     async fn get_db_connection_string(
         &self,
         project_name: &str,
-        db_type: Type,
+        db_type: ResourceType,
         db_name: Option<String>,
-    ) -> Result<DatabaseResponse, Status> {
+    ) -> Result<DatabaseInfo> {
         trace!("getting sql string for project '{project_name}'");
 
         let database_name = match db_type {
-            database::Type::AwsRds(_) => db_name.unwrap_or_else(|| project_name.to_string()),
-            database::Type::Shared(SharedEngine::MongoDb) => "admin".to_string(),
+            ResourceType::DatabaseAwsRdsPostgres
+            | ResourceType::DatabaseAwsRdsMySql
+            | ResourceType::DatabaseAwsRdsMariaDB => {
+                db_name.unwrap_or_else(|| project_name.to_string())
+            }
             _ => project_name.to_string(),
         };
 
@@ -196,23 +207,20 @@ impl LocalProvisioner {
         sleep(Duration::from_millis(450)).await;
         self.wait_for_ready(&container_name, is_ready_cmd).await?;
 
-        let res = DatabaseResponse {
+        let res = DatabaseInfo::new(
             engine,
             username,
-            password: password.expose().to_owned(),
+            password.expose().clone(),
             database_name,
-            port: host_port,
-            address_private: "localhost".to_string(),
-            address_public: "localhost".to_string(),
-        };
+            host_port,
+            "localhost".to_string(),
+            None,
+        );
 
         Ok(res)
     }
 
-    pub async fn start_container(
-        &self,
-        req: ContainerRequest,
-    ) -> Result<ContainerResponse, Status> {
+    pub async fn start_container(&self, req: ContainerRequest) -> Result<ContainerResponse> {
         let ContainerRequest {
             project_name,
             container_name,
@@ -235,11 +243,7 @@ impl LocalProvisioner {
         Ok(ContainerResponse { host_port })
     }
 
-    async fn wait_for_ready(
-        &self,
-        container_name: &str,
-        is_ready_cmd: Vec<String>,
-    ) -> Result<(), Status> {
+    async fn wait_for_ready(&self, container_name: &str, is_ready_cmd: Vec<String>) -> Result<()> {
         loop {
             trace!("waiting for '{container_name}' to be ready for connections");
 
@@ -317,46 +321,6 @@ impl LocalProvisioner {
     }
 }
 
-#[async_trait]
-impl Provisioner for LocalProvisioner {
-    async fn provision_database(
-        &self,
-        request: Request<DatabaseRequest>,
-    ) -> Result<Response<DatabaseResponse>, Status> {
-        let DatabaseRequest {
-            project_name,
-            db_type,
-            db_name,
-        } = request.into_inner();
-
-        let db_type: Option<Type> = db_type.unwrap().into();
-
-        let res = self
-            .get_db_connection_string(&project_name, db_type.unwrap(), db_name)
-            .await?;
-
-        Ok(Response::new(res))
-    }
-
-    async fn delete_database(
-        &self,
-        _request: Request<DatabaseRequest>,
-    ) -> Result<Response<DatabaseDeletionResponse>, Status> {
-        panic!("local runner should not try to delete databases");
-    }
-
-    async fn dump_database(
-        &self,
-        _request: Request<DatabaseDumpRequest>,
-    ) -> Result<Response<DatabaseDumpResponse>, Status> {
-        panic!("local runner should not try to dump databases");
-    }
-
-    async fn health_check(&self, _request: Request<Ping>) -> Result<Response<Pong>, Status> {
-        panic!("local runner should not try to do a health check");
-    }
-}
-
 fn print_layers(layers: &Vec<CreateImageInfo>) {
     for info in layers {
         stdout()
@@ -406,11 +370,11 @@ struct EngineConfig {
     is_ready_cmd: Vec<String>,
 }
 
-fn db_type_to_config(db_type: Type, database_name: &str) -> EngineConfig {
+fn db_type_to_config(db_type: ResourceType, database_name: &str) -> EngineConfig {
     match db_type {
-        Type::Shared(SharedEngine::Postgres) => EngineConfig {
+        ResourceType::DatabaseSharedPostgres => EngineConfig {
             r#type: "shared_postgres".to_string(),
-            image: "docker.io/library/postgres:14".to_string(),
+            image: "docker.io/library/postgres:16".to_string(),
             engine: "postgres".to_string(),
             username: "postgres".to_string(),
             password: "postgres".to_string().into(),
@@ -425,28 +389,9 @@ fn db_type_to_config(db_type: Type, database_name: &str) -> EngineConfig {
                 "pg_isready | grep 'accepting connections'".to_string(),
             ],
         },
-        Type::Shared(SharedEngine::MongoDb) => EngineConfig {
-            r#type: "shared_mongodb".to_string(),
-            image: "docker.io/library/mongo:5.0.10".to_string(),
-            engine: "mongodb".to_string(),
-            username: "mongodb".to_string(),
-            password: "password".to_string().into(),
-            port: "27017/tcp".to_string(),
-            env: Some(vec![
-                "MONGO_INITDB_ROOT_USERNAME=mongodb".to_string(),
-                "MONGO_INITDB_ROOT_PASSWORD=password".to_string(),
-                format!("MONGO_INITDB_DATABASE={database_name}"),
-            ]),
-            is_ready_cmd: vec![
-                "mongosh".to_string(),
-                "--quiet".to_string(),
-                "--eval".to_string(),
-                "db".to_string(),
-            ],
-        },
-        Type::AwsRds(AwsRdsEngine::Postgres) => EngineConfig {
+        ResourceType::DatabaseAwsRdsPostgres => EngineConfig {
             r#type: "aws_rds_postgres".to_string(),
-            image: "docker.io/library/postgres:13.4".to_string(),
+            image: "docker.io/library/postgres:16".to_string(),
             engine: "postgres".to_string(),
             username: "postgres".to_string(),
             password: "postgres".to_string().into(),
@@ -461,7 +406,7 @@ fn db_type_to_config(db_type: Type, database_name: &str) -> EngineConfig {
                 "pg_isready | grep 'accepting connections'".to_string(),
             ],
         },
-        Type::AwsRds(AwsRdsEngine::MariaDB) => EngineConfig {
+        ResourceType::DatabaseAwsRdsMariaDB => EngineConfig {
             r#type: "aws_rds_mariadb".to_string(),
             image: "docker.io/library/mariadb:10.6.7".to_string(),
             engine: "mariadb".to_string(),
@@ -480,7 +425,7 @@ fn db_type_to_config(db_type: Type, database_name: &str) -> EngineConfig {
                 "show databases;".to_string(),
             ],
         },
-        Type::AwsRds(AwsRdsEngine::MySql) => EngineConfig {
+        ResourceType::DatabaseAwsRdsMySql => EngineConfig {
             r#type: "aws_rds_mysql".to_string(),
             image: "docker.io/library/mysql:8.0.28".to_string(),
             engine: "mysql".to_string(),
@@ -499,165 +444,133 @@ fn db_type_to_config(db_type: Type, database_name: &str) -> EngineConfig {
                 "show databases;".to_string(),
             ],
         },
+        _ => panic!("Non-database resource type provided: {db_type}"),
     }
 }
 
-pub mod beta {
-    use std::{
-        collections::HashMap, convert::Infallible, net::SocketAddr, process::exit, sync::Arc,
-    };
+#[derive(Clone)]
+pub struct ProvApiState {
+    pub project_name: String,
+    pub secrets: HashMap<String, String>,
+}
 
-    use anyhow::{bail, Context, Result};
-    use hyper::{
-        body,
-        service::{make_service_fn, service_fn},
-        Body, Method, Request as HyperRequest, Response, Server,
-    };
-    use shuttle_common::{
-        database,
-        models::resource::get_resource_tables_beta,
-        resource::{
-            self, ProvisionResourceRequestBeta, ResourceResponseBeta, ResourceState,
-            ResourceTypeBeta,
-        },
-        DatabaseResource, DbInput,
-    };
-    use shuttle_proto::provisioner::{provisioner_server::Provisioner, DatabaseRequest};
-    use tonic::Request;
-    use tracing::debug;
+pub struct ProvisionerServer;
 
-    use super::LocalProvisioner;
+impl ProvisionerServer {
+    pub async fn run(
+        state: Arc<ProvApiState>,
+        api_addr: &SocketAddr,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let listener = TcpListener::bind(api_addr).await?;
+        loop {
+            let (stream, _) = listener.accept().await?;
+            let io = TokioIo::new(stream);
 
-    #[derive(Clone)]
-    pub struct ProvApiState {
-        pub project_name: String,
-        pub secrets: HashMap<String, String>,
-    }
-
-    pub struct ProvisionerServerBeta;
-
-    impl ProvisionerServerBeta {
-        pub fn start(state: Arc<ProvApiState>, api_addr: &SocketAddr) {
-            let make_svc = make_service_fn(move |_conn| {
-                let state = state.clone();
-                async {
-                    Ok::<_, Infallible>(service_fn(move |req| {
-                        let state = state.clone();
-                        handler(state, req)
-                    }))
-                }
-            });
-            let server = Server::bind(api_addr).serve(make_svc);
-            tokio::spawn(async move {
-                if let Err(e) = server.await {
-                    eprintln!("Provisioner server error: {}", e);
+            let state = Arc::clone(&state);
+            tokio::task::spawn(async move {
+                if let Err(err) = http1::Builder::new()
+                    .serve_connection(io, service_fn(|req| handler(Arc::clone(&state), req)))
+                    .await
+                {
+                    eprintln!("Provisioner server error: {:?}", err);
                     exit(1);
                 }
             });
         }
     }
+}
 
-    pub async fn handler(
-        state: Arc<ProvApiState>,
-        req: HyperRequest<Body>,
-    ) -> std::result::Result<Response<Body>, hyper::Error> {
-        let method = req.method().clone();
-        let uri = req.uri().clone();
-        debug!("Received {method} {uri}");
+pub async fn handler(
+    state: Arc<ProvApiState>,
+    req: HyperRequest<body::Incoming>,
+) -> std::result::Result<Response<BoxBody<Bytes, Infallible>>, hyper::http::Error> {
+    let method = req.method().clone();
+    let uri = req.uri().clone();
+    debug!("Received {method} {uri}");
 
-        let body = body::to_bytes(req.into_body()).await?.to_vec();
-        let res = match provision(state, method, uri.to_string().as_str(), body).await {
-            Ok(bytes) => Response::new(Body::from(bytes)),
-            Err(e) => {
-                eprintln!("Encountered error when provisioning: {e}");
-                Response::builder().status(500).body(Body::empty()).unwrap()
-            }
-        };
+    let body = req.into_body().collect().await.unwrap().to_bytes();
 
-        Ok(res)
+    match provision(state, method, uri.to_string().as_str(), body.to_vec()).await {
+        Ok(bytes) => Response::builder()
+            .status(200)
+            .body(BoxBody::new(Full::new(Bytes::from(bytes)))),
+        Err(e) => {
+            eprintln!("Encountered error when provisioning: {e}");
+            Response::builder().status(500).body(Empty::new().boxed())
+        }
     }
+}
 
-    async fn provision(
-        state: Arc<ProvApiState>,
-        method: Method,
-        uri: &str,
-        body: Vec<u8>,
-    ) -> Result<Vec<u8>> {
-        Ok(match (method, uri) {
-            (Method::GET, "/projects/proj_LOCAL/resources/secrets") => {
-                let response = ResourceResponseBeta {
-                    r#type: ResourceTypeBeta::Secrets,
-                    state: ResourceState::Ready,
-                    config: serde_json::Value::Null,
-                    output: serde_json::to_value(&state.secrets).unwrap(),
-                };
-                let table =
-                    get_resource_tables_beta(&[response.clone()], "local service", false, true);
-                println!("{table}");
-                serde_json::to_vec(&response).unwrap()
-            }
-            (Method::POST, "/projects/proj_LOCAL/resources") => {
-                let prov = LocalProvisioner::new().unwrap();
-                let shuttle_resource: ProvisionResourceRequestBeta =
-                    serde_json::from_slice(&body).context("deserializing resource request")?;
+async fn provision(
+    state: Arc<ProvApiState>,
+    method: Method,
+    uri: &str,
+    body: Vec<u8>,
+) -> Result<Vec<u8>> {
+    Ok(match (method, uri) {
+        (Method::GET, "/projects/proj_LOCAL/resources/secrets") => {
+            let response = ResourceResponse {
+                r#type: ResourceType::Secrets,
+                state: ResourceState::Ready,
+                config: serde_json::Value::Null,
+                output: serde_json::to_value(&state.secrets).unwrap(),
+            };
+            let table = get_resource_tables(&[response.clone()], "local service", false, true);
+            println!("{table}");
+            serde_json::to_vec(&response).unwrap()
+        }
+        (Method::POST, "/projects/proj_LOCAL/resources") => {
+            let prov = LocalProvisioner::new().unwrap();
+            let shuttle_resource: ProvisionResourceRequest =
+                serde_json::from_slice(&body).context("deserializing resource request")?;
 
-                let response = match shuttle_resource.r#type {
-                    ResourceTypeBeta::DatabaseSharedPostgres
-                    | ResourceTypeBeta::DatabaseAwsRdsMariaDB
-                    | ResourceTypeBeta::DatabaseAwsRdsMysql
-                    | ResourceTypeBeta::DatabaseAwsRdsPostgres => {
-                        let config: DbInput =
-                            serde_json::from_value(shuttle_resource.config.clone())
-                                .context("deserializing resource config")?;
-                        let res = DatabaseResource::Info(
-                            prov.provision_database(Request::new(DatabaseRequest {
-                                project_name: state.project_name.clone(),
-                                db_type: Some(
-                                    database::Type::try_from(shuttle_resource.r#type)
-                                        .map_err(anyhow::Error::msg)?
-                                        .into()
-                                ),
-                                db_name: config.db_name,
-                            }))
-                            .await
-                            .context("Failed to start database container. Make sure that a Docker engine is running.")?
-                            .into_inner()
-                            .into());
-                        ResourceResponseBeta {
-                            r#type: shuttle_resource.r#type,
-                            state: resource::ResourceState::Ready,
-                            config: shuttle_resource.config,
-                            output: serde_json::to_value(res).unwrap(),
-                        }
-                    }
-                    ResourceTypeBeta::Container => {
-                        let config = serde_json::from_value(shuttle_resource.config.clone())
-                            .context("deserializing resource config")?;
-                        let res = prov.start_container(config)
-                            .await
-                            .context("Failed to start Docker container. Make sure that a Docker engine is running.")?;
-                        ResourceResponseBeta {
-                            r#type: shuttle_resource.r#type,
-                            state: resource::ResourceState::Ready,
-                            config: shuttle_resource.config,
-                            output: serde_json::to_value(res).unwrap(),
-                        }
-                    }
-                    ResourceTypeBeta::Secrets => ResourceResponseBeta {
+            let response = match shuttle_resource.r#type {
+                ResourceType::DatabaseSharedPostgres
+                | ResourceType::DatabaseAwsRdsMariaDB
+                | ResourceType::DatabaseAwsRdsMySql
+                | ResourceType::DatabaseAwsRdsPostgres => {
+                    let config: DbInput = serde_json::from_value(shuttle_resource.config.clone())
+                        .context("deserializing resource config")?;
+                    let res = prov.get_db_connection_string(
+                            &state.project_name,
+                            shuttle_resource.r#type,
+                            config.db_name,
+                        )
+                        .await
+                        .context("Failed to start database container. Make sure that a Docker engine is running.")?;
+                    ResourceResponse {
                         r#type: shuttle_resource.r#type,
                         state: resource::ResourceState::Ready,
                         config: shuttle_resource.config,
-                        output: serde_json::to_value(&state.secrets).unwrap(),
-                    },
-                };
+                        output: serde_json::to_value(res).unwrap(),
+                    }
+                }
+                ResourceType::Container => {
+                    let config = serde_json::from_value(shuttle_resource.config.clone())
+                        .context("deserializing resource config")?;
+                    let res = prov.start_container(config)
+                            .await
+                            .context("Failed to start Docker container. Make sure that a Docker engine is running.")?;
+                    ResourceResponse {
+                        r#type: shuttle_resource.r#type,
+                        state: resource::ResourceState::Ready,
+                        config: shuttle_resource.config,
+                        output: serde_json::to_value(res).unwrap(),
+                    }
+                }
+                ResourceType::Secrets => ResourceResponse {
+                    r#type: shuttle_resource.r#type,
+                    state: resource::ResourceState::Ready,
+                    config: shuttle_resource.config,
+                    output: serde_json::to_value(&state.secrets).unwrap(),
+                },
+            };
 
-                let table =
-                    get_resource_tables_beta(&[response.clone()], "local service", false, true);
-                println!("{table}");
+            let table = get_resource_tables(&[response.clone()], "local service", false, true);
+            println!("{table}");
 
-                serde_json::to_vec(&response).unwrap()
-            }
-            _ => bail!("Received unsupported resource request"),
-        })
-    }
+            serde_json::to_vec(&response).unwrap()
+        }
+        _ => bail!("Received unsupported resource request"),
+    })
 }

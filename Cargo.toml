@@ -27,7 +27,7 @@ anyhow = "1.0.66"
 assert_cmd = "2.0.6"
 async-trait = "0.1.58"
 axum = { version = "0.8.1", default-features = false }
-bollard = "0.16.0"
+bollard = { version = "0.18.1", features = ["ssl_providerless"] }
 cargo_metadata = "0.19.1"
 chrono = { version = "0.4.34", default-features = false }
 clap = { version = "4.2.7", features = ["derive"] }

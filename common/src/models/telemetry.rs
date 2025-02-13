@@ -88,6 +88,39 @@ pub struct GrafanaCloudConfig {
     pub instance_id: String,
 }
 
+#[cfg(feature = "integration-tests")]
+impl From<BetterstackConfig> for TelemetrySinkConfig {
+    fn from(value: BetterstackConfig) -> Self {
+        TelemetrySinkConfig::Betterstack(value)
+    }
+}
+
+#[cfg(feature = "integration-tests")]
+impl From<DatadogConfig> for TelemetrySinkConfig {
+    fn from(value: DatadogConfig) -> Self {
+        TelemetrySinkConfig::Datadog(value)
+    }
+}
+
+#[cfg(feature = "integration-tests")]
+impl From<GrafanaCloudConfig> for TelemetrySinkConfig {
+    fn from(value: GrafanaCloudConfig) -> Self {
+        TelemetrySinkConfig::GrafanaCloud(value)
+    }
+}
+
+#[cfg(feature = "integration-tests")]
+impl std::str::FromStr for TelemetrySinkConfig {
+    type Err = serde_json::Error;
+
+    fn from_str(config: &str) -> Result<Self, Self::Err> {
+        serde_json::from_str::<BetterstackConfig>(config)
+            .map(Self::from)
+            .or(serde_json::from_str::<DatadogConfig>(config).map(Self::from))
+            .or(serde_json::from_str::<GrafanaCloudConfig>(config).map(Self::from))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

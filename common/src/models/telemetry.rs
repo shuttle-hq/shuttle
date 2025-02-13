@@ -41,8 +41,18 @@ impl From<Vec<TelemetrySinkConfig>> for TelemetryConfigResponse {
 
 /// The user-supplied config required to export telemetry to a given external sink
 #[derive(
-    Eq, Clone, PartialEq, Serialize, Deserialize, strum::AsRefStr, strum::EnumDiscriminants,
+    // std
+    Eq,
+    Clone,
+    PartialEq,
+    // serde
+    Serialize,
+    Deserialize,
+    // strum
+    strum::AsRefStr,
+    strum::EnumDiscriminants,
 )]
+#[cfg_attr(feature = "integration-tests", derive(Debug))]
 #[serde(tag = "type", content = "content", rename_all = "snake_case")]
 #[strum(serialize_all = "snake_case")]
 #[typeshare::typeshare]
@@ -71,16 +81,19 @@ impl TelemetrySinkConfigDiscriminants {
 }
 
 #[derive(Eq, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "integration-tests", derive(Debug))]
 #[typeshare::typeshare]
 pub struct BetterstackConfig {
     pub source_token: String,
 }
 #[derive(Eq, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "integration-tests", derive(Debug))]
 #[typeshare::typeshare]
 pub struct DatadogConfig {
     pub api_key: String,
 }
 #[derive(Eq, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "integration-tests", derive(Debug))]
 #[typeshare::typeshare]
 pub struct GrafanaCloudConfig {
     pub token: String,
@@ -116,8 +129,37 @@ impl std::str::FromStr for TelemetrySinkConfig {
     fn from_str(config: &str) -> Result<Self, Self::Err> {
         serde_json::from_str::<BetterstackConfig>(config)
             .map(Self::from)
-            .or(serde_json::from_str::<DatadogConfig>(config).map(Self::from))
-            .or(serde_json::from_str::<GrafanaCloudConfig>(config).map(Self::from))
+            .inspect_err(|error| {
+                tracing::debug!(
+                    %config,
+                    %error,
+                    "cannot deserialize config as valid Betterstack configuration",
+                )
+            })
+            .or(serde_json::from_str::<DatadogConfig>(config)
+                .map(Self::from)
+                .inspect_err(|error| {
+                    tracing::debug!(
+                        %config,
+                        %error,
+                        "cannot deserialize config as valid DataDog configuration",
+                    )
+                }))
+            .or(serde_json::from_str::<GrafanaCloudConfig>(config)
+                .map(Self::from)
+                .inspect_err(|error| {
+                    tracing::debug!(
+                        %config,
+                        %error,
+                        "cannot deserialize config as valid GrafanaCloud configuration",
+                    )
+                }))
+            .map_err(|_| {
+                <serde_json::Error as serde::de::Error>::custom(format!(
+                    "configuration does not match any known external telemetry sink: {}",
+                    config
+                ))
+            })
     }
 }
 

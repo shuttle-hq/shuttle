@@ -16,6 +16,7 @@ pub enum DeploymentState {
     Pending,
     Building,
     Running,
+    #[serde(rename = "in progress")]
     #[strum(serialize = "in progress")]
     InProgress,
     Stopped,

@@ -32,7 +32,7 @@ axum = ["dep:axum", "dep:tracing"]
 display = ["chrono/clock", "dep:crossterm"]
 tables = ["models", "display", "dep:comfy-table"]
 
-# internal / utilty features
+# internal / utility features
 integration-tests = []
 
 [package.metadata.docs.rs]

@@ -1,13 +1,13 @@
-use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
-use strum::{Display, EnumString};
-
-#[cfg(feature = "display")]
-use crossterm::style::Stylize;
 #[cfg(feature = "display")]
 use std::fmt::Write;
 
-#[derive(Deserialize, Serialize, Debug)]
+use chrono::{DateTime, Utc};
+#[cfg(feature = "display")]
+use crossterm::style::Stylize;
+use serde::{Deserialize, Serialize};
+use strum::{EnumString, IntoStaticStr};
+
+#[derive(Debug, Deserialize, Serialize)]
 #[typeshare::typeshare]
 pub struct UserResponse {
     pub name: String,
@@ -41,17 +41,21 @@ impl UserResponse {
 }
 
 #[derive(
+    // std
     Clone,
     Copy,
     Debug,
     Default,
-    Deserialize,
-    Serialize,
     Eq,
     PartialEq,
     Ord,
     PartialOrd,
+    // serde
+    Deserialize,
+    Serialize,
+    // strum
     EnumString,
+    IntoStaticStr,
     strum::Display,
 )]
 #[serde(rename_all = "lowercase")]
@@ -72,7 +76,7 @@ pub enum AccountTier {
     Deployer,
 }
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Debug, Deserialize, Serialize)]
 #[typeshare::typeshare]
 pub struct Subscription {
     pub id: String,
@@ -82,7 +86,7 @@ pub struct Subscription {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Debug, Deserialize)]
 #[typeshare::typeshare]
 pub struct SubscriptionRequest {
     pub id: String,
@@ -90,7 +94,20 @@ pub struct SubscriptionRequest {
     pub quantity: i32,
 }
 
-#[derive(Clone, Debug, EnumString, Display, Deserialize, Serialize, Eq, PartialEq)]
+#[derive(
+    // std
+    Clone,
+    Debug,
+    Eq,
+    PartialEq,
+    // serde
+    Deserialize,
+    Serialize,
+    // strum
+    EnumString,
+    strum::Display,
+    IntoStaticStr,
+)]
 #[serde(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
 #[typeshare::typeshare]

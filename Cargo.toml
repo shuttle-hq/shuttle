@@ -1,13 +1,13 @@
 [workspace]
 resolver = "2"
 members = [
-  "admin",
-  "api-client",
-  "cargo-shuttle",
-  "codegen",
-  "common",
-  "runtime",
-  "service",
+    "admin",
+    "api-client",
+    "cargo-shuttle",
+    "codegen",
+    "common",
+    "runtime",
+    "service",
 ]
 exclude = ["examples", "resources", "services"]
 
@@ -59,7 +59,7 @@ proc-macro2 = "1.0.89"
 quote = "1.0.21"
 regex = "1.9.5"
 reqwest = { version = "0.12.12", default-features = false, features = [
-  "rustls-tls",
+    "rustls-tls",
 ] }
 reqwest-middleware = "0.4.0"
 rexpect = "0.6.0"
@@ -67,20 +67,20 @@ semver = { version = "1.0.17", features = ["serde"] }
 serde = { version = "1.0.148", default-features = false }
 serde_json = "1.0.89"
 strfmt = "0.2.2"
-strum = { version = "0.26.1", features = ["derive"] }
+strum = { version = "0.27.1", features = ["derive"] }
 syn = "2.0"
 tempfile = "3.4.0"
 thiserror = "2"
 tokio = "1.40.0"
 tokio-tungstenite = { version = "0.26.1", features = [
-  "rustls-tls-webpki-roots",
+    "rustls-tls-webpki-roots",
 ] }
 toml = "0.8.2"
 toml_edit = "0.22.22"
 tracing = { version = "0.1.37", default-features = false }
 tracing-subscriber = { version = "0.3.16", default-features = false, features = [
-  "registry",
-  "json",
+    "registry",
+    "json",
 ] }
 trybuild = "1.0.72"
 typeshare = "1.0.3"

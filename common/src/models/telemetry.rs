@@ -1,4 +1,10 @@
+use std::borrow::Cow;
+
 use serde::{Deserialize, Serialize};
+
+const fn default_betterstack_host() -> Cow<'static, str> {
+    Cow::Borrowed("in-otel.logs.betterstack.com")
+}
 
 /// Status of a telemetry export configuration for an external sink
 #[derive(Eq, Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -23,6 +29,7 @@ impl From<Vec<TelemetrySinkConfig>> for TelemetryConfigResponse {
 
         for sink in value {
             match sink {
+                TelemetrySinkConfig::Debug(_) => {}
                 TelemetrySinkConfig::Betterstack(_) => {
                     instance.betterstack = Some(TelemetrySinkStatus { enabled: true })
                 }
@@ -53,19 +60,32 @@ impl From<Vec<TelemetrySinkConfig>> for TelemetryConfigResponse {
     strum::EnumDiscriminants,
 )]
 #[cfg_attr(feature = "integration-tests", derive(Debug))]
+#[cfg_attr(any(test, feature = "integration-tests"), derive(strum::EnumIter))]
 #[serde(tag = "type", content = "content", rename_all = "snake_case")]
 #[strum(serialize_all = "snake_case")]
 #[typeshare::typeshare]
+#[cfg_attr(
+    any(test, feature = "integration-tests"),
+    strum_discriminants(derive(strum::EnumIter))
+)]
 #[strum_discriminants(derive(Serialize, Deserialize, strum::AsRefStr))]
 #[strum_discriminants(serde(rename_all = "snake_case"))]
 #[strum_discriminants(strum(serialize_all = "snake_case"))]
 pub enum TelemetrySinkConfig {
     /// [Betterstack](https://betterstack.com/docs/logs/open-telemetry/)
     Betterstack(BetterstackConfig),
+
     /// [Datadog](https://docs.datadoghq.com/opentelemetry/collector_exporter/otel_collector_datadog_exporter)
     Datadog(DatadogConfig),
+
     /// [Grafana Cloud](https://grafana.com/docs/grafana-cloud/send-data/otlp/)
     GrafanaCloud(GrafanaCloudConfig),
+
+    /// Internal Debugging
+    #[doc(hidden)]
+    #[typeshare(skip)]
+    #[strum_discriminants(doc(hidden))]
+    Debug(serde_json::Value),
 }
 
 impl TelemetrySinkConfig {
@@ -85,18 +105,36 @@ impl TelemetrySinkConfigDiscriminants {
 #[typeshare::typeshare]
 pub struct BetterstackConfig {
     #[serde(default = "default_betterstack_host")]
-    pub ingesting_host: String,
+    pub ingesting_host: Cow<'static, str>,
     pub source_token: String,
 }
-fn default_betterstack_host() -> String {
-    "in-otel.logs.betterstack.com".to_owned()
+
+#[cfg(any(test, feature = "integration-tests"))]
+impl Default for BetterstackConfig {
+    fn default() -> Self {
+        Self {
+            source_token: "some-source-token".into(),
+            ingesting_host: default_betterstack_host(),
+        }
+    }
 }
+
 #[derive(Eq, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "integration-tests", derive(Debug))]
 #[typeshare::typeshare]
 pub struct DatadogConfig {
     pub api_key: String,
 }
+
+#[cfg(any(test, feature = "integration-tests"))]
+impl Default for DatadogConfig {
+    fn default() -> Self {
+        Self {
+            api_key: "some-api-key".into(),
+        }
+    }
+}
+
 #[derive(Eq, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "integration-tests", derive(Debug))]
 #[typeshare::typeshare]
@@ -104,6 +142,17 @@ pub struct GrafanaCloudConfig {
     pub token: String,
     pub endpoint: String,
     pub instance_id: String,
+}
+
+#[cfg(any(test, feature = "integration-tests"))]
+impl Default for GrafanaCloudConfig {
+    fn default() -> Self {
+        Self {
+            token: "some-auth-token".into(),
+            instance_id: String::from("0000000"),
+            endpoint: "https://prometheus-env-id-env-region.grafana.net/api/prom/push".into(),
+        }
+    }
 }
 
 #[cfg(feature = "integration-tests")]
@@ -174,38 +223,58 @@ mod tests {
 
     #[test]
     fn sink_config_enum() {
-        assert_eq!(
-            "betterstack",
-            TelemetrySinkConfig::Betterstack(BetterstackConfig {
-                ingesting_host: "".into(),
-                source_token: "".into()
-            })
-            .as_ref()
-        );
-        assert_eq!(
-            "project::telemetry::betterstack::config",
-            TelemetrySinkConfig::Betterstack(BetterstackConfig {
-                ingesting_host: "".into(),
-                source_token: "".into()
-            })
-            .as_db_type()
-        );
+        for variant in <TelemetrySinkConfig as strum::IntoEnumIterator>::iter() {
+            match variant {
+                sink @ TelemetrySinkConfig::Betterstack(_) => {
+                    assert_eq!("betterstack", sink.as_ref());
+                    assert_eq!("project::telemetry::betterstack::config", sink.as_db_type());
+                }
+                sink @ TelemetrySinkConfig::Datadog(_) => {
+                    assert_eq!("datadog", sink.as_ref());
+                    assert_eq!("project::telemetry::datadog::config", sink.as_db_type());
+                }
+                sink @ TelemetrySinkConfig::GrafanaCloud(_) => {
+                    assert_eq!("grafana_cloud", sink.as_ref());
+                    assert_eq!(
+                        "project::telemetry::grafana_cloud::config",
+                        sink.as_db_type()
+                    );
+                }
+                sink @ TelemetrySinkConfig::Debug(_) => {
+                    assert_eq!("debug", sink.as_ref());
+                    assert_eq!("project::telemetry::debug::config", sink.as_db_type());
+                }
+            }
+        }
 
-        assert_eq!(
-            "betterstack",
-            TelemetrySinkConfigDiscriminants::Betterstack.as_ref()
-        );
-        assert_eq!(
-            "grafana_cloud",
-            TelemetrySinkConfigDiscriminants::GrafanaCloud.as_ref()
-        );
-        assert_eq!(
-            "\"betterstack\"",
-            serde_json::to_string(&TelemetrySinkConfigDiscriminants::Betterstack).unwrap()
-        );
-        assert_eq!(
-            "\"grafana_cloud\"",
-            serde_json::to_string(&TelemetrySinkConfigDiscriminants::GrafanaCloud).unwrap()
-        );
+        for variant in <TelemetrySinkConfigDiscriminants as strum::IntoEnumIterator>::iter() {
+            match variant {
+                discriminant @ TelemetrySinkConfigDiscriminants::Betterstack => {
+                    assert_eq!("betterstack", discriminant.as_ref());
+                    assert_eq!(
+                        r#""betterstack""#,
+                        serde_json::to_string(&discriminant).unwrap()
+                    );
+                }
+                discriminant @ TelemetrySinkConfigDiscriminants::Datadog => {
+                    assert_eq!("datadog", discriminant.as_ref());
+                    assert_eq!(
+                        r#""datadog""#,
+                        serde_json::to_string(&discriminant).unwrap()
+                    );
+                }
+                discriminant @ TelemetrySinkConfigDiscriminants::GrafanaCloud => {
+                    assert_eq!("grafana_cloud", discriminant.as_ref());
+                    assert_eq!(
+                        r#""grafana_cloud""#,
+                        serde_json::to_string(&discriminant).unwrap()
+                    );
+                }
+                discriminant @ TelemetrySinkConfigDiscriminants::Debug => {
+                    assert_eq!("debug", discriminant.as_ref());
+                    assert_eq!(r#""debug""#, serde_json::to_string(&discriminant).unwrap());
+                }
+            }
+        }
     }
 }

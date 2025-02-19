@@ -23,6 +23,9 @@ tracing = { workspace = true, features = ["std"], optional = true }
 typeshare = { workspace = true }
 zeroize = { workspace = true }
 
+[dev-dependencies]
+rstest = "0.24.0"
+
 [features]
 # main features
 models = ["chrono/serde", "dep:tracing"]

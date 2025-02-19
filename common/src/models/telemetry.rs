@@ -84,7 +84,12 @@ impl TelemetrySinkConfigDiscriminants {
 #[cfg_attr(feature = "integration-tests", derive(Debug))]
 #[typeshare::typeshare]
 pub struct BetterstackConfig {
+    #[serde(default = "default_betterstack_host")]
+    pub ingesting_host: String,
     pub source_token: String,
+}
+fn default_betterstack_host() -> String {
+    "in-otel.logs.betterstack.com".to_owned()
 }
 #[derive(Eq, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "integration-tests", derive(Debug))]
@@ -172,6 +177,7 @@ mod tests {
         assert_eq!(
             "betterstack",
             TelemetrySinkConfig::Betterstack(BetterstackConfig {
+                ingesting_host: "".into(),
                 source_token: "".into()
             })
             .as_ref()
@@ -179,6 +185,7 @@ mod tests {
         assert_eq!(
             "project::telemetry::betterstack::config",
             TelemetrySinkConfig::Betterstack(BetterstackConfig {
+                ingesting_host: "".into(),
                 source_token: "".into()
             })
             .as_db_type()

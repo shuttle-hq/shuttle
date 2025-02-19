@@ -41,7 +41,7 @@ impl DeploymentState {
             Self::Unknown => Color::Grey,
         }
     }
-    #[cfg(feature = "display")]
+    #[cfg(all(feature = "tables", feature = "display"))]
     pub fn get_color_comfy_table(&self) -> comfy_table::Color {
         use comfy_table::Color;
 

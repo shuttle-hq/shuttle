@@ -83,6 +83,7 @@ pub enum TelemetrySinkConfig {
 
     /// Internal Debugging
     #[doc(hidden)]
+    #[typeshare(skip)]
     #[strum_discriminants(doc(hidden))]
     Debug(serde_json::Value),
 }

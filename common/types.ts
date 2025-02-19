@@ -15,6 +15,7 @@ export interface ApiError {
 }
 
 export interface BetterstackConfig {
+	ingesting_host: string;
 	source_token: string;
 }
 

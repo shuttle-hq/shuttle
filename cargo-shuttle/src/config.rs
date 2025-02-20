@@ -285,7 +285,6 @@ impl RequestContext {
     pub fn load_local_internal(&mut self, project_args: &ProjectArgs) -> Result<()> {
         let workspace_path = project_args
             .workspace_path()
-            .map(|t| t.0)
             .unwrap_or(project_args.working_directory.clone());
 
         trace!(
@@ -373,7 +372,6 @@ impl RequestContext {
     ) -> Result<Config<LocalConfigManager, ProjectConfig>> {
         let workspace_path = project_args
             .workspace_path()
-            .map(|t| t.0)
             .unwrap_or(project_args.working_directory.clone());
 
         trace!("looking for Shuttle.toml in {}", workspace_path.display());

@@ -1963,7 +1963,7 @@ mod tests {
         };
 
         assert_eq!(
-            project_args.workspace_path().unwrap(),
+            project_args.workspace_path().unwrap().0,
             path_from_workspace_root("examples/axum/hello-world")
         );
     }

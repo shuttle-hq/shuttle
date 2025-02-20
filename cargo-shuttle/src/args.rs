@@ -6,7 +6,7 @@ use std::{
 };
 
 use anyhow::{bail, Context};
-use cargo_metadata::MetadataCommand;
+use cargo_metadata::{Metadata, MetadataCommand};
 use clap::{
     builder::{OsStringValueParser, PossibleValue, TypedValueParser},
     Args, Parser, Subcommand, ValueEnum,
@@ -57,26 +57,21 @@ pub struct ProjectArgs {
 }
 
 impl ProjectArgs {
-    pub fn workspace_path(&self) -> anyhow::Result<PathBuf> {
+    /// Resolve the cargo workspace root in the provided working directory
+    pub fn workspace_path(&self) -> anyhow::Result<(PathBuf, Metadata)> {
         // NOTE: If crates cache is missing, this blocks for several seconds during download
-        let path = MetadataCommand::new()
+        let metadata = MetadataCommand::new()
             .current_dir(&self.working_directory)
             .exec()
-            .context("Failed to find a Rust project in this directory. Try again in a cargo workspace, or provide a --name or --id argument.")?
-            .workspace_root
-            .into();
+            .context("Failed to find a Rust project in this directory. Try again in a cargo workspace, or provide a --name or --id argument.")?;
+        let path = metadata.workspace_root.clone().into();
 
-        Ok(path)
+        Ok((path, metadata))
     }
 
     pub fn project_name(&self) -> anyhow::Result<String> {
-        let workspace_path = self.workspace_path()?;
+        let (workspace_path, meta) = self.workspace_path()?;
 
-        // NOTE: If crates cache is missing, this blocks for several seconds during download
-        let meta = MetadataCommand::new()
-            .current_dir(&workspace_path)
-            .exec()
-            .expect("metadata command to succeed in cargo workspace root");
         let package_name = if let Some(root_package) = meta.root_package() {
             root_package.name.clone()
         } else {
@@ -613,7 +608,7 @@ mod tests {
         };
 
         assert_eq!(
-            project_args.workspace_path().unwrap(),
+            project_args.workspace_path().unwrap().0,
             path_from_workspace_root("examples/axum/hello-world/")
         );
     }

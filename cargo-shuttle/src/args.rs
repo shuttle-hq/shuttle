@@ -72,6 +72,8 @@ impl ProjectArgs {
     pub fn project_name(&self) -> anyhow::Result<String> {
         let workspace_path = self.workspace_path()?;
 
+        // This second call to cargo metadata in the workspace root seems superfluous,
+        // but it does give a different output if the previous one was run in a workspace member.
         // NOTE: If crates cache is missing, this blocks for several seconds during download
         let meta = MetadataCommand::new()
             .current_dir(&workspace_path)

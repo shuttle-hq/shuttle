@@ -58,11 +58,11 @@ pub struct ProjectArgs {
 
 impl ProjectArgs {
     pub fn workspace_path(&self) -> anyhow::Result<PathBuf> {
-        // NOTE: If crates cache is missing this blocks for several seconds during download
+        // NOTE: If crates cache is missing, this blocks for several seconds during download
         let path = MetadataCommand::new()
             .current_dir(&self.working_directory)
             .exec()
-            .context("failed to get cargo metadata")?
+            .context("Failed to find a Rust project in this directory. Try again in a cargo workspace, or provide a --name or --id argument.")?
             .workspace_root
             .into();
 
@@ -72,11 +72,13 @@ impl ProjectArgs {
     pub fn project_name(&self) -> anyhow::Result<String> {
         let workspace_path = self.workspace_path()?;
 
-        // NOTE: If crates cache is missing this blocks for several seconds during download
+        // This second call to cargo metadata in the workspace root seems superfluous,
+        // but it does give a different output if the previous one was run in a workspace member.
+        // NOTE: If crates cache is missing, this blocks for several seconds during download
         let meta = MetadataCommand::new()
             .current_dir(&workspace_path)
             .exec()
-            .context("failed to get cargo metadata")?;
+            .expect("metadata command to succeed in cargo workspace root");
         let package_name = if let Some(root_package) = meta.root_package() {
             root_package.name.clone()
         } else {

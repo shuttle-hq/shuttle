@@ -75,9 +75,6 @@ impl Client {
     }
 
     pub async fn get_user(&self, user_id: &str) -> Result<UserResponse> {
-        Ok(self
-            .inner
-            .get_json(format!("/admin/users/{user_id}"))
-            .await?)
+        self.inner.get_json(format!("/admin/users/{user_id}")).await
     }
 }

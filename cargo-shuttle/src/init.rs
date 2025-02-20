@@ -117,7 +117,7 @@ fn setup_template(auto_path: &str) -> Result<TempDir> {
                 .with_context(|| format!("Failed to clone Git repository at {url}"))?;
         } else {
             eprintln!(
-                "URL scheme is not supported. Please use HTTP of HTTPS for URLs, \
+                "URL scheme is not supported. Please use HTTP or HTTPS for URLs, \
                 or use another method of specifying the template location."
             );
             eprintln!(

@@ -771,7 +771,7 @@ impl Shuttle {
                     .get_current_user()
                     .await
                     .context("failed to check API key validity")?;
-                println!("Logged in as {} ({})", u.name.bold(), u.id.bold());
+                println!("Logged in as {}", u.id.bold());
             }
         }
 

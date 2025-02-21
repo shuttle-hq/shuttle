@@ -318,12 +318,11 @@ export enum AccountTier {
 	PendingPaymentPro = "pendingpaymentpro",
 	CancelledPro = "cancelledpro",
 	Pro = "pro",
-	Team = "team",
+	Growth = "growth",
 	/** Higher limits and partial admin endpoint access */
 	Employee = "employee",
 	/** Unlimited resources, full API access, admin endpoint access */
 	Admin = "admin",
-	Deployer = "deployer",
 }
 
 export interface UserResponse {
@@ -333,7 +332,6 @@ export interface UserResponse {
 	key: string;
 	account_tier: AccountTier;
 	subscriptions: Subscription[];
-	has_access_to_beta?: boolean;
 	flags?: string[];
 }
 

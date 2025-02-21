@@ -16,7 +16,6 @@ pub struct UserResponse {
     pub key: String,
     pub account_tier: AccountTier,
     pub subscriptions: Vec<Subscription>,
-    pub has_access_to_beta: Option<bool>,
     pub flags: Option<Vec<String>>,
 }
 
@@ -69,12 +68,11 @@ pub enum AccountTier {
     PendingPaymentPro,
     CancelledPro,
     Pro,
-    Team,
+    Growth,
     /// Higher limits and partial admin endpoint access
     Employee,
     /// Unlimited resources, full API access, admin endpoint access
     Admin,
-    Deployer,
 }
 
 #[derive(Debug, Deserialize, Serialize)]

@@ -9,6 +9,23 @@ export interface AddCertificateRequest {
 	subject: string;
 }
 
+export enum TeamRole {
+	Owner = "owner",
+	Admin = "admin",
+	Member = "member",
+}
+
+/**
+ * Provide user id to add user.
+ * Provide email address to invite user via email.
+ */
+export interface AddTeamMemberRequest {
+	user_id?: string;
+	email?: string;
+	/** Role of the user in the team */
+	role?: TeamRole;
+}
+
 export interface ApiError {
 	message: string;
 	status_code: number;
@@ -180,7 +197,15 @@ export interface ProjectListResponse {
 
 /** Set wanted field(s) to Some to update those parts of the project */
 export interface ProjectUpdateRequest {
+	/** Change display name */
 	name?: string;
+	/** Transfer to other user */
+	user_id?: string;
+	/** Transfer to a team */
+	team_id?: string;
+	/** Transfer away from current team */
+	remove_from_team?: boolean;
+	/** Change compute tier */
 	compute_tier?: ComputeTier;
 }
 
@@ -245,12 +270,6 @@ export interface SubscriptionRequest {
 	id: string;
 	type: SubscriptionType;
 	quantity: number;
-}
-
-export enum TeamRole {
-	Owner = "owner",
-	Admin = "admin",
-	Member = "member",
 }
 
 export interface TeamMembership {

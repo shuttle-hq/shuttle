@@ -40,3 +40,14 @@ pub enum TeamRole {
     Admin,
     Member,
 }
+
+/// Provide user id to add user.
+/// Provide email address to invite user via email.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[typeshare::typeshare]
+pub struct AddTeamMemberRequest {
+    pub user_id: Option<String>,
+    pub email: Option<String>,
+    /// Role of the user in the team
+    pub role: Option<TeamRole>,
+}

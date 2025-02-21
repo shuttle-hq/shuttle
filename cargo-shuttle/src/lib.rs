@@ -771,7 +771,7 @@ impl Shuttle {
                     .get_current_user()
                     .await
                     .context("failed to check API key validity")?;
-                println!("Logged in as {} ({})", u.name.bold(), u.id.bold());
+                println!("Logged in as {}", u.id.bold());
             }
         }
 
@@ -1643,17 +1643,21 @@ impl Shuttle {
         let pid = self.ctx.project_id();
 
         if !no_confirm {
+            // check that the project exists, and look up the name
+            let proj = client.get_project(pid).await?;
             println!(
                 "{}",
                 formatdoc!(
                     r#"
                     WARNING:
-                        Are you sure you want to delete "{pid}"?
+                        Are you sure you want to delete '{}' ({})?
                         This will...
                         - Shut down you service.
                         - Delete any databases and secrets in this project.
                         - Delete any custom domains linked to this project.
-                        This action is permanent."#
+                        This action is permanent."#,
+                    proj.name,
+                    pid,
                 )
                 .bold()
                 .red()

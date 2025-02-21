@@ -1,34 +1,53 @@
 use serde::{Deserialize, Serialize};
 use strum::{Display, EnumString};
 
-/// Minimal team information
-#[derive(Debug, Default, Serialize, Deserialize, PartialEq)]
-pub struct Response {
-    /// Team ID
-    pub id: String,
-
-    /// Name used for display purposes
-    pub display_name: String,
-
-    /// Is this user an admin of the team
-    pub is_admin: bool,
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[typeshare::typeshare]
+pub struct TeamListResponse {
+    pub teams: Vec<TeamResponse>,
 }
 
-/// Member of a team
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
-pub struct MemberResponse {
-    /// User ID
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[typeshare::typeshare]
+pub struct TeamResponse {
     pub id: String,
+    /// Display name
+    pub name: String,
+    /// Membership info of the calling user
+    pub membership: TeamMembership,
+}
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[typeshare::typeshare]
+pub struct TeamMembersResponse {
+    pub members: Vec<TeamMembership>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[typeshare::typeshare]
+pub struct TeamMembership {
+    pub user_id: String,
     /// Role of the user in the team
-    pub role: MemberRole,
+    pub role: TeamRole,
 }
 
-/// Role of a user in a team
-#[derive(Debug, Serialize, Deserialize, PartialEq, Display, EnumString)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Display, EnumString)]
 #[serde(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
-pub enum MemberRole {
+#[typeshare::typeshare]
+pub enum TeamRole {
+    Owner,
     Admin,
     Member,
+}
+
+/// Provide user id to add user.
+/// Provide email address to invite user via email.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[typeshare::typeshare]
+pub struct AddTeamMemberRequest {
+    pub user_id: Option<String>,
+    pub email: Option<String>,
+    /// Role of the user in the team
+    pub role: Option<TeamRole>,
 }

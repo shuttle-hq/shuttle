@@ -19,9 +19,12 @@ pub struct ProjectCreateRequest {
 #[typeshare::typeshare]
 pub struct ProjectResponse {
     pub id: String,
+    /// Display name
+    pub name: String,
     /// Project owner
     pub user_id: String,
-    pub name: String,
+    /// Team project belongs to
+    pub team_id: Option<String>,
     pub created_at: DateTime<Utc>,
     pub compute_tier: Option<ComputeTier>,
     /// State of the current deployment if one exists (something has been deployed).
@@ -73,7 +76,15 @@ pub struct ProjectListResponse {
 #[derive(Debug, Default, Deserialize, Serialize, Clone, PartialEq)]
 #[typeshare::typeshare]
 pub struct ProjectUpdateRequest {
+    /// Change display name
     pub name: Option<String>,
+    /// Transfer to other user
+    pub user_id: Option<String>,
+    /// Transfer to a team
+    pub team_id: Option<String>,
+    /// Transfer away from current team
+    pub remove_from_team: Option<bool>,
+    /// Change compute tier
     pub compute_tier: Option<ComputeTier>,
 }
 

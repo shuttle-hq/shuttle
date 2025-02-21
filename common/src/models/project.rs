@@ -76,7 +76,15 @@ pub struct ProjectListResponse {
 #[derive(Debug, Default, Deserialize, Serialize, Clone, PartialEq)]
 #[typeshare::typeshare]
 pub struct ProjectUpdateRequest {
+    /// Change display name
     pub name: Option<String>,
+    /// Transfer to other user
+    pub user_id: Option<String>,
+    /// Transfer to a team
+    pub team_id: Option<String>,
+    /// Transfer away from current team
+    pub remove_from_team: Option<bool>,
+    /// Change compute tier
     pub compute_tier: Option<ComputeTier>,
 }
 

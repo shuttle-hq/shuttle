@@ -160,9 +160,12 @@ export enum ComputeTier {
 
 export interface ProjectResponse {
 	id: string;
+	/** Display name */
+	name: string;
 	/** Project owner */
 	user_id: string;
-	name: string;
+	/** Team project belongs to */
+	team_id?: string;
 	created_at: string;
 	compute_tier?: ComputeTier;
 	/** State of the current deployment if one exists (something has been deployed). */
@@ -244,6 +247,34 @@ export interface SubscriptionRequest {
 	quantity: number;
 }
 
+export enum TeamRole {
+	Owner = "owner",
+	Admin = "admin",
+	Member = "member",
+}
+
+export interface TeamMembership {
+	user_id: string;
+	/** Role of the user in the team */
+	role: TeamRole;
+}
+
+export interface TeamResponse {
+	id: string;
+	/** Display name */
+	name: string;
+	/** Membership info of the calling user */
+	membership: TeamMembership;
+}
+
+export interface TeamListResponse {
+	teams: TeamResponse[];
+}
+
+export interface TeamMembersResponse {
+	members: TeamMembership[];
+}
+
 /** Status of a telemetry export configuration for an external sink */
 export interface TelemetrySinkStatus {
 	/** Indicates that the associated project is configured to export telemetry data to this sink */
@@ -277,12 +308,14 @@ export enum AccountTier {
 }
 
 export interface UserResponse {
-	name: string;
 	id: string;
+	/** Auth0 id */
+	name: string;
 	key: string;
 	account_tier: AccountTier;
 	subscriptions: Subscription[];
 	has_access_to_beta?: boolean;
+	flags?: string[];
 }
 
 export type DeploymentRequest = 

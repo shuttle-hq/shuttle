@@ -138,19 +138,6 @@ impl Shuttle {
             bail!("This command is not yet supported on the NEW platform (shuttle.dev).");
         }
 
-        if let Some(ref url) = args.api_url {
-            if url != API_URL_DEFAULT_BETA {
-                eprintln!(
-                    "{}",
-                    format!("INFO: Targeting non-default API: {url}").yellow(),
-                );
-            }
-            if url.ends_with('/') {
-                eprintln!("WARNING: API URL is probably incorrect. Ends with '/': {url}");
-            }
-        }
-        self.ctx.set_api_url(args.api_url);
-
         // All commands that call the API
         if matches!(
             args.cmd,
@@ -169,6 +156,19 @@ impl Shuttle {
             // TODO: refactor so that beta local run does not need to know project id / always uses crate name ???
             matches!(args.cmd, Command::Run(..))
         ) {
+            if let Some(ref url) = args.api_url {
+                if url != API_URL_DEFAULT_BETA {
+                    eprintln!(
+                        "{}",
+                        format!("INFO: Targeting non-default API: {url}").yellow(),
+                    );
+                }
+                if url.ends_with('/') {
+                    eprintln!("WARNING: API URL is probably incorrect. Ends with '/': {url}");
+                }
+            }
+            self.ctx.set_api_url(args.api_url);
+
             let client = ShuttleApiClient::new(
                 self.ctx.api_url(),
                 self.ctx.api_key().ok(),
@@ -306,9 +306,9 @@ impl Shuttle {
 
         // 1. Log in (if not logged in yet)
         if needs_login {
-            println!("First, let's log in to your Shuttle account.");
+            eprintln!("First, let's log in to your Shuttle account.");
             self.login(args.login_args.clone(), offline).await?;
-            println!();
+            eprintln!();
         } else if args.login_args.api_key.is_some() {
             self.login(args.login_args.clone(), offline).await?;
         }
@@ -340,7 +340,7 @@ impl Shuttle {
                 break;
             } else if needs_name {
                 // try again
-                println!(r#"Type the same name again to use "{}" anyways."#, name);
+                eprintln!(r#"Type the same name again to use "{}" anyways."#, name);
                 prev_name = Some(name);
             } else {
                 // don't continue if non-interactive
@@ -350,7 +350,7 @@ impl Shuttle {
             }
         }
         if needs_name {
-            println!();
+            eprintln!();
         }
 
         // 3. Confirm the project directory
@@ -363,13 +363,13 @@ impl Shuttle {
             );
 
             loop {
-                println!("Where should we create this project?");
+                eprintln!("Where should we create this project?");
 
                 let directory_str: String = Input::with_theme(&theme)
                     .with_prompt("Directory")
                     .default(format!("{}", path.display()))
                     .interact()?;
-                println!();
+                eprintln!();
 
                 let path = args::create_and_parse_path(OsString::from(directory_str))?;
 
@@ -382,7 +382,7 @@ impl Shuttle {
                         .default(true)
                         .interact()?
                 {
-                    println!();
+                    eprintln!();
                     continue;
                 }
 
@@ -405,7 +405,7 @@ impl Shuttle {
                         .await
                         .map_err(|e| {
                             error!(err = %e, "Failed to get templates");
-                            println!(
+                            eprintln!(
                                 "{}",
                                 "Failed to look up template list. Falling back to internal list."
                                     .yellow()
@@ -416,7 +416,7 @@ impl Shuttle {
                             if s.version == TEMPLATES_SCHEMA_VERSION {
                                 return Some(s);
                             }
-                            println!(
+                            eprintln!(
                                 "{}",
                                 "Template list with incompatible version found. Consider upgrading Shuttle CLI. Falling back to internal list."
                                     .yellow()
@@ -426,7 +426,7 @@ impl Shuttle {
                         })
                 };
                 if let Some(schema) = schema {
-                    println!("What type of project template would you like to start from?");
+                    eprintln!("What type of project template would you like to start from?");
                     let i = Select::with_theme(&theme)
                         .items(&[
                             "A Hello World app in a supported framework",
@@ -435,7 +435,7 @@ impl Shuttle {
                         .clear(false)
                         .default(0)
                         .interact()?;
-                    println!();
+                    eprintln!();
                     if i == 0 {
                         // Use a Hello world starter
                         let mut starters = schema.starters.into_values().collect::<Vec<_>>();
@@ -458,7 +458,7 @@ impl Shuttle {
                             .items(&starter_strings)
                             .default(0)
                             .interact()?;
-                        println!();
+                        eprintln!();
                         let path = starters[index]
                             .path
                             .clone()
@@ -491,7 +491,7 @@ impl Shuttle {
                             .items(&template_strings)
                             .default(0)
                             .interact()?;
-                        println!();
+                        eprintln!();
                         let path = templates[index]
                             .path
                             .clone()
@@ -503,7 +503,7 @@ impl Shuttle {
                         }
                     }
                 } else {
-                    println!("Shuttle works with many frameworks. Which one do you want to use?");
+                    eprintln!("Shuttle works with many frameworks. Which one do you want to use?");
                     let frameworks = args::InitTemplateArg::VARIANTS;
                     let framework_strings = frameworks
                         .iter()
@@ -516,7 +516,7 @@ impl Shuttle {
                         .items(&framework_strings)
                         .default(0)
                         .interact()?;
-                    println!();
+                    eprintln!();
                     frameworks[index].template()
                 }
             }
@@ -532,7 +532,7 @@ impl Shuttle {
             &template,
             no_git,
         )?;
-        println!();
+        eprintln!();
 
         // 6. Confirm that the user wants to create the project environment on Shuttle
         let should_create_environment = if !interactive {
@@ -551,7 +551,7 @@ impl Shuttle {
                 ))
                 .default(true)
                 .interact()?;
-            println!();
+            eprintln!();
             should_create
         };
 
@@ -564,11 +564,11 @@ impl Shuttle {
         }
 
         if std::env::current_dir().is_ok_and(|d| d != path) {
-            println!("You can `cd` to the directory, then:");
+            eprintln!("You can `cd` to the directory, then:");
         }
-        println!("Run `shuttle run` to run the app locally.");
+        eprintln!("Run `shuttle run` to run the app locally.");
         if !should_create_environment {
-            println!("Run `shuttle deploy` to deploy it to Shuttle.");
+            eprintln!("Run `shuttle deploy` to deploy it to Shuttle.");
         }
 
         Ok(())
@@ -592,15 +592,15 @@ impl Shuttle {
                 if let Ok(api_error) = e.downcast::<ApiError>() {
                     // If the returned error string changes, this could break
                     if api_error.message.contains("Invalid project name") {
-                        println!("{}", api_error.message.yellow());
-                        println!("{}", "Try a different name.".yellow());
+                        eprintln!("{}", api_error.message.yellow());
+                        eprintln!("{}", "Try a different name.".yellow());
                         return false;
                     }
                 }
                 // Else, the API error was about something else.
                 // Ignore and keep going to not prevent the flow of the init command.
                 project_args.name_or_id = Some(name);
-                println!(
+                eprintln!(
                     "{}",
                     "Failed to check if project name is available.".yellow()
                 );
@@ -807,11 +807,11 @@ impl Shuttle {
 
         let url = &format!("{}/device-auth?token={}", console_url, token);
         let _ = webbrowser::open(url);
-        println!("Complete login in Shuttle Console to authenticate CLI.");
-        println!("If your browser did not automatically open, go to {url}");
-        println!();
-        println!("{}", format!("Token: {token}").bold());
-        println!();
+        eprintln!("Complete login in Shuttle Console to authenticate CLI.");
+        eprintln!("If your browser did not automatically open, go to {url}");
+        eprintln!();
+        eprintln!("{}", format!("Token: {token}").bold());
+        eprintln!();
 
         let key = read_ws_until_text(&mut rx).await?;
         let Some(key) = key else {
@@ -827,11 +827,11 @@ impl Shuttle {
     async fn logout(&mut self, logout_args: LogoutArgs) -> Result<()> {
         if logout_args.reset_api_key {
             self.reset_api_key().await?;
-            println!("Successfully reset the API key.");
+            eprintln!("Successfully reset the API key.");
         }
         self.ctx.clear_api_key()?;
-        println!("Successfully logged out.");
-        println!(" -> Use `shuttle login` to log in again.");
+        eprintln!("Successfully logged out.");
+        eprintln!(" -> Use `shuttle login` to log in again.");
 
         Ok(())
     }
@@ -863,7 +863,7 @@ impl Shuttle {
             let get_cleanup = |d: Option<DeploymentResponse>| {
                 move || {
                     if let Some(d) = d {
-                        println!("{}", d.to_string_colored());
+                        eprintln!("{}", d.to_string_colored());
                     }
                 }
             };
@@ -939,18 +939,18 @@ impl Shuttle {
     async fn deployments_list(&self, page: u32, limit: u32, table_args: TableArgs) -> Result<()> {
         let client = self.client.as_ref().unwrap();
         if limit == 0 {
-            println!();
             return Ok(());
         }
-        let limit = limit + 1;
-
         let proj_name = self.ctx.project_name();
 
+        // fetch one additional to know if there is another page available
+        let limit = limit + 1;
         let mut deployments = client
             .get_deployments(self.ctx.project_id(), page as i32, limit as i32)
             .await?
             .deployments;
         let page_hint = if deployments.len() == limit as usize {
+            // hide the extra one and show hint instead
             deployments.pop();
             true
         } else {
@@ -1037,7 +1037,7 @@ impl Shuttle {
         let client = self.client.as_ref().unwrap();
 
         if !no_confirm {
-            println!(
+            eprintln!(
                 "{}",
                 formatdoc!(
                     "
@@ -1064,7 +1064,7 @@ impl Shuttle {
             .await?;
         println!("{msg}");
 
-        println!(
+        eprintln!(
             "{}",
             formatdoc! {"
                 Note:
@@ -1111,7 +1111,7 @@ impl Shuttle {
         let client = self.client.as_ref().unwrap();
 
         if !no_confirm {
-            println!(
+            eprintln!(
                 "{}",
                 formatdoc!(
                     "
@@ -1185,7 +1185,6 @@ impl Shuttle {
 
         let working_directory = self.ctx.working_directory();
 
-        trace!("building project");
         println!(
             "{} {}",
             "    Building".bold().green(),
@@ -1552,7 +1551,7 @@ impl Shuttle {
             pb.set_message(deployment.to_string_summary_colored());
             let failed = state == DeploymentState::Failed;
             let cleanup = move || {
-                println!("{}", deployment.to_string_colored());
+                eprintln!("{}", deployment.to_string_colored());
                 failed
             };
             match state {
@@ -1613,7 +1612,7 @@ impl Shuttle {
             )
             .await?;
 
-        println!("Renamed project {} to {}", project.id, project.name);
+        println!("Renamed project {} to '{}'", project.id, project.name);
 
         Ok(())
     }
@@ -1645,7 +1644,7 @@ impl Shuttle {
         if !no_confirm {
             // check that the project exists, and look up the name
             let proj = client.get_project(pid).await?;
-            println!(
+            eprintln!(
                 "{}",
                 formatdoc!(
                     r#"

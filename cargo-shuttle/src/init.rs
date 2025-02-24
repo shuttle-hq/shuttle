@@ -25,7 +25,7 @@ pub fn generate_project(
     temp_loc: &TemplateLocation,
     no_git: bool,
 ) -> Result<()> {
-    println!(r#"Creating project "{name}" in "{}""#, dest.display());
+    eprintln!(r#"Creating project "{name}" in "{}""#, dest.display());
 
     let temp_dir: TempDir = setup_template(&temp_loc.auto_path)
         .context("Failed to setup template generation directory")?;
@@ -101,7 +101,7 @@ fn setup_template(auto_path: &str) -> Result<TempDir> {
         // `owner` and `name` are required for the regex to
         // match. Thus, we don't need to check if they exist.
         let url = format!("{vendor}{}/{}.git", &caps["owner"], &caps["name"]);
-        println!(r#"Cloning from "{}"..."#, url);
+        eprintln!(r#"Cloning from "{}"..."#, url);
         gix_clone(&url, temp_dir.path()).context("Failed to clone git repository")?;
     } else if Path::new(auto_path).is_absolute() || auto_path.starts_with('.') {
         if Path::new(auto_path).exists() {
@@ -116,11 +116,11 @@ fn setup_template(auto_path: &str) -> Result<TempDir> {
             gix_clone(auto_path, temp_dir.path())
                 .with_context(|| format!("Failed to clone Git repository at {url}"))?;
         } else {
-            println!(
-                "URL scheme is not supported. Please use HTTP of HTTPS for URLs, \
+            eprintln!(
+                "URL scheme is not supported. Please use HTTP or HTTPS for URLs, \
                 or use another method of specifying the template location."
             );
-            println!(
+            eprintln!(
                 "HINT: You can find examples of how to select a template here: {EXAMPLES_README}"
             );
             anyhow::bail!("invalid URL scheme")
@@ -195,7 +195,7 @@ fn copy_dirs(src: &Path, dest: &Path, git_policy: GitDir) -> Result<()> {
             copy_dirs(&entry.path(), &entry_dest, git_policy)?;
         } else if entry_type.is_file() {
             if entry_dest.exists() {
-                println!(
+                eprintln!(
                     "Warning: file '{}' already exists. Cannot overwrite",
                     entry_dest.display()
                 );
@@ -204,7 +204,7 @@ fn copy_dirs(src: &Path, dest: &Path, git_policy: GitDir) -> Result<()> {
                 fs::copy(entry.path(), &entry_dest)?;
             }
         } else if entry_type.is_symlink() {
-            println!("Warning: symlink '{entry_name}' is ignored");
+            eprintln!("Warning: symlink '{entry_name}' is ignored");
         }
     }
 

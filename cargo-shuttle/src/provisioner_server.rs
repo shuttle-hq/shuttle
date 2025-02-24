@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap, convert::Infallible, io::stdout, net::SocketAddr, process::exit,
+    collections::HashMap, convert::Infallible, io::stderr, net::SocketAddr, process::exit,
     sync::Arc, time::Duration,
 };
 
@@ -311,7 +311,7 @@ impl LocalProvisioner {
         }
 
         // Undo last MoveUps
-        stdout()
+        stderr()
             .queue(MoveDown(
                 layers.len().try_into().expect("to convert usize to u16"),
             ))
@@ -323,7 +323,7 @@ impl LocalProvisioner {
 
 fn print_layers(layers: &Vec<CreateImageInfo>) {
     for info in layers {
-        stdout()
+        stderr()
             .queue(Clear(ClearType::CurrentLine))
             .expect("to be able to clear line");
 
@@ -352,7 +352,7 @@ fn print_layers(layers: &Vec<CreateImageInfo>) {
             )
         }
     }
-    stdout()
+    stderr()
         .queue(MoveUp(
             layers.len().try_into().expect("to convert usize to u16"),
         ))

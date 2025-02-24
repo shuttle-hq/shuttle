@@ -64,6 +64,16 @@ pub async fn run(args: Args) {
             let project_ids = client.gc_shuttlings(minutes).await.unwrap();
             gc(client, project_ids, stop_deployments, limit).await;
         }
+        Command::SimulateUser { user_id, cmd } => {
+            let u = client.get_user(&user_id).await.unwrap();
+            let mut cmd_iter = cmd.into_iter();
+            tokio::process::Command::new(cmd_iter.next().expect("at least one cmd arg to run"))
+                .args(cmd_iter)
+                .env("SHUTTLE_API_KEY", u.key)
+                .status()
+                .await
+                .unwrap();
+        }
     };
 }
 

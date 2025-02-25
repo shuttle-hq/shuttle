@@ -52,6 +52,12 @@ impl ProjectResponse {
         writeln!(&mut s, "  Owner: {}", self.user_id).unwrap();
         writeln!(
             &mut s,
+            "  Team: {}",
+            self.team_id.as_deref().unwrap_or(&"N/A")
+        )
+        .unwrap();
+        writeln!(
+            &mut s,
             "  Created: {}",
             self.created_at
                 .to_rfc3339_opts(chrono::SecondsFormat::Secs, true)

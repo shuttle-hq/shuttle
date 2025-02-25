@@ -17,7 +17,7 @@ mod shuttle_main;
 /// ```
 ///
 /// ## Shuttle supported services
-/// The following types can be returned from a `#[shuttle_service::main]` function and enjoy first class service support in shuttle.
+/// The following types can be returned from a `#[shuttle_runtime::main]` function and enjoy first class service support in shuttle.
 ///
 /// | Return type       | Crate                                                          | Service                                                                 | Example                                                                                 |
 /// | ----------------- | -------------------------------------------------------------- | ----------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |

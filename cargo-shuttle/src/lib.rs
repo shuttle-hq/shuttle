@@ -1651,9 +1651,9 @@ impl Shuttle {
                     WARNING:
                         Are you sure you want to delete '{}' ({})?
                         This will...
-                        - Shut down you service.
-                        - Delete any databases and secrets in this project.
-                        - Delete any custom domains linked to this project.
+                        - Shut down your service
+                        - Delete any databases and secrets in this project
+                        - Delete any custom domains linked to this project
                         This action is permanent."#,
                     proj.name,
                     pid,

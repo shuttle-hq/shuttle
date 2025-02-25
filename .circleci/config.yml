@@ -388,6 +388,7 @@ workflows:
                 - services/shuttle-actix-web
                 - services/shuttle-axum
                 - services/shuttle-poem
+                - services/shuttle-rama
                 - services/shuttle-rocket
                 - services/shuttle-salvo
                 - services/shuttle-serenity
@@ -533,6 +534,7 @@ workflows:
                 - services/shuttle-actix-web
                 - services/shuttle-axum
                 - services/shuttle-poem
+                - services/shuttle-rama
                 - services/shuttle-rocket
                 - services/shuttle-salvo
                 - services/shuttle-serenity

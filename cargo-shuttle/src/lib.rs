@@ -692,7 +692,16 @@ impl Shuttle {
             } else {
                 eprintln!("Which project do you want to link this directory to?");
 
-                let mut items = projs.iter().map(|p| p.name.clone()).collect::<Vec<_>>();
+                let mut items = projs
+                    .iter()
+                    .map(|p| {
+                        if let Some(team_id) = p.team_id.as_ref() {
+                            format!("Team {}: {}", team_id, p.name)
+                        } else {
+                            p.name.clone()
+                        }
+                    })
+                    .collect::<Vec<_>>();
                 items.extend_from_slice(&["[CREATE NEW]".to_string()]);
                 let index = Select::with_theme(&theme)
                     .items(&items)
@@ -1619,12 +1628,28 @@ impl Shuttle {
 
     async fn projects_list(&self, table_args: TableArgs) -> Result<()> {
         let client = self.client.as_ref().unwrap();
-
-        let projects_table =
-            get_projects_table(&client.get_projects_list().await?.projects, table_args.raw);
-
-        println!("{}", "Personal Projects".bold());
-        println!("{projects_table}\n");
+        let all_projects = client.get_projects_list().await?.projects;
+        // partition by team id and print separate tables
+        let mut all_projects_map = BTreeMap::new();
+        for proj in all_projects {
+            all_projects_map
+                .entry(proj.team_id.clone())
+                .or_insert_with(Vec::new)
+                .push(proj);
+        }
+        for (team_id, projects) in all_projects_map {
+            println!(
+                "{}",
+                if let Some(team_id) = team_id {
+                    format!("Team {} projects", team_id)
+                } else {
+                    "Personal Projects".to_owned()
+                }
+                .bold()
+            );
+            println!("{}", get_projects_table(&projects, table_args.raw));
+            println!("");
+        }
 
         Ok(())
     }

@@ -40,15 +40,6 @@ impl ProjectResponse {
         writeln!(&mut s, "{}", "Project info:".bold()).unwrap();
         writeln!(&mut s, "  Project ID: {}", self.id).unwrap();
         writeln!(&mut s, "  Project Name: {}", self.name).unwrap();
-        writeln!(
-            &mut s,
-            "  Deployment Status: {}",
-            self.deployment_state
-                .as_ref()
-                .map(|s| s.to_string_colored())
-                .unwrap_or_else(|| "N/A".dark_grey().to_string())
-        )
-        .unwrap();
         writeln!(&mut s, "  Owner: {}", self.user_id).unwrap();
         writeln!(
             &mut s,

@@ -40,13 +40,13 @@ pub async fn run(args: Args) {
                 .unwrap();
             println!("{res:?}");
         }
-        Command::SetBetaAccess { user_id } => {
-            client.set_beta_access(&user_id, true).await.unwrap();
-            println!("Set user {user_id} beta access");
+        Command::AddFeatureFlag { entity, flag } => {
+            client.feature_flag(&entity, &flag, true).await.unwrap();
+            println!("Added flag {flag} for {entity}");
         }
-        Command::UnsetBetaAccess { user_id } => {
-            client.set_beta_access(&user_id, false).await.unwrap();
-            println!("Unset user {user_id} beta access");
+        Command::RemoveFeatureFlag { entity, flag } => {
+            client.feature_flag(&entity, &flag, false).await.unwrap();
+            println!("Removed flag {flag} for {entity}");
         }
         Command::Gc {
             days,

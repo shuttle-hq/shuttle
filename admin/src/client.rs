@@ -45,14 +45,20 @@ impl Client {
             .await
     }
 
-    pub async fn set_beta_access(&self, user_id: &str, access: bool) -> Result<()> {
-        let resp = if access {
+    pub async fn feature_flag(&self, entity: &str, flag: &str, set: bool) -> Result<()> {
+        let resp = if set {
             self.inner
-                .put(format!("/admin/users/{user_id}/beta"), Option::<()>::None)
+                .put(
+                    format!("/admin/feature-flag/{entity}/{flag}"),
+                    Option::<()>::None,
+                )
                 .await?
         } else {
             self.inner
-                .delete(format!("/admin/users/{user_id}/beta"), Option::<()>::None)
+                .delete(
+                    format!("/admin/feature-flag/{entity}/{flag}"),
+                    Option::<()>::None,
+                )
                 .await?
         };
 

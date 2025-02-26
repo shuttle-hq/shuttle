@@ -34,11 +34,13 @@ pub enum Command {
     /// Renew all old custom domain certificates
     RenewCerts,
 
-    SetBetaAccess {
-        user_id: String,
+    AddFeatureFlag {
+        entity: String,
+        flag: String,
     },
-    UnsetBetaAccess {
-        user_id: String,
+    RemoveFeatureFlag {
+        entity: String,
+        flag: String,
     },
 
     /// Garbage collect free tier projects

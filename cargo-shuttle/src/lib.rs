@@ -1647,8 +1647,7 @@ impl Shuttle {
                 }
                 .bold()
             );
-            println!("{}", get_projects_table(&projects, table_args.raw));
-            println!("");
+            println!("{}\n", get_projects_table(&projects, table_args.raw));
         }
 
         Ok(())

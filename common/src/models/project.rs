@@ -44,7 +44,7 @@ impl ProjectResponse {
         writeln!(
             &mut s,
             "  Team: {}",
-            self.team_id.as_deref().unwrap_or(&"N/A")
+            self.team_id.as_deref().unwrap_or("N/A")
         )
         .unwrap();
         writeln!(

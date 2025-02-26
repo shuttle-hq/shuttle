@@ -7,20 +7,20 @@ use reqwest::header::HeaderMap;
 use reqwest::Response;
 use reqwest_middleware::{ClientWithMiddleware, RequestBuilder};
 use serde::{Deserialize, Serialize};
-use shuttle_common::models::certificate::{
-    AddCertificateRequest, CertificateListResponse, CertificateResponse, DeleteCertificateRequest,
+use shuttle_common::models::{
+    certificate::{
+        AddCertificateRequest, CertificateListResponse, CertificateResponse,
+        DeleteCertificateRequest,
+    },
+    deployment::{
+        DeploymentListResponse, DeploymentRequest, DeploymentResponse, UploadArchiveResponse,
+    },
+    log::LogsResponse,
+    project::{ProjectCreateRequest, ProjectListResponse, ProjectResponse, ProjectUpdateRequest},
+    resource::{ProvisionResourceRequest, ResourceListResponse, ResourceResponse, ResourceType},
+    team::TeamListResponse,
+    user::UserResponse,
 };
-use shuttle_common::models::deployment::{
-    DeploymentListResponse, DeploymentRequest, DeploymentResponse, UploadArchiveResponse,
-};
-use shuttle_common::models::log::LogsResponse;
-use shuttle_common::models::project::{
-    ProjectCreateRequest, ProjectListResponse, ProjectResponse, ProjectUpdateRequest,
-};
-use shuttle_common::models::resource::{
-    ProvisionResourceRequest, ResourceListResponse, ResourceResponse, ResourceType,
-};
-use shuttle_common::models::{team, user};
 use tokio::net::TcpStream;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
@@ -79,7 +79,7 @@ impl ShuttleApiClient {
     }
 
     pub async fn get_device_auth_ws(&self) -> Result<WebSocketStream<MaybeTlsStream<TcpStream>>> {
-        self.ws_get("/device-auth/ws".to_owned())
+        self.ws_get("/device-auth/ws")
             .await
             .with_context(|| "failed to connect to auth endpoint")
     }
@@ -97,8 +97,8 @@ impl ShuttleApiClient {
             .context("parsing name check response")
     }
 
-    pub async fn get_current_user(&self) -> Result<user::UserResponse> {
-        self.get_json("/users/me".to_owned()).await
+    pub async fn get_current_user(&self) -> Result<UserResponse> {
+        self.get_json("/users/me").await
     }
 
     pub async fn deploy(
@@ -248,11 +248,9 @@ impl ShuttleApiClient {
         self.delete_json(format!("/projects/{project}")).await
     }
 
-    async fn _get_teams_list(&self) -> Result<Vec<team::Response>> {
-        self.get_json("/teams".to_string()).await
-    }
-    async fn _get_team_projects_list(&self, team_id: &str) -> Result<ProjectListResponse> {
-        self.get_json(format!("/teams/{team_id}/projects")).await
+    #[allow(unused)]
+    async fn get_teams_list(&self) -> Result<TeamListResponse> {
+        self.get_json("/teams").await
     }
 
     pub async fn get_deployment_logs(
@@ -307,9 +305,12 @@ impl ShuttleApiClient {
         self.put("/users/reset-api-key", Option::<()>::None).await
     }
 
-    pub async fn ws_get(&self, path: String) -> Result<WebSocketStream<MaybeTlsStream<TcpStream>>> {
+    pub async fn ws_get(
+        &self,
+        path: impl AsRef<str>,
+    ) -> Result<WebSocketStream<MaybeTlsStream<TcpStream>>> {
         let ws_url = self.api_url.clone().replace("http", "ws");
-        let url = format!("{ws_url}{path}");
+        let url = format!("{ws_url}{}", path.as_ref());
         let mut req = url.into_client_request()?;
 
         #[cfg(feature = "tracing")]

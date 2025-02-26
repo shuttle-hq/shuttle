@@ -10,12 +10,13 @@ use strum::{EnumString, IntoStaticStr};
 #[derive(Debug, Deserialize, Serialize)]
 #[typeshare::typeshare]
 pub struct UserResponse {
-    pub name: String,
     pub id: String,
+    /// Auth0 id
+    pub name: String,
     pub key: String,
     pub account_tier: AccountTier,
     pub subscriptions: Vec<Subscription>,
-    pub has_access_to_beta: Option<bool>,
+    pub flags: Option<Vec<String>>,
 }
 
 impl UserResponse {
@@ -23,17 +24,26 @@ impl UserResponse {
     pub fn to_string_colored(&self) -> String {
         let mut s = String::new();
         writeln!(&mut s, "{}", "Account info:".bold()).unwrap();
-        writeln!(&mut s, "  User Id: {}", self.id).unwrap();
-        writeln!(&mut s, "  Username: {}", self.name).unwrap();
+        writeln!(&mut s, "  User ID: {}", self.id).unwrap();
         writeln!(&mut s, "  Account tier: {}", self.account_tier).unwrap();
-        writeln!(&mut s, "  Subscriptions:").unwrap();
-        for sub in &self.subscriptions {
-            writeln!(
-                &mut s,
-                "    - {}: Type: {}, Quantity: {}, Created: {}, Updated: {}",
-                sub.id, sub.r#type, sub.quantity, sub.created_at, sub.updated_at,
-            )
-            .unwrap();
+        if !self.subscriptions.is_empty() {
+            writeln!(&mut s, "  Subscriptions:").unwrap();
+            for sub in &self.subscriptions {
+                writeln!(
+                    &mut s,
+                    "    - {}: Type: {}, Quantity: {}, Created: {}, Updated: {}",
+                    sub.id, sub.r#type, sub.quantity, sub.created_at, sub.updated_at,
+                )
+                .unwrap();
+            }
+        }
+        if let Some(flags) = self.flags.as_ref() {
+            if !flags.is_empty() {
+                writeln!(&mut s, "  Feature flags:").unwrap();
+                for flag in flags {
+                    writeln!(&mut s, "    - {}", flag).unwrap();
+                }
+            }
         }
 
         s
@@ -68,12 +78,11 @@ pub enum AccountTier {
     PendingPaymentPro,
     CancelledPro,
     Pro,
-    Team,
+    Growth,
     /// Higher limits and partial admin endpoint access
     Employee,
     /// Unlimited resources, full API access, admin endpoint access
     Admin,
-    Deployer,
 }
 
 #[derive(Debug, Deserialize, Serialize)]

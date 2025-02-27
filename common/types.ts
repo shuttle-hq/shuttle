@@ -175,6 +175,11 @@ export enum ComputeTier {
 	XXL = "xxl",
 }
 
+export enum ComputeType {
+	Fargate = "fargate",
+	FargateSpot = "fargatespot",
+}
+
 export interface ProjectResponse {
 	id: string;
 	/** Display name */
@@ -185,7 +190,8 @@ export interface ProjectResponse {
 	team_id?: string;
 	created_at: string;
 	compute_tier?: ComputeTier;
-	/** State of the current deployment if one exists (something has been deployed). */
+	compute_type?: ComputeType;
+	/** State of the current deployment if one exists (something has been deployed) */
 	deployment_state?: DeploymentState;
 	/** URIs where running deployments can be reached */
 	uris: string[];
@@ -207,6 +213,8 @@ export interface ProjectUpdateRequest {
 	remove_from_team?: boolean;
 	/** Change compute tier */
 	compute_tier?: ComputeTier;
+	/** Change compute type */
+	compute_type?: ComputeType;
 }
 
 export enum ResourceType {

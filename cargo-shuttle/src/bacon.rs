@@ -7,23 +7,10 @@ use tracing::debug;
 const MIN_BACON_VERSION: &str = "3.8.0";
 
 #[cfg(unix)]
-const KILL_COMMAND: &str = r#"["pkill", "-TERM", "-P"]"#;
+const BACON_CONFIG: &str = include_str!("bacon.unix.toml");
 
 #[cfg(windows)]
-const KILL_COMMAND: &str = r#"["taskkill", "/F", "/T", "/PID"]"#;
-
-fn get_bacon_config() -> String {
-    format!(
-        r#"[jobs.shuttle]
-command = ["shuttle", "run"]
-need_stdout = true
-allow_warnings = true
-background = false
-on_change_strategy = "kill_then_restart"
-kill = {}"#,
-        KILL_COMMAND
-    )
-}
+const BACON_CONFIG: &str = include_str!("bacon.windows.toml");
 
 /// Runs shuttle in watch mode using bacon
 pub async fn run_bacon(working_directory: &Path) -> Result<()> {
@@ -32,7 +19,7 @@ pub async fn run_bacon(working_directory: &Path) -> Result<()> {
 
     Command::new("bacon")
         .current_dir(working_directory)
-        .args(["-j", "shuttle", "--config-toml", &get_bacon_config()])
+        .args(["-j", "shuttle", "--config-toml", BACON_CONFIG])
         .stdin(std::process::Stdio::inherit())
         .stdout(std::process::Stdio::inherit())
         .stderr(std::process::Stdio::inherit())

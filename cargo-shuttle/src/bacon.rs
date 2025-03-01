@@ -1,8 +1,8 @@
 use anyhow::{bail, Result};
+use semver::Version;
 use std::path::Path;
 use tokio::process::Command;
 use tracing::debug;
-use semver::Version;
 
 const MIN_BACON_VERSION: &str = "3.8.0";
 const BACON_CONFIG: &str = r#"[jobs.shuttle]
@@ -17,7 +17,7 @@ kill = ["pkill", "-TERM", "-P"]"#;
 pub async fn run_bacon(working_directory: &Path) -> Result<()> {
     check_bacon().await?;
     debug!("Starting shuttle in watch mode using bacon...");
-    
+
     Command::new("bacon")
         .current_dir(working_directory)
         .args(["-j", "shuttle", "--config-toml", BACON_CONFIG])
@@ -35,17 +35,24 @@ pub async fn run_bacon(working_directory: &Path) -> Result<()> {
 }
 
 async fn check_bacon() -> Result<()> {
-    let version = String::from_utf8_lossy(
-        &Command::new("bacon")
-            .arg("--version")
-            .output()
-            .await
-            .map_err(|_| anyhow::anyhow!("bacon not found - run 'cargo install bacon'"))?
-            .stdout
-    );
+    let output = Command::new("bacon")
+        .arg("--version")
+        .output()
+        .await
+        .map_err(|_| anyhow::anyhow!("bacon not found - run 'cargo install bacon'"))?;
 
-    Version::parse(version.split_whitespace().nth(1).ok_or_else(|| anyhow::anyhow!("invalid bacon version"))?)?
-        .lt(&Version::parse(MIN_BACON_VERSION)?)
-        .then(|| bail!("bacon {MIN_BACON_VERSION} or higher required - run 'cargo install bacon'"))
-        .unwrap_or(Ok(()))
-} 
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let version_str = stdout
+        .split_whitespace()
+        .nth(1)
+        .ok_or_else(|| anyhow::anyhow!("invalid bacon version format"))?;
+
+    let version = Version::parse(version_str)?;
+    let min_version = Version::parse(MIN_BACON_VERSION)?;
+
+    if version < min_version {
+        bail!("bacon {MIN_BACON_VERSION} or higher required - run 'cargo install bacon'");
+    }
+
+    Ok(())
+}

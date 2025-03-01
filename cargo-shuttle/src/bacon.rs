@@ -5,13 +5,25 @@ use tokio::process::Command;
 use tracing::debug;
 
 const MIN_BACON_VERSION: &str = "3.8.0";
-const BACON_CONFIG: &str = r#"[jobs.shuttle]
+
+#[cfg(unix)]
+const KILL_COMMAND: &str = r#"["pkill", "-TERM", "-P"]"#;
+
+#[cfg(windows)]
+const KILL_COMMAND: &str = r#"["taskkill", "/F", "/T", "/PID"]"#;
+
+fn get_bacon_config() -> String {
+    format!(
+        r#"[jobs.shuttle]
 command = ["shuttle", "run"]
 need_stdout = true
 allow_warnings = true
 background = false
 on_change_strategy = "kill_then_restart"
-kill = ["pkill", "-TERM", "-P"]"#;
+kill = {}"#,
+        KILL_COMMAND
+    )
+}
 
 /// Runs shuttle in watch mode using bacon
 pub async fn run_bacon(working_directory: &Path) -> Result<()> {
@@ -20,7 +32,7 @@ pub async fn run_bacon(working_directory: &Path) -> Result<()> {
 
     Command::new("bacon")
         .current_dir(working_directory)
-        .args(["-j", "shuttle", "--config-toml", BACON_CONFIG])
+        .args(["-j", "shuttle", "--config-toml", &get_bacon_config()])
         .stdin(std::process::Stdio::inherit())
         .stdout(std::process::Stdio::inherit())
         .stderr(std::process::Stdio::inherit())
@@ -29,7 +41,7 @@ pub async fn run_bacon(working_directory: &Path) -> Result<()> {
         .await?
         .success()
         .then_some(())
-        .ok_or_else(|| anyhow::anyhow!("bacon failed"))?;
+        .ok_or_else(|| anyhow::anyhow!("bacon process failed"))?;
 
     Ok(())
 }

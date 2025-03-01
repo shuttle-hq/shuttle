@@ -39,19 +39,20 @@ async fn check_bacon() -> Result<()> {
         .arg("--version")
         .output()
         .await
-        .map_err(|_| anyhow::anyhow!("bacon not found - run 'cargo install bacon'"))?;
+        .map_err(|e| anyhow::anyhow!("Failed to execute bacon: {}\nPlease ensure bacon is installed ('cargo install bacon') and you have the necessary permissions", e))?;
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let version_str = stdout
         .split_whitespace()
         .nth(1)
-        .ok_or_else(|| anyhow::anyhow!("invalid bacon version format"))?;
+        .ok_or_else(|| anyhow::anyhow!("Failed to parse bacon version: unexpected output format"))?;
 
-    let version = Version::parse(version_str)?;
+    let version = Version::parse(version_str)
+        .map_err(|e| anyhow::anyhow!("Failed to parse bacon version '{}': {}", version_str, e))?;
     let min_version = Version::parse(MIN_BACON_VERSION)?;
 
     if version < min_version {
-        bail!("bacon {MIN_BACON_VERSION} or higher required - run 'cargo install bacon'");
+        bail!("bacon {MIN_BACON_VERSION} or higher required - current version is {version}. Please upgrade using 'cargo install bacon'");
     }
 
     Ok(())

@@ -355,7 +355,7 @@ pub struct RunArgs {
     #[arg(long)]
     pub raw: bool,
     /// Uses bacon crate to run the project in watch mode
-    #[arg(long, short = 'b', default_value = "false")]
+    #[arg(long)]
     pub bacon: bool,
 
     #[command(flatten)]

@@ -1,10 +1,10 @@
 mod args;
+mod bacon;
 pub mod builder;
 pub mod config;
 mod init;
 mod provisioner_server;
 mod util;
-mod bacon;
 
 use std::collections::{BTreeMap, HashMap};
 use std::ffi::OsString;

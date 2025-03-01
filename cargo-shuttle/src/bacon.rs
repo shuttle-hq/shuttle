@@ -1,64 +1,51 @@
-use anyhow::{bail, Context, Result};
+use anyhow::{bail, Result};
 use std::path::Path;
 use tokio::process::Command;
 use tracing::debug;
 use semver::Version;
 
 const MIN_BACON_VERSION: &str = "3.8.0";
+const BACON_CONFIG: &str = r#"[jobs.shuttle]
+command = ["shuttle", "run"]
+need_stdout = true
+allow_warnings = true
+background = false
+on_change_strategy = "kill_then_restart"
+kill = ["pkill", "-TERM", "-P"]"#;
 
-/// Runs bacon in watch mode, checking version requirements first
+/// Runs shuttle in watch mode using bacon
 pub async fn run_bacon(working_directory: &Path) -> Result<()> {
-    // Check version and installation
-    let output = Command::new("bacon")
-        .arg("--version")
-        .output()
-        .await
-        .map_err(|_| anyhow::anyhow!("bacon is not installed - run 'cargo install bacon' to install"))?;
-
-    if !output.status.success() {
-        bail!("Failed to get bacon version");
-    }
-
-    let version_str = String::from_utf8_lossy(&output.stdout);
-    let version = version_str
-        .split_whitespace()
-        .nth(1)
-        .and_then(|v| Version::parse(v).ok())
-        .ok_or_else(|| anyhow::anyhow!("Failed to parse bacon version"))?;
-
-    let min_version = Version::parse(MIN_BACON_VERSION).expect("MIN_BACON_VERSION to be valid semver");
-    if version < min_version {
-        bail!("bacon version {MIN_BACON_VERSION} or higher is required - run 'cargo install bacon' to upgrade");
-    }
-
-    debug!("Starting bacon in watch mode...");
+    check_bacon().await?;
+    debug!("Starting shuttle in watch mode using bacon...");
     
-    // Run bacon with proper process control configuration
-    let status = Command::new("bacon")
+    Command::new("bacon")
         .current_dir(working_directory)
-        .args([
-            "-j", "shuttle",
-            "--config-toml",
-            r#"[jobs.shuttle]
-            command = ["shuttle", "run"]
-            need_stdout = true
-            allow_warnings = true
-            background = false
-            on_change_strategy = "kill_then_restart"
-            kill = ["pkill", "-TERM", "-P"]"#
-        ])
+        .args(["-j", "shuttle", "--config-toml", BACON_CONFIG])
         .stdin(std::process::Stdio::inherit())
         .stdout(std::process::Stdio::inherit())
         .stderr(std::process::Stdio::inherit())
-        .spawn()
-        .context("failed to start bacon")?
+        .spawn()?
         .wait()
-        .await
-        .context("failed to wait for bacon process")?;
-
-    if !status.success() {
-        bail!("bacon exited with status code: {}", status);
-    }
+        .await?
+        .success()
+        .then_some(())
+        .ok_or_else(|| anyhow::anyhow!("bacon failed"))?;
 
     Ok(())
+}
+
+async fn check_bacon() -> Result<()> {
+    let version = String::from_utf8_lossy(
+        &Command::new("bacon")
+            .arg("--version")
+            .output()
+            .await
+            .map_err(|_| anyhow::anyhow!("bacon not found - run 'cargo install bacon'"))?
+            .stdout
+    );
+
+    Version::parse(version.split_whitespace().nth(1).ok_or_else(|| anyhow::anyhow!("invalid bacon version"))?)?
+        .lt(&Version::parse(MIN_BACON_VERSION)?)
+        .then(|| bail!("bacon {MIN_BACON_VERSION} or higher required - run 'cargo install bacon'"))
+        .unwrap_or(Ok(()))
 } 

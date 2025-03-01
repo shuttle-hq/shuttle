@@ -42,10 +42,9 @@ async fn check_bacon() -> Result<()> {
         .map_err(|e| anyhow::anyhow!("Failed to execute bacon: {}\nPlease ensure bacon is installed ('cargo install bacon') and you have the necessary permissions", e))?;
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    let version_str = stdout
-        .split_whitespace()
-        .nth(1)
-        .ok_or_else(|| anyhow::anyhow!("Failed to parse bacon version: unexpected output format"))?;
+    let version_str = stdout.split_whitespace().nth(1).ok_or_else(|| {
+        anyhow::anyhow!("Failed to parse bacon version: unexpected output format")
+    })?;
 
     let version = Version::parse(version_str)
         .map_err(|e| anyhow::anyhow!("Failed to parse bacon version '{}': {}", version_str, e))?;

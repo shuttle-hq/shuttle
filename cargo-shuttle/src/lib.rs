@@ -4,6 +4,7 @@ pub mod config;
 mod init;
 mod provisioner_server;
 mod util;
+mod bacon;
 
 use std::collections::{BTreeMap, HashMap};
 use std::ffi::OsString;
@@ -1224,6 +1225,17 @@ impl Shuttle {
     async fn local_run(&self, mut run_args: RunArgs, debug: bool) -> Result<()> {
         let project_name = self.ctx.project_name().to_owned();
         let working_directory = self.ctx.working_directory();
+
+        // Handle bacon mode
+        if run_args.bacon {
+            println!(
+                "\n    {} {} in watch mode using bacon\n",
+                "Starting".bold().green(),
+                project_name
+            );
+            return bacon::run_bacon(working_directory).await;
+        }
+
         let services = self.pre_local_run(&run_args).await?;
         let service = services
             .first()

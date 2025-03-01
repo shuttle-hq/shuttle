@@ -33,10 +33,20 @@ pub async fn run_bacon(working_directory: &Path) -> Result<()> {
 
     debug!("Starting bacon in watch mode...");
     
-    // Run bacon with watch mode
+    // Run bacon with proper process control configuration
     let status = Command::new("bacon")
         .current_dir(working_directory)
-        .args(["--job", "run"])
+        .args([
+            "-j", "shuttle",
+            "--config-toml",
+            r#"[jobs.shuttle]
+            command = ["shuttle", "run"]
+            need_stdout = true
+            allow_warnings = true
+            background = false
+            on_change_strategy = "kill_then_restart"
+            kill = ["pkill", "-TERM", "-P"]"#
+        ])
         .stdin(std::process::Stdio::inherit())
         .stdout(std::process::Stdio::inherit())
         .stderr(std::process::Stdio::inherit())

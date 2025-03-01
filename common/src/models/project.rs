@@ -52,7 +52,6 @@ impl ProjectResponse {
             &mut s,
             "  Compute type: {}",
             self.compute_type
-                .clone()
                 .map(|c| c.to_string())
                 .unwrap_or("N/A".to_owned())
         )
@@ -61,7 +60,6 @@ impl ProjectResponse {
             &mut s,
             "  Compute tier: {}",
             self.compute_tier
-                .clone()
                 .map(|c| c.to_string())
                 .unwrap_or("N/A".to_owned())
         )

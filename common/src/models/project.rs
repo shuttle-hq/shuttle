@@ -26,8 +26,9 @@ pub struct ProjectResponse {
     /// Team project belongs to
     pub team_id: Option<String>,
     pub created_at: DateTime<Utc>,
-    pub compute_tier: Option<ComputeTier>,
     pub compute_type: Option<ComputeType>,
+    pub compute_tier: Option<ComputeTier>,
+    pub proxy_type: Option<ProxyType>,
     /// State of the current deployment if one exists (something has been deployed)
     pub deployment_state: Option<DeploymentState>,
     /// URIs where running deployments can be reached
@@ -60,6 +61,14 @@ impl ProjectResponse {
             &mut s,
             "  Compute tier: {}",
             self.compute_tier
+                .map(|c| c.to_string())
+                .unwrap_or("N/A".to_owned())
+        )
+        .unwrap();
+        writeln!(
+            &mut s,
+            "  Proxy type: {}",
+            self.proxy_type
                 .map(|c| c.to_string())
                 .unwrap_or("N/A".to_owned())
         )
@@ -102,6 +111,8 @@ pub struct ProjectUpdateRequest {
     pub compute_tier: Option<ComputeTier>,
     /// Change compute type
     pub compute_type: Option<ComputeType>,
+    /// Change proxy type
+    pub proxy_type: Option<ProxyType>,
 }
 
 #[derive(
@@ -127,4 +138,13 @@ pub enum ComputeTier {
 pub enum ComputeType {
     Fargate,
     FargateSpot,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Display, Serialize, Deserialize, EnumString)]
+#[serde(rename_all = "lowercase")]
+#[strum(serialize_all = "lowercase")]
+#[typeshare::typeshare]
+pub enum ProxyType {
+    ShuttleProxy,
+    AwsAlb,
 }

@@ -180,11 +180,6 @@ export enum ComputeTier {
 	XXL = "xxl",
 }
 
-export enum ProxyType {
-	ShuttleProxy = "shuttleproxy",
-	AwsAlb = "awsalb",
-}
-
 export interface ProjectResponse {
 	id: string;
 	/** Display name */
@@ -196,7 +191,6 @@ export interface ProjectResponse {
 	created_at: string;
 	compute_type?: ComputeType;
 	compute_tier?: ComputeTier;
-	proxy_type?: ProxyType;
 	/** State of the current deployment if one exists (something has been deployed) */
 	deployment_state?: DeploymentState;
 	/** URIs where running deployments can be reached */
@@ -221,8 +215,6 @@ export interface ProjectUpdateRequest {
 	compute_tier?: ComputeTier;
 	/** Change compute type */
 	compute_type?: ComputeType;
-	/** Change proxy type */
-	proxy_type?: ProxyType;
 }
 
 export enum ResourceType {

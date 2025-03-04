@@ -87,7 +87,7 @@ impl Client {
 
     pub async fn get_user_everything(&self, query: &str) -> Result<Value> {
         self.inner
-            .get_json_with_body(format!("/admin/users/everything"), json!(query))
+            .get_json_with_body("/admin/users/everything", json!(query))
             .await
     }
 

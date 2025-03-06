@@ -272,7 +272,7 @@ export interface SubscriptionRequest {
 	quantity: number;
 }
 
-export interface TeamInviteResponse {
+export interface TeamInvite {
 	id: string;
 	email: string;
 	/** Role of the user in the team */
@@ -300,6 +300,7 @@ export interface TeamListResponse {
 
 export interface TeamMembersResponse {
 	members: TeamMembership[];
+	invites: TeamInvite[];
 }
 
 /** Status of a telemetry export configuration for an external sink */

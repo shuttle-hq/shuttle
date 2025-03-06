@@ -22,6 +22,7 @@ pub struct TeamResponse {
 #[typeshare::typeshare]
 pub struct TeamMembersResponse {
     pub members: Vec<TeamMembership>,
+    pub invites: Vec<TeamInvite>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -34,7 +35,7 @@ pub struct TeamMembership {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[typeshare::typeshare]
-pub struct TeamInviteResponse {
+pub struct TeamInvite {
     pub id: String,
     pub email: String,
     /// Role of the user in the team

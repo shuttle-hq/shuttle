@@ -272,6 +272,14 @@ export interface SubscriptionRequest {
 	quantity: number;
 }
 
+export interface TeamInvite {
+	id: string;
+	email: string;
+	/** Role of the user in the team */
+	role: TeamRole;
+	expires_at: string;
+}
+
 export interface TeamMembership {
 	user_id: string;
 	/** Role of the user in the team */

@@ -272,7 +272,7 @@ export interface SubscriptionRequest {
 	quantity: number;
 }
 
-export interface TeamInvite {
+export interface TeamInviteResponse {
 	id: string;
 	email: string;
 	/** Role of the user in the team */

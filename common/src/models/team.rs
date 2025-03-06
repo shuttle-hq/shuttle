@@ -34,7 +34,7 @@ pub struct TeamMembership {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[typeshare::typeshare]
-pub struct TeamInvite {
+pub struct TeamInviteResponse {
     pub id: String,
     pub email: String,
     /// Role of the user in the team

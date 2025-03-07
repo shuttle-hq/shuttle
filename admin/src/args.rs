@@ -66,14 +66,6 @@ pub enum Command {
         limit: u32,
     },
 
-    /// Run a command with SHUTTLE_API_KEY set to a different user's key
-    SimulateUser {
-        /// user to simulate
-        user_id: String,
-        /// Shell (shuttle) command to run as other user
-        cmd: Vec<String>,
-    },
-
     /// Delete a user
     DeleteUser {
         user_id: String,

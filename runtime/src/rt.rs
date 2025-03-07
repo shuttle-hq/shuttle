@@ -88,7 +88,7 @@ pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + S
     // start a health check server if requested
     if let Some(healthz_port) = healthz_port {
         trace!("Starting health check server on port {healthz_port}");
-        let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), healthz_port);
+        let addr = SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), healthz_port);
         tokio::spawn(async move {
             // light hyper server
             let Ok(listener) = TcpListener::bind(&addr).await else {

@@ -11,9 +11,12 @@ use strum::{EnumString, IntoStaticStr};
 #[typeshare::typeshare]
 pub struct UserResponse {
     pub id: String,
+    /// Auth0 id (deprecated)
+    pub name: Option<String>,
     /// Auth0 id
-    pub name: String,
-    pub key: String,
+    pub auth0_id: Option<String>,
+    // deprecated
+    pub key: Option<String>,
     pub account_tier: AccountTier,
     pub subscriptions: Vec<Subscription>,
     pub flags: Option<Vec<String>>,

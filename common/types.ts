@@ -272,6 +272,14 @@ export interface SubscriptionRequest {
 	quantity: number;
 }
 
+export interface TeamInvite {
+	id: string;
+	email: string;
+	/** Role of the user in the team */
+	role: TeamRole;
+	expires_at: string;
+}
+
 export interface TeamMembership {
 	user_id: string;
 	/** Role of the user in the team */
@@ -292,6 +300,7 @@ export interface TeamListResponse {
 
 export interface TeamMembersResponse {
 	members: TeamMembership[];
+	invites: TeamInvite[];
 }
 
 /** Status of a telemetry export configuration for an external sink */
@@ -327,9 +336,11 @@ export enum AccountTier {
 
 export interface UserResponse {
 	id: string;
+	/** Auth0 id (deprecated) */
+	name?: string;
 	/** Auth0 id */
-	name: string;
-	key: string;
+	auth0_id?: string;
+	key?: string;
 	account_tier: AccountTier;
 	subscriptions: Subscription[];
 	flags?: string[];

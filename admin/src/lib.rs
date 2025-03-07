@@ -24,7 +24,8 @@ pub async fn run(args: Args) {
             let certs = client.get_old_certificates().await.unwrap();
             eprintln!("Starting renewals of {} certs in 5 seconds...", certs.len());
             tokio::time::sleep(tokio::time::Duration::from_millis(5000)).await;
-            for (cert_id, _) in certs {
+            for (cert_id, subject) in certs {
+                println!("--> {cert_id} {subject}");
                 println!("{:?}", client.renew_certificate(&cert_id).await);
                 // prevent api rate limiting
                 tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
@@ -63,16 +64,6 @@ pub async fn run(args: Args) {
         } => {
             let project_ids = client.gc_shuttlings(minutes).await.unwrap();
             gc(client, project_ids, stop_deployments, limit).await;
-        }
-        Command::SimulateUser { user_id, cmd } => {
-            let u = client.get_user(&user_id).await.unwrap();
-            let mut cmd_iter = cmd.into_iter();
-            tokio::process::Command::new(cmd_iter.next().expect("at least one cmd arg to run"))
-                .args(cmd_iter)
-                .env("SHUTTLE_API_KEY", u.key)
-                .status()
-                .await
-                .unwrap();
         }
         Command::DeleteUser { user_id } => {
             eprintln!("Deleting user {} in 3 seconds...", user_id);

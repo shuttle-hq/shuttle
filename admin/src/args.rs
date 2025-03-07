@@ -71,7 +71,7 @@ pub enum Command {
         user_id: String,
     },
 
-    /// Get everything in a user account
+    /// Get info about everything in a user account
     Everything {
         /// user id / project id / email
         query: String,

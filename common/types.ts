@@ -336,9 +336,11 @@ export enum AccountTier {
 
 export interface UserResponse {
 	id: string;
+	/** Auth0 id (deprecated) */
+	name?: string;
 	/** Auth0 id */
-	name: string;
-	key: string;
+	auth0_id?: string;
+	key?: string;
 	account_tier: AccountTier;
 	subscriptions: Subscription[];
 	flags?: string[];

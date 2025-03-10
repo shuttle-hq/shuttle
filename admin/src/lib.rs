@@ -74,6 +74,16 @@ pub async fn run(args: Args) {
                 .await
                 .unwrap();
         }
+        Command::DeleteUser { user_id } => {
+            eprintln!("Deleting user {} in 3 seconds...", user_id);
+            tokio::time::sleep(tokio::time::Duration::from_millis(3000)).await;
+            let msg = client.delete_user(&user_id).await.unwrap();
+            println!("{msg}");
+        }
+        Command::Everything { query } => {
+            let v = client.get_user_everything(&query).await.unwrap();
+            println!("{}", serde_json::to_string_pretty(&v).unwrap());
+        }
     };
 }
 

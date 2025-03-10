@@ -1,4 +1,5 @@
 use anyhow::Result;
+use serde_json::{json, Value};
 use shuttle_api_client::ShuttleApiClient;
 use shuttle_common::models::{
     project::{ComputeTier, ProjectResponse, ProjectUpdateRequest},
@@ -82,5 +83,17 @@ impl Client {
 
     pub async fn get_user(&self, user_id: &str) -> Result<UserResponse> {
         self.inner.get_json(format!("/admin/users/{user_id}")).await
+    }
+
+    pub async fn get_user_everything(&self, query: &str) -> Result<Value> {
+        self.inner
+            .get_json_with_body("/admin/users/everything", json!(query))
+            .await
+    }
+
+    pub async fn delete_user(&self, user_id: &str) -> Result<String> {
+        self.inner
+            .delete_json(format!("/admin/users/{user_id}"))
+            .await
     }
 }

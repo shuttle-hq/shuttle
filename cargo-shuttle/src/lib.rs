@@ -1164,18 +1164,14 @@ impl Shuttle {
             &[workspace_root.join("Secrets.toml")]
         };
         let secrets_file = args.secrets.as_ref().or_else(|| {
-            for secrets_file in files {
-                if secrets_file.exists() && secrets_file.is_file() {
-                    return Some(secrets_file);
-                }
-            }
-
-            None
+            files
+                .iter()
+                .find(|&secrets_file| secrets_file.exists() && secrets_file.is_file())
         });
 
         Ok(if let Some(secrets_file) = secrets_file {
             trace!("Loading secrets from {}", secrets_file.display());
-            if let Ok(secrets_str) = read_to_string(&secrets_file) {
+            if let Ok(secrets_str) = read_to_string(secrets_file) {
                 let secrets = toml::from_str::<HashMap<String, String>>(&secrets_str)?;
 
                 trace!(keys = ?secrets.keys(), "available secrets");

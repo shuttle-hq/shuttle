@@ -1,4 +1,4 @@
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 use semver::Version;
 use std::path::Path;
 use tokio::process::Command;
@@ -28,7 +28,7 @@ pub async fn run_bacon(working_directory: &Path) -> Result<()> {
         .await?
         .success()
         .then_some(())
-        .ok_or_else(|| anyhow::anyhow!("bacon process failed"))?;
+        .context("bacon process failed")?;
 
     Ok(())
 }
@@ -38,12 +38,13 @@ async fn check_bacon() -> Result<()> {
         .arg("--version")
         .output()
         .await
-        .map_err(|e| anyhow::anyhow!("Failed to execute bacon: {}\nPlease ensure bacon is installed ('cargo install bacon') and you have the necessary permissions", e))?;
+        .context("Failed to execute bacon\nPlease ensure bacon is installed ('cargo install bacon') and you have the necessary permissions")?;
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    let version_str = stdout.split_whitespace().nth(1).ok_or_else(|| {
-        anyhow::anyhow!("Failed to parse bacon version: unexpected output format")
-    })?;
+    let version_str = stdout
+        .split_whitespace()
+        .nth(1)
+        .context("Failed to parse bacon version: unexpected output format")?;
 
     let version = Version::parse(version_str)
         .map_err(|e| anyhow::anyhow!("Failed to parse bacon version '{}': {}", version_str, e))?;

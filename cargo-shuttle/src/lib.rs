@@ -1243,6 +1243,8 @@ impl Shuttle {
         let api_port = portpicker::pick_unused_port()
             .expect("failed to find available port for local provisioner server");
         let api_addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), api_port);
+        let healthz_port = portpicker::pick_unused_port()
+            .expect("failed to find available port for runtime health check");
         let ip = if run_args.external {
             Ipv4Addr::UNSPECIFIED
         } else {
@@ -1270,6 +1272,7 @@ impl Shuttle {
             ("SHUTTLE_ENV", Environment::Local.to_string()),
             ("SHUTTLE_RUNTIME_IP", ip.to_string()),
             ("SHUTTLE_RUNTIME_PORT", run_args.port.to_string()),
+            ("SHUTTLE_HEALTHZ_PORT", healthz_port.to_string()),
             ("SHUTTLE_API", format!("http://127.0.0.1:{}", api_port)),
         ];
         // Use a nice debugging tracing level if user does not provide their own
@@ -1292,6 +1295,7 @@ impl Shuttle {
         .spawn()
         .context("spawning runtime process")?;
 
+        // Start background tasks for reading runtime's stdout and stderr
         let raw = run_args.raw;
         let mut stdout_reader = BufReader::new(
             runtime
@@ -1324,6 +1328,19 @@ impl Shuttle {
                 } else {
                     let log_item = LogItem::new(Utc::now(), "app".to_owned(), line);
                     println!("{log_item}");
+                }
+            }
+        });
+
+        // Start background task for simulated health check
+        tokio::spawn(async move {
+            loop {
+                // ECS health check runs ever 5s
+                tokio::time::sleep(tokio::time::Duration::from_millis(5000)).await;
+
+                tracing::trace!("Health check against runtime");
+                if let Err(e) = reqwest::get(format!("http://127.0.0.1:{}/", healthz_port)).await {
+                    tracing::trace!("Health check against runtime failed: {e}");
                 }
             }
         });

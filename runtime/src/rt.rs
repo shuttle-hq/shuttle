@@ -68,6 +68,7 @@ impl RuntimeEnvVars {
     }
 }
 
+// uses non-standard exit codes for each scenario to help track down exit reasons
 pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + Send + 'static) {
     debug!("Parsing environment variables");
     let RuntimeEnvVars {
@@ -248,8 +249,80 @@ pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + S
     //
     info!("Starting service");
 
-    if let Err(e) = service.bind(service_addr).await {
-        eprintln!("ERROR: Service encountered an error in `bind`: {e}");
-        exit(1);
+    let service_bind = service.bind(service_addr);
+
+    #[cfg(target_family = "unix")]
+    let interrupted = {
+        let mut sigterm_notif =
+            tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+                .expect("Can not get the SIGTERM signal receptor");
+        let mut sigint_notif =
+            tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())
+                .expect("Can not get the SIGINT signal receptor");
+        tokio::select! {
+            res = service_bind => {
+                if let Err(e) = res {
+                    tracing::error!("Service encountered an error in `bind`: {e}");
+                    exit(1);
+                }
+                tracing::warn!("Service terminated on its own. Shutting down the runtime...");
+                false
+            }
+            _ = sigterm_notif.recv() => {
+                tracing::warn!("Received SIGTERM. Shutting down the runtime...");
+                true
+            },
+            _ = sigint_notif.recv() => {
+                tracing::warn!("Received SIGINT. Shutting down the runtime...");
+                true
+            }
+        }
+    };
+    #[cfg(target_family = "windows")]
+    let interrupted = {
+        let mut ctrl_break_notif = tokio::signal::windows::ctrl_break()
+            .expect("Can not get the CtrlBreak signal receptor");
+        let mut ctrl_c_notif =
+            tokio::signal::windows::ctrl_c().expect("Can not get the CtrlC signal receptor");
+        let mut ctrl_close_notif = tokio::signal::windows::ctrl_close()
+            .expect("Can not get the CtrlClose signal receptor");
+        let mut ctrl_logoff_notif = tokio::signal::windows::ctrl_logoff()
+            .expect("Can not get the CtrlLogoff signal receptor");
+        let mut ctrl_shutdown_notif = tokio::signal::windows::ctrl_shutdown()
+            .expect("Can not get the CtrlShutdown signal receptor");
+        tokio::select! {
+            res = service_bind => {
+                if let Err(e) = res {
+                    tracing::error!("Service encountered an error in `bind`: {e}");
+                    exit(1);
+                }
+                tracing::warn!("Service terminated on its own. Shutting down the runtime...");
+                false
+            }
+            _ = ctrl_break_notif.recv() => {
+                tracing::warn!("Received ctrl-break. Shutting down the runtime...");
+                true
+            },
+            _ = ctrl_c_notif.recv() => {
+                tracing::warn!("Received ctrl-c. Shutting down the runtime...");
+                true
+            },
+            _ = ctrl_close_notif.recv() => {
+                tracing::warn!("Received ctrl-close. Shutting down the runtime...");
+                true
+            },
+            _ = ctrl_logoff_notif.recv() => {
+                tracing::warn!("Received ctrl-logoff. Shutting down the runtime...");
+                true
+            },
+            _ = ctrl_shutdown_notif.recv() => {
+                tracing::warn!("Received ctrl-shutdown. Shutting down the runtime...");
+                true
+            }
+        }
+    };
+
+    if interrupted {
+        exit(10);
     }
 }

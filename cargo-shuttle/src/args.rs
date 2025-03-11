@@ -300,8 +300,8 @@ pub struct LoginArgs {
     #[arg(long)]
     pub api_key: Option<String>,
     /// URL to the Shuttle Console for automatic login
-    #[arg(long, env = "SHUTTLE_CONSOLE", default_value = SHUTTLE_CONSOLE_URL, hide_default_value = true)]
-    pub console_url: String,
+    #[arg(long, env = "SHUTTLE_CONSOLE", hide = true)]
+    pub console_url: Option<String>,
 }
 
 #[derive(Args, Clone, Debug)]

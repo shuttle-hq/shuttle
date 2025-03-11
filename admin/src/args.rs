@@ -1,10 +1,10 @@
 use clap::{Parser, Subcommand};
-use shuttle_common::{constants::API_URL_DEFAULT_BETA, models::project::ComputeTier};
+use shuttle_common::{constants::SHUTTLE_API_URL, models::project::ComputeTier};
 
 #[derive(Parser, Debug)]
 pub struct Args {
     /// run this command against the api at the supplied url
-    #[arg(long, default_value = API_URL_DEFAULT_BETA, env = "SHUTTLE_API")]
+    #[arg(long, env = "SHUTTLE_API", default_value = SHUTTLE_API_URL)]
     pub api_url: String,
 
     #[command(subcommand)]

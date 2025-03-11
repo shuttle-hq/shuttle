@@ -4,7 +4,7 @@
 pub const STORAGE_DIRNAME: &str = ".shuttle-storage";
 
 // URLs
-pub const API_URL_DEFAULT_BETA: &str = "https://api.shuttle.dev";
+pub const SHUTTLE_API_URL: &str = "https://api.shuttle.dev";
 pub const SHUTTLE_CONSOLE_URL: &str = "https://console.shuttle.dev";
 
 pub const SHUTTLE_INSTALL_DOCS_URL: &str = "https://docs.shuttle.dev/getting-started/installation";

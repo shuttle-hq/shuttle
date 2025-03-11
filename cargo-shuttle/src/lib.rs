@@ -30,8 +30,8 @@ use reqwest::header::HeaderMap;
 use shuttle_api_client::ShuttleApiClient;
 use shuttle_common::{
     constants::{
-        headers::X_CARGO_SHUTTLE_VERSION, API_URL_DEFAULT_BETA, EXAMPLES_REPO, RUNTIME_NAME,
-        STORAGE_DIRNAME, TEMPLATES_SCHEMA_VERSION,
+        headers::X_CARGO_SHUTTLE_VERSION, EXAMPLES_REPO, RUNTIME_NAME, SHUTTLE_API_URL,
+        SHUTTLE_CONSOLE_URL, STORAGE_DIRNAME, TEMPLATES_SCHEMA_VERSION,
     },
     models::{
         auth::{KeyMessage, TokenMessage},
@@ -157,7 +157,7 @@ impl Shuttle {
             matches!(args.cmd, Command::Run(..))
         ) {
             if let Some(ref url) = args.api_url {
-                if url != API_URL_DEFAULT_BETA {
+                if url != SHUTTLE_API_URL {
                     eprintln!(
                         "{}",
                         format!("INFO: Targeting non-default API: {url}").yellow(),
@@ -787,12 +787,14 @@ impl Shuttle {
         Ok(())
     }
 
-    async fn device_auth(&self, console_url: String) -> Result<String> {
+    async fn device_auth(&self, console_url: Option<String>) -> Result<String> {
         let client = self.client.as_ref().unwrap();
 
         // should not have trailing slash
-        if console_url.ends_with('/') {
-            eprintln!("WARNING: Console URL is probably incorrect. Ends with '/': {console_url}");
+        if let Some(u) = console_url.as_ref() {
+            if u.ends_with('/') {
+                eprintln!("WARNING: Console URL is probably incorrect. Ends with '/': {u}");
+            }
         }
 
         let (mut tx, mut rx) = client.get_device_auth_ws().await?.split();
@@ -808,14 +810,22 @@ impl Shuttle {
             }
         });
 
-        let token = read_ws_until_text(&mut rx).await?;
-        let Some(token) = token else {
+        let token_message = read_ws_until_text(&mut rx).await?;
+        let Some(token_message) = token_message else {
             bail!("Did not receive device auth token over websocket");
         };
-        let token = serde_json::from_str::<TokenMessage>(&token)?.token;
+        let token_message = serde_json::from_str::<TokenMessage>(&token_message)?;
+        let token = token_message.token;
 
-        let url = &format!("{}/device-auth?token={}", console_url, token);
-        let _ = webbrowser::open(url);
+        // use provided url if it exists, otherwise fall back to old behavior of constructing it here
+        let url = token_message.url.unwrap_or_else(|| {
+            format!(
+                "{}/device-auth?token={}",
+                console_url.as_deref().unwrap_or(SHUTTLE_CONSOLE_URL),
+                token
+            )
+        });
+        let _ = webbrowser::open(&url);
         eprintln!("Complete login in Shuttle Console to authenticate CLI.");
         eprintln!("If your browser did not automatically open, go to {url}");
         eprintln!();

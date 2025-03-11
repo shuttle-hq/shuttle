@@ -12,10 +12,7 @@ use clap::{
     Args, Parser, Subcommand, ValueEnum,
 };
 use clap_complete::Shell;
-use shuttle_common::{
-    constants::{EXAMPLES_REPO, SHUTTLE_CONSOLE_URL},
-    models::resource::ResourceType,
-};
+use shuttle_common::{constants::EXAMPLES_REPO, models::resource::ResourceType};
 
 #[derive(Parser)]
 #[command(

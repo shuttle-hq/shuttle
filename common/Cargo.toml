@@ -21,7 +21,7 @@ serde_json = { workspace = true }
 strum = { workspace = true, features = ["derive"] }
 tracing = { workspace = true, features = ["std"], optional = true }
 typeshare = { workspace = true }
-utoipa = { version = "5", features = ["chrono"], optional = true }
+utoipa = { workspace = true, features = ["chrono"], optional = true }
 zeroize = { workspace = true }
 
 [dev-dependencies]

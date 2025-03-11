@@ -84,6 +84,7 @@ tracing-subscriber = { version = "0.3.16", default-features = false, features = 
 ] }
 trybuild = "1.0.72"
 typeshare = "1.0.3"
+utoipa = "5"
 url = "2.5.4"
 walkdir = "2.3.3"
 webbrowser = "1.0.1"

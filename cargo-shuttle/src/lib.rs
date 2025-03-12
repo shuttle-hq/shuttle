@@ -65,8 +65,8 @@ use crate::builder::{async_cargo_metadata, build_workspace, find_shuttle_package
 use crate::config::RequestContext;
 use crate::provisioner_server::{ProvApiState, ProvisionerServer};
 use crate::util::{
-    check_and_warn_runtime_version, generate_completions, generate_manpage, get_templates_schema,
-    is_dirty, open_gh_issue, read_ws_until_text, update_cargo_shuttle,
+    bacon, check_and_warn_runtime_version, generate_completions, generate_manpage,
+    get_templates_schema, is_dirty, open_gh_issue, read_ws_until_text, update_cargo_shuttle,
 };
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -1239,6 +1239,17 @@ impl Shuttle {
     async fn local_run(&self, mut run_args: RunArgs, debug: bool) -> Result<()> {
         let project_name = self.ctx.project_name().to_owned();
         let working_directory = self.ctx.working_directory();
+
+        // Handle bacon mode
+        if run_args.bacon {
+            println!(
+                "\n    {} {} in watch mode using bacon\n",
+                "Starting".bold().green(),
+                project_name
+            );
+            return bacon::run_bacon(working_directory).await;
+        }
+
         let services = self.pre_local_run(&run_args).await?;
         let service = services
             .first()

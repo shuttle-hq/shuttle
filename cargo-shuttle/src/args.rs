@@ -351,6 +351,9 @@ pub struct RunArgs {
     /// Don't display timestamps and log origin tags
     #[arg(long)]
     pub raw: bool,
+    /// Uses bacon crate to run the project in watch mode
+    #[arg(long)]
+    pub bacon: bool,
 
     #[command(flatten)]
     pub secret_args: SecretsArgs,

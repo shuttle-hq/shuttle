@@ -476,6 +476,11 @@ workflows:
             - build-binaries-aarch64
             - build-binaries-windows
             - build-binaries-mac
+          filters:
+            branches:
+              ignore: /.*/
+            tags:
+              only: /v[\d\.]+/
   publish-crates:
     jobs:
       - approve-publish-crates:
@@ -494,6 +499,11 @@ workflows:
           name: publish-<< matrix.path >>
           requires:
             - approve-publish-crates
+          filters:
+            branches:
+              ignore: /.*/
+            tags:
+              only: /v[\d\.]+/
       - publish-crate:
           matrix:
             parameters:
@@ -503,6 +513,11 @@ workflows:
           name: publish-<< matrix.path >>
           requires:
             - publish-common
+          filters:
+            branches:
+              ignore: /.*/
+            tags:
+              only: /v[\d\.]+/
       - publish-crate:
           matrix:
             parameters:
@@ -516,6 +531,11 @@ workflows:
           name: publish-<< matrix.path >>
           requires:
             - publish-service
+          filters:
+            branches:
+              ignore: /.*/
+            tags:
+              only: /v[\d\.]+/
       - publish-crate:
           matrix:
             parameters:
@@ -526,6 +546,11 @@ workflows:
           requires:
             - publish-api-client
             - publish-service
+          filters:
+            branches:
+              ignore: /.*/
+            tags:
+              only: /v[\d\.]+/
       - publish-crate:
           matrix:
             parameters:
@@ -543,3 +568,8 @@ workflows:
           name: publish-<< matrix.path >>
           requires:
             - publish-runtime
+          filters:
+            branches:
+              ignore: /.*/
+            tags:
+              only: /v[\d\.]+/

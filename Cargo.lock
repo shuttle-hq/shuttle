@@ -387,7 +387,7 @@ dependencies = [
 
 [[package]]
 name = "cargo-shuttle"
-version = "0.52.0"
+version = "0.53.0"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -3648,7 +3648,7 @@ checksum = "0fda2ff0d084019ba4d7c6f371c95d8fd75ce3524c3cb8fb653a3023f6323e64"
 
 [[package]]
 name = "shuttle-admin"
-version = "0.52.0"
+version = "0.53.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -3664,7 +3664,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-api-client"
-version = "0.52.0"
+version = "0.53.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3684,7 +3684,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-codegen"
-version = "0.52.0"
+version = "0.53.0"
 dependencies = [
  "pretty_assertions",
  "proc-macro-error2",
@@ -3699,7 +3699,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-common"
-version = "0.52.0"
+version = "0.53.0"
 dependencies = [
  "axum",
  "chrono",
@@ -3719,7 +3719,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-runtime"
-version = "0.52.0"
+version = "0.53.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3749,7 +3749,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-service"
-version = "0.52.0"
+version = "0.53.0"
 dependencies = [
  "anyhow",
  "async-trait",

@@ -21,6 +21,7 @@ serde_json = { workspace = true }
 strum = { workspace = true, features = ["derive"] }
 tracing = { workspace = true, features = ["std"], optional = true }
 typeshare = { workspace = true }
+utoipa = { workspace = true, features = ["chrono"], optional = true }
 zeroize = { workspace = true }
 
 [dev-dependencies]
@@ -34,6 +35,8 @@ models = ["chrono/serde", "dep:tracing"]
 axum = ["dep:axum", "dep:tracing"]
 display = ["chrono/clock", "dep:crossterm"]
 tables = ["models", "display", "dep:comfy-table"]
+
+utoipa = ["dep:utoipa"]
 
 # internal / utility features
 integration-tests = []

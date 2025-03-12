@@ -10,12 +10,14 @@ use std::fmt::Write;
 use super::deployment::DeploymentState;
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub struct ProjectCreateRequest {
     pub name: String,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub struct ProjectResponse {
     pub id: String,
@@ -64,6 +66,7 @@ impl ProjectResponse {
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub struct ProjectListResponse {
     pub projects: Vec<ProjectResponse>,
@@ -71,6 +74,7 @@ pub struct ProjectListResponse {
 
 /// Set wanted field(s) to Some to update those parts of the project
 #[derive(Debug, Default, Deserialize, Serialize, Clone, PartialEq)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub struct ProjectUpdateRequest {
     /// Change display name
@@ -88,6 +92,7 @@ pub struct ProjectUpdateRequest {
 #[derive(
     Debug, Default, Clone, Copy, PartialEq, Eq, Display, Serialize, Deserialize, EnumString,
 )]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[serde(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
 #[typeshare::typeshare]

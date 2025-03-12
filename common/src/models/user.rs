@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use strum::{EnumString, IntoStaticStr};
 
 #[derive(Debug, Deserialize, Serialize)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub struct UserResponse {
     pub id: String,
@@ -73,6 +74,7 @@ impl UserResponse {
 )]
 #[serde(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub enum AccountTier {
     #[default]
@@ -89,6 +91,7 @@ pub enum AccountTier {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub struct Subscription {
     pub id: String,
@@ -99,6 +102,7 @@ pub struct Subscription {
 }
 
 #[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub struct SubscriptionRequest {
     pub id: String,
@@ -120,6 +124,7 @@ pub struct SubscriptionRequest {
     strum::Display,
     IntoStaticStr,
 )]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[serde(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
 #[typeshare::typeshare]

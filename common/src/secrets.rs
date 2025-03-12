@@ -15,6 +15,7 @@ use zeroize::Zeroize;
 /// To make sure nothing leaks after the [`Secret`] has been dropped, a custom [`Drop`]
 /// implementation will zero-out the underlying memory.
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema), schema(value_type = String, format = "password"))]
 pub struct Secret<T: Zeroize>(T);
 
 impl<T: Zeroize> Debug for Secret<T> {

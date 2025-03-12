@@ -15,14 +15,17 @@ const BACON_CONFIG: &str = include_str!("bacon.windows.toml");
 /// Runs shuttle in watch mode using bacon
 pub async fn run_bacon(working_directory: &Path) -> Result<()> {
     check_bacon().await?;
-    debug!("Starting shuttle in watch mode using bacon...");
+    debug!("Starting 'shuttle run' in watch mode using bacon");
 
     Command::new("bacon")
         .current_dir(working_directory)
-        .args(["-j", "shuttle", "--config-toml", BACON_CONFIG])
-        .stdin(std::process::Stdio::inherit())
-        .stdout(std::process::Stdio::inherit())
-        .stderr(std::process::Stdio::inherit())
+        .args([
+            "--headless",
+            "-j",
+            "shuttle-run",
+            "--config-toml",
+            BACON_CONFIG,
+        ])
         .spawn()?
         .wait()
         .await?
@@ -34,6 +37,7 @@ pub async fn run_bacon(working_directory: &Path) -> Result<()> {
 }
 
 async fn check_bacon() -> Result<()> {
+    debug!("Checking bacon version");
     let output = Command::new("bacon")
         .arg("--version")
         .output()

@@ -1,7 +1,7 @@
-[jobs.shuttle]
+[jobs.shuttle-run]
 command = ["shuttle", "run"]
 need_stdout = true
 allow_warnings = true
 background = false
 on_change_strategy = "kill_then_restart"
-kill = ["pkill", "-TERM", "-P"]
+kill = ["kill", "-s", "INT"]

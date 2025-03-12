@@ -38,7 +38,7 @@ async fn check_bacon() -> Result<()> {
         .arg("--version")
         .output()
         .await
-        .context("Failed to execute bacon\nPlease ensure bacon is installed ('cargo install bacon') and you have the necessary permissions")?;
+        .context("Failed to execute bacon.\nPlease ensure bacon is installed ('cargo install bacon') and you have the necessary permissions.")?;
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let version_str = stdout
@@ -51,7 +51,7 @@ async fn check_bacon() -> Result<()> {
     let min_version = Version::parse(MIN_BACON_VERSION)?;
 
     if version < min_version {
-        bail!("bacon {MIN_BACON_VERSION} or higher required - current version is {version}. Please upgrade using 'cargo install bacon'");
+        bail!("bacon {MIN_BACON_VERSION} or higher required - current version is {version}. Please upgrade using 'cargo install bacon'.");
     }
 
     Ok(())

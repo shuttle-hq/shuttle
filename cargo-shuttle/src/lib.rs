@@ -1,5 +1,4 @@
 mod args;
-mod bacon;
 pub mod builder;
 pub mod config;
 mod init;
@@ -66,8 +65,8 @@ use crate::builder::{async_cargo_metadata, build_workspace, find_shuttle_package
 use crate::config::RequestContext;
 use crate::provisioner_server::{ProvApiState, ProvisionerServer};
 use crate::util::{
-    check_and_warn_runtime_version, generate_completions, generate_manpage, get_templates_schema,
-    is_dirty, open_gh_issue, read_ws_until_text, update_cargo_shuttle,
+    bacon, check_and_warn_runtime_version, generate_completions, generate_manpage,
+    get_templates_schema, is_dirty, open_gh_issue, read_ws_until_text, update_cargo_shuttle,
 };
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");

@@ -1,3 +1,5 @@
+pub mod bacon;
+
 use std::{
     fmt::Write,
     fs::File,

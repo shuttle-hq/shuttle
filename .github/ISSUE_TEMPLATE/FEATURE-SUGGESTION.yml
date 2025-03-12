@@ -1,7 +1,7 @@
 name: Feature suggestion
 description: Suggest a new feature
-title: "[Feature]: "
-labels: ["S-Triage", "T-Feature Request"]
+type: Feature
+labels: ["S-Triage"]
 body:
   - type: markdown
     attributes:
@@ -10,20 +10,16 @@ body:
     id: describe
     attributes:
       label: Describe the feature
-      description: A high level description.
-      placeholder: A feature that allows users to...
     validations:
       required: true
   - type: textarea
     id: example
     attributes:
-      label: Suggestion or Example of how the feature would be used
-      description: What should the feature look like?
+      label: Suggestion or example of how the feature would be used
   - type: checkboxes
     id: duplicate
     attributes:
       label: Duplicate declaration
-      description: Please confirm that you are not creating a duplicate issue.
       options:
         - label: I have searched the issues and this feature has not been requested before.
           required: true

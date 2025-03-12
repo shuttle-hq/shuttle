@@ -1,3 +1,4 @@
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use strum::{Display, EnumString};
 
@@ -21,6 +22,7 @@ pub struct TeamResponse {
 #[typeshare::typeshare]
 pub struct TeamMembersResponse {
     pub members: Vec<TeamMembership>,
+    pub invites: Vec<TeamInvite>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -29,6 +31,16 @@ pub struct TeamMembership {
     pub user_id: String,
     /// Role of the user in the team
     pub role: TeamRole,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[typeshare::typeshare]
+pub struct TeamInvite {
+    pub id: String,
+    pub email: String,
+    /// Role of the user in the team
+    pub role: TeamRole,
+    pub expires_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Display, EnumString)]

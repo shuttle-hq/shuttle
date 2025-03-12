@@ -7,7 +7,46 @@ See [conventional commits](https://www.conventionalcommits.org/) for commit guid
 
 **For proper release notes with more details such as upgrading guidelines, check out the [releases page](https://github.com/shuttle-hq/shuttle/releases).**
 
-## [0.52.0](https://github.com/shuttle-hq/shuttle/compare/v0.51.0..0.52.0) - 2025-02-04
+## [0.53.0](https://github.com/shuttle-hq/shuttle/compare/v0.52.0..0.53.0) - 2025-03-12
+
+### Features
+
+- *(admin)* Delete user + everything command ([#1992](https://github.com/shuttle-hq/shuttle/issues/1992)) - ([a55f171](https://github.com/shuttle-hq/shuttle/commit/a55f171ce59aa2bcff7be73a02d5d3574c8e2564))
+- *(admin)* Feature flag command ([#1987](https://github.com/shuttle-hq/shuttle/issues/1987)) - ([ca4e667](https://github.com/shuttle-hq/shuttle/commit/ca4e667571e1f3cbdaa81407270489f7e0fc0d6f))
+- *(admin)* Simulate-user ([#1984](https://github.com/shuttle-hq/shuttle/issues/1984)) - ([e4ffdc9](https://github.com/shuttle-hq/shuttle/commit/e4ffdc9acdbc7da8eaad55f323af39340bc98176))
+- *(cargo-shuttle)* Use api-provided console url on login if available ([#1999](https://github.com/shuttle-hq/shuttle/issues/1999)) - ([929f14b](https://github.com/shuttle-hq/shuttle/commit/929f14bc988e2a32de16cb6a2f9f3940df9f17a8))
+- *(cargo-shuttle)* Use stderr, better error ([#1985](https://github.com/shuttle-hq/shuttle/issues/1985)) - ([9a7f49d](https://github.com/shuttle-hq/shuttle/commit/9a7f49dd9ec48326c7284433829b708ae465c46c))
+- *(common)* Add utoipa attribute macro types ([#2000](https://github.com/shuttle-hq/shuttle/issues/2000)) - ([48f201e](https://github.com/shuttle-hq/shuttle/commit/48f201e72c08b81837dc94961bd85f78c1a4d975))
+- *(common)* Team invite models ([#1995](https://github.com/shuttle-hq/shuttle/issues/1995)) - ([41343ca](https://github.com/shuttle-hq/shuttle/commit/41343ca388fca24e2a69eb6b804c494c1dfc75ca))
+- Impl live reloading for local runs ([#1991](https://github.com/shuttle-hq/shuttle/issues/1991)) - ([4c34d24](https://github.com/shuttle-hq/shuttle/commit/4c34d24235e57aa9a543a757db42d390b3b99c19))
+- Runtime print message on exit signal, cli simulate ecs health check ([#1998](https://github.com/shuttle-hq/shuttle/issues/1998)) - ([f4af28e](https://github.com/shuttle-hq/shuttle/commit/f4af28ef6cdd761b2cf6e4bba167a1beb64c441b))
+- Start runtime healthz server on unspecified ip ([#1993](https://github.com/shuttle-hq/shuttle/issues/1993)) - ([e8801a8](https://github.com/shuttle-hq/shuttle/commit/e8801a81d38687992bec00c46e90cd8c3aa3b3e2))
+- Team models, team project lists ([#1986](https://github.com/shuttle-hq/shuttle/issues/1986)) - ([00dee07](https://github.com/shuttle-hq/shuttle/commit/00dee07d118d6c75d11f28b194b911026bbabbcf))
+- Telemetry debugging variant ([#1982](https://github.com/shuttle-hq/shuttle/issues/1982)) - ([66b2ce8](https://github.com/shuttle-hq/shuttle/commit/66b2ce809805dcc8ce8e7d9de54ee7eb137dad2a))
+
+### Bug Fixes
+
+- Reqwest version ([#2006](https://github.com/shuttle-hq/shuttle/issues/2006)) - ([30fb6f1](https://github.com/shuttle-hq/shuttle/commit/30fb6f120fc3b17771cb55e882b1b2700faa2c26))
+- Ci regression in new reqwest version ([#2003](https://github.com/shuttle-hq/shuttle/issues/2003)) - ([9fd65d9](https://github.com/shuttle-hq/shuttle/commit/9fd65d9874b0da48bebd1b1979cd07e7c886dcc4))
+- Load Secrets.dev.toml on local run ([#1997](https://github.com/shuttle-hq/shuttle/issues/1997)) - ([9602f59](https://github.com/shuttle-hq/shuttle/commit/9602f59eeef5ef734d44223735d196a5a7c26075))
+- Betterstack config host ([#1981](https://github.com/shuttle-hq/shuttle/issues/1981)) - ([58b0bef](https://github.com/shuttle-hq/shuttle/commit/58b0bef9ec57a46ba5b7046ab9aa8cb66c31fb1d))
+
+### Miscellaneous Tasks
+
+- *(shuttle-openai)* Update async-openai to 0.28.0 ([#1994](https://github.com/shuttle-hq/shuttle/issues/1994)) - ([32be9cc](https://github.com/shuttle-hq/shuttle/commit/32be9cc6b780b5ed6b8ae1e3502c8610aacb1964))
+- V0.53.0 - ([e84608b](https://github.com/shuttle-hq/shuttle/commit/e84608be6a0567e4fb5706fa1052ee775fd0549e))
+- Use new github issue types ([#2005](https://github.com/shuttle-hq/shuttle/issues/2005)) - ([37a60ae](https://github.com/shuttle-hq/shuttle/commit/37a60ae3e9c4deb5ac30ba5620dedf942491e133))
+- Bump diesel in aws-rds ([#2002](https://github.com/shuttle-hq/shuttle/issues/2002)) - ([2eb0060](https://github.com/shuttle-hq/shuttle/commit/2eb0060d0a7e4bb4afa8dcfee999418118f66167))
+- User telemetry support updates ([#1978](https://github.com/shuttle-hq/shuttle/issues/1978)) - ([eb2e8bc](https://github.com/shuttle-hq/shuttle/commit/eb2e8bcb3ddc96af770991312efcfedd190709c2))
+- Release on tags instead of production ([#1977](https://github.com/shuttle-hq/shuttle/issues/1977)) - ([3bcfabb](https://github.com/shuttle-hq/shuttle/commit/3bcfabb53a018b67459828a5ed7e84e79374c850))
+
+### Miscellaneous
+
+- *(shared-db)* Upgrade diesel-async to v0.5.2 ([#1989](https://github.com/shuttle-hq/shuttle/issues/1989)) - ([2247ed4](https://github.com/shuttle-hq/shuttle/commit/2247ed44c7678df07adbd4594437e93ed6ec93ca))
+- Bump examples - ([1d6131a](https://github.com/shuttle-hq/shuttle/commit/1d6131a591c46cb8129c520988d0d08c00658bc4))
+- DOCKER_HOST handling fix ([#1960](https://github.com/shuttle-hq/shuttle/issues/1960)) - ([e656428](https://github.com/shuttle-hq/shuttle/commit/e6564282374781ad1981360156ba7efbb474905c))
+
+## [0.52.0](https://github.com/shuttle-hq/shuttle/compare/v0.51.0..v0.52.0) - 2025-02-04
 
 ### Features
 
@@ -26,15 +65,13 @@ See [conventional commits](https://www.conventionalcommits.org/) for commit guid
 
 ### Miscellaneous Tasks
 
-- 0.52.0 - ([09daf77](https://github.com/shuttle-hq/shuttle/commit/09daf7731007954e837cc66f087d92c0b82da6c4))
+- V0.52.0 ([#1975](https://github.com/shuttle-hq/shuttle/issues/1975)) - ([b5157d8](https://github.com/shuttle-hq/shuttle/commit/b5157d852f150b6a7169d447b04c4460c7179fe8))
 - Use `TelemetryResourceDetector` for telemetry sdk values when creating default resource ([#1974](https://github.com/shuttle-hq/shuttle/issues/1974)) - ([90cb292](https://github.com/shuttle-hq/shuttle/commit/90cb292001d3eb2c7e98979772d6b8c14a73ac58))
 - Rename all beta models ([#1969](https://github.com/shuttle-hq/shuttle/issues/1969)) - ([b4dee33](https://github.com/shuttle-hq/shuttle/commit/b4dee339afb8b7fa2141666af75975eaa3d33349))
 - Remove legacy code ([#1962](https://github.com/shuttle-hq/shuttle/issues/1962)) - ([c4e8b8a](https://github.com/shuttle-hq/shuttle/commit/c4e8b8a284470edbed4cfabc9a992e9550c70cf9))
 
 ### Miscellaneous
 
-- Cargo update - ([808fc1f](https://github.com/shuttle-hq/shuttle/commit/808fc1f16fee59182538a4236e59c879e284f60f))
-- Bump examples - ([7f99776](https://github.com/shuttle-hq/shuttle/commit/7f99776992988d4edc799036119ddab86c3fb47e))
 - Admin cert command ([#1971](https://github.com/shuttle-hq/shuttle/issues/1971)) - ([82ddbce](https://github.com/shuttle-hq/shuttle/commit/82ddbceb36cbd5456c32935f3327fa35f4e9c034))
 
 ## [0.51.0](https://github.com/shuttle-hq/shuttle/compare/v0.50.0..v0.51.0) - 2025-01-10

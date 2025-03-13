@@ -288,6 +288,8 @@ export interface TeamMembership {
 	nickname?: string;
 	/** URL to profile picture */
 	picture?: string;
+	/** Auth0 primary email */
+	email?: string;
 }
 
 export interface TeamResponse {

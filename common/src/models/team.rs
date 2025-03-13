@@ -35,6 +35,8 @@ pub struct TeamMembership {
     pub nickname: Option<String>,
     /// URL to profile picture
     pub picture: Option<String>,
+    /// Auth0 primary email
+    pub email: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

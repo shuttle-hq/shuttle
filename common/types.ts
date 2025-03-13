@@ -284,6 +284,10 @@ export interface TeamMembership {
 	user_id: string;
 	/** Role of the user in the team */
 	role: TeamRole;
+	/** Auth0 display name */
+	nickname?: string;
+	/** URL to profile picture */
+	picture?: string;
 }
 
 export interface TeamResponse {

@@ -16,6 +16,7 @@ impl axum::response::IntoResponse for ApiError {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub struct ApiError {
     pub message: String,

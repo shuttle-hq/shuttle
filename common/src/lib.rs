@@ -28,6 +28,7 @@ pub enum DatabaseResource {
 
 /// Holds the data for building a database connection string.
 #[derive(Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub struct DatabaseInfo {
     engine: String,

@@ -4,6 +4,7 @@ use crossterm::style::Stylize;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub struct LogItem {
     pub timestamp: DateTime<Utc>,
@@ -40,6 +41,7 @@ impl std::fmt::Display for LogItem {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub struct LogsResponse {
     pub logs: Vec<LogItem>,

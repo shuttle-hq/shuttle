@@ -9,6 +9,7 @@ pub struct AddCertificateRequest {
 }
 
 #[derive(Deserialize, Serialize, Debug)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub struct DeleteCertificateRequest {
     #[serde(alias = "domain")]

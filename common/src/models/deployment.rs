@@ -8,10 +8,10 @@ use strum::{Display, EnumString};
 use crossterm::style::Stylize;
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Display, Serialize, EnumString)]
-#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[serde(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
 #[strum(ascii_case_insensitive)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub enum DeploymentState {
     Pending,
@@ -116,8 +116,8 @@ pub struct UploadArchiveResponse {
 }
 
 #[derive(Deserialize, Serialize)]
-#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[serde(tag = "type", content = "content")]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub enum DeploymentRequest {
     /// Build an image from the source code in an attached zip archive
@@ -141,8 +141,8 @@ pub struct DeploymentRequestBuildArchive {
 }
 
 #[derive(Deserialize, Serialize, Default)]
-#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[serde(tag = "type", content = "content")]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub enum BuildArgs {
     Rust(BuildArgsRust),

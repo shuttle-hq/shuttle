@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub struct ProvisionResourceRequest {
     /// The type of this resource
@@ -25,6 +26,7 @@ pub enum ResourceInput {
 )]
 #[serde(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub enum ResourceState {
     Authorizing,
@@ -36,6 +38,7 @@ pub enum ResourceState {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub struct ResourceResponse {
     pub r#type: ResourceType,
@@ -47,6 +50,7 @@ pub struct ResourceResponse {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub struct ResourceListResponse {
     pub resources: Vec<ResourceResponse>,
@@ -64,6 +68,7 @@ pub struct ResourceListResponse {
     strum::Display,
     strum::EnumString,
 )]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 // is a flat enum instead of nested enum to allow typeshare
 pub enum ResourceType {

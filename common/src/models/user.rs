@@ -124,7 +124,6 @@ pub struct SubscriptionRequest {
     strum::Display,
     IntoStaticStr,
 )]
-#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[serde(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]

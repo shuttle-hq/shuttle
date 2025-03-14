@@ -61,7 +61,6 @@ pub struct SecretStore {
 /// Helper type for typeshare
 #[allow(unused)]
 #[typeshare::typeshare]
-#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 type SecretStoreT = HashMap<String, String>;
 
 impl SecretStore {

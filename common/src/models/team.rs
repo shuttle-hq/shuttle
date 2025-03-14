@@ -3,12 +3,14 @@ use serde::{Deserialize, Serialize};
 use strum::{Display, EnumString};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub struct TeamListResponse {
     pub teams: Vec<TeamResponse>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub struct TeamResponse {
     pub id: String,
@@ -19,6 +21,7 @@ pub struct TeamResponse {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub struct TeamMembersResponse {
     pub members: Vec<TeamMembership>,
@@ -26,6 +29,7 @@ pub struct TeamMembersResponse {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub struct TeamMembership {
     pub user_id: String,
@@ -40,6 +44,7 @@ pub struct TeamMembership {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub struct TeamInvite {
     pub id: String,
@@ -52,6 +57,7 @@ pub struct TeamInvite {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Display, EnumString)]
 #[serde(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub enum TeamRole {
     Owner,
@@ -62,6 +68,7 @@ pub enum TeamRole {
 /// Provide user id to add user.
 /// Provide email address to invite user via email.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub struct AddTeamMemberRequest {
     pub user_id: Option<String>,

@@ -8,6 +8,7 @@ const fn default_betterstack_host() -> Cow<'static, str> {
 
 /// Status of a telemetry export configuration for an external sink
 #[derive(Eq, Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub struct TelemetrySinkStatus {
     /// Indicates that the associated project is configured to export telemetry data to this sink
@@ -16,6 +17,7 @@ pub struct TelemetrySinkStatus {
 
 /// A safe-for-display representation of the current telemetry export configuration for a given project
 #[derive(Eq, Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub struct TelemetryConfigResponse {
     betterstack: Option<TelemetrySinkStatus>,
@@ -63,7 +65,6 @@ impl From<Vec<TelemetrySinkConfig>> for TelemetryConfigResponse {
 #[cfg_attr(any(test, feature = "integration-tests"), derive(strum::EnumIter))]
 #[serde(tag = "type", content = "content", rename_all = "snake_case")]
 #[strum(serialize_all = "snake_case")]
-#[typeshare::typeshare]
 #[cfg_attr(
     any(test, feature = "integration-tests"),
     strum_discriminants(derive(strum::EnumIter))
@@ -71,6 +72,8 @@ impl From<Vec<TelemetrySinkConfig>> for TelemetryConfigResponse {
 #[strum_discriminants(derive(Serialize, Deserialize, strum::AsRefStr))]
 #[strum_discriminants(serde(rename_all = "snake_case"))]
 #[strum_discriminants(strum(serialize_all = "snake_case"))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[typeshare::typeshare]
 pub enum TelemetrySinkConfig {
     /// [Betterstack](https://betterstack.com/docs/logs/open-telemetry/)
     Betterstack(BetterstackConfig),
@@ -102,6 +105,7 @@ impl TelemetrySinkConfigDiscriminants {
 
 #[derive(Eq, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "integration-tests", derive(Debug))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub struct BetterstackConfig {
     #[serde(default = "default_betterstack_host")]
@@ -121,6 +125,7 @@ impl Default for BetterstackConfig {
 
 #[derive(Eq, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "integration-tests", derive(Debug))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub struct DatadogConfig {
     pub api_key: String,
@@ -137,6 +142,7 @@ impl Default for DatadogConfig {
 
 #[derive(Eq, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "integration-tests", derive(Debug))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub struct GrafanaCloudConfig {
     pub token: String,

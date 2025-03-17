@@ -31,12 +31,9 @@ pub async fn run(args: Args) {
                 tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
             }
         }
-        Command::UpdateCompute {
-            project_id,
-            compute_tier,
-        } => {
+        Command::UpdateProjectConfig { project_id, json } => {
             let res = client
-                .update_project_compute_tier(&project_id, compute_tier)
+                .update_project_config(&project_id, serde_json::from_str(&json).unwrap())
                 .await
                 .unwrap();
             println!("{res:?}");

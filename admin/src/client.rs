@@ -2,7 +2,7 @@ use anyhow::Result;
 use serde_json::{json, Value};
 use shuttle_api_client::ShuttleApiClient;
 use shuttle_common::models::{
-    project::{ComputeTier, ProjectResponse, ProjectUpdateRequest},
+    project::{ProjectResponse, ProjectUpdateRequest},
     user::UserResponse,
 };
 
@@ -30,16 +30,16 @@ impl Client {
             .await
     }
 
-    pub async fn update_project_compute_tier(
+    pub async fn update_project_config(
         &self,
         project_id: &str,
-        compute_tier: ComputeTier,
+        config: serde_json::Value,
     ) -> Result<ProjectResponse> {
         self.inner
             .put_json(
                 format!("/projects/{project_id}"),
                 Some(ProjectUpdateRequest {
-                    compute_tier: Some(compute_tier),
+                    config: Some(config),
                     ..Default::default()
                 }),
             )

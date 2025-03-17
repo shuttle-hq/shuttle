@@ -205,8 +205,8 @@ export interface ProjectUpdateRequest {
 	team_id?: string;
 	/** Transfer away from current team */
 	remove_from_team?: boolean;
-	/** Change compute tier */
-	compute_tier?: ComputeTier;
+	/** Project runtime configuration */
+	config?: any;
 }
 
 export enum ResourceType {

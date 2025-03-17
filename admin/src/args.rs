@@ -1,5 +1,5 @@
 use clap::{Parser, Subcommand};
-use shuttle_common::{constants::SHUTTLE_API_URL, models::project::ComputeTier};
+use shuttle_common::constants::SHUTTLE_API_URL;
 
 #[derive(Parser, Debug)]
 pub struct Args {
@@ -22,13 +22,13 @@ pub enum Command {
         new_user_id: String,
     },
 
-    UpdateCompute {
+    UpdateProjectConfig {
         /// Project to update
         #[arg(long, visible_alias = "id")]
         project_id: String,
-        /// Compute tier to set.
-        #[arg(long, visible_alias = "tier")]
-        compute_tier: ComputeTier,
+        /// Project configuration as JSON
+        #[arg(long, visible_alias = "config")]
+        json: String,
     },
 
     /// Renew all old custom domain certificates

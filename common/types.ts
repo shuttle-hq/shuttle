@@ -166,6 +166,11 @@ export interface ProjectCreateRequest {
 	name: string;
 }
 
+export enum ComputeType {
+	Fargate = "fargate",
+	FargateSpot = "fargatespot",
+}
+
 export enum ComputeTier {
 	XS = "xs",
 	S = "s",
@@ -184,8 +189,9 @@ export interface ProjectResponse {
 	/** Team project belongs to */
 	team_id?: string;
 	created_at: string;
+	compute_type?: ComputeType;
 	compute_tier?: ComputeTier;
-	/** State of the current deployment if one exists (something has been deployed). */
+	/** State of the current deployment if one exists (something has been deployed) */
 	deployment_state?: DeploymentState;
 	/** URIs where running deployments can be reached */
 	uris: string[];
@@ -207,6 +213,8 @@ export interface ProjectUpdateRequest {
 	remove_from_team?: boolean;
 	/** Change compute tier */
 	compute_tier?: ComputeTier;
+	/** Change compute type */
+	compute_type?: ComputeType;
 }
 
 export enum ResourceType {

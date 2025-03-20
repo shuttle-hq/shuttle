@@ -73,7 +73,7 @@ pub struct ProjectListResponse {
 }
 
 /// Set wanted field(s) to Some to update those parts of the project
-#[derive(Debug, Default, Deserialize, Serialize, Clone, PartialEq)]
+#[derive(Debug, Default, Deserialize, Serialize, Clone)]
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub struct ProjectUpdateRequest {
@@ -85,8 +85,8 @@ pub struct ProjectUpdateRequest {
     pub team_id: Option<String>,
     /// Transfer away from current team
     pub remove_from_team: Option<bool>,
-    /// Change compute tier
-    pub compute_tier: Option<ComputeTier>,
+    /// Project runtime configuration
+    pub config: Option<serde_json::Value>,
 }
 
 #[derive(

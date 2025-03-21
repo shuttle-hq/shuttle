@@ -18,7 +18,9 @@ pub struct Args {
 #[derive(Subcommand, Debug)]
 pub enum Command {
     ChangeProjectOwner {
-        project_name: String,
+        /// Project to update ownership of
+        project_id: String,
+        /// User id to switch ownership to
         new_user_id: String,
     },
 

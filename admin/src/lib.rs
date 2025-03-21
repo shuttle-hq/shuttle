@@ -17,8 +17,15 @@ pub async fn run(args: Args) {
     let client = Client::new(args.api_url.clone(), api_key, args.client_timeout);
 
     match args.command {
-        Command::ChangeProjectOwner { .. } => {
-            unimplemented!();
+        Command::ChangeProjectOwner {
+            project_id,
+            new_user_id,
+        } => {
+            let res = client
+                .update_project_owner(&project_id, new_user_id)
+                .await
+                .unwrap();
+            println!("{res:?}");
         }
         Command::RenewCerts => {
             let certs = client.get_old_certificates().await.unwrap();

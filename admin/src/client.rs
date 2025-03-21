@@ -46,6 +46,22 @@ impl Client {
             .await
     }
 
+    pub async fn update_project_owner(
+        &self,
+        project_id: &str,
+        user_id: String,
+    ) -> Result<ProjectResponse> {
+        self.inner
+            .put_json(
+                format!("/projects/{project_id}"),
+                Some(ProjectUpdateRequest {
+                    user_id: Some(user_id),
+                    ..Default::default()
+                }),
+            )
+            .await
+    }
+
     pub async fn feature_flag(&self, entity: &str, flag: &str, set: bool) -> Result<()> {
         let resp = if set {
             self.inner

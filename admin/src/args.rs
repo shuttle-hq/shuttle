@@ -33,6 +33,29 @@ pub enum Command {
         json: String,
     },
 
+    GetProjectConfig {
+        /// Project to get config for
+        #[arg(long, visible_alias = "id")]
+        project_id: String,
+    },
+
+    /// Upgrade project to use a dedicated load balancer.
+    UpgradeProjectToLb {
+        /// Project to upgrade to ALB
+        #[arg(long, visible_alias = "id")]
+        project_id: String,
+    },
+
+    /// Update replica count for a project with a dedicated load balancer.
+    UpdateLbProjectReplicas {
+        /// Project to update
+        #[arg(long, visible_alias = "id")]
+        project_id: String,
+        /// Replicas to set for the given project
+        #[arg(long)]
+        replicas: u8,
+    },
+
     /// Renew all old custom domain certificates
     RenewCerts,
 

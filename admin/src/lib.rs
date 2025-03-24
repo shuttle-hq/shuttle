@@ -45,6 +45,24 @@ pub async fn run(args: Args) {
                 .unwrap();
             println!("{res:?}");
         }
+        Command::UpgradeProjectToLb { project_id } => {
+            let res = client.upgrade_project_to_lb(&project_id).await.unwrap();
+            println!("{res:#?}");
+        }
+        Command::UpdateLbProjectReplicas {
+            project_id,
+            replicas,
+        } => {
+            let res = client
+                .update_lb_project_replicas(&project_id, replicas)
+                .await
+                .unwrap();
+            println!("{res:#?}");
+        }
+        Command::GetProjectConfig { project_id } => {
+            let res = client.get_project_config(&project_id).await.unwrap();
+            println!("{res:#?}");
+        }
         Command::AddFeatureFlag { entity, flag } => {
             client.feature_flag(&entity, &flag, true).await.unwrap();
             println!("Added flag {flag} for {entity}");

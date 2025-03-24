@@ -46,6 +46,31 @@ impl Client {
             .await
     }
 
+    pub async fn get_project_config(&self, project_id: &str) -> Result<Value> {
+        self.inner
+            .get_json(format!("/admin/projects/{project_id}"))
+            .await
+    }
+
+    pub async fn upgrade_project_to_lb(&self, project_id: &str) -> Result<Value> {
+        self.inner
+            .put_json(format!("/admin/projects/{project_id}"), Option::<()>::None)
+            .await
+    }
+
+    pub async fn update_lb_project_replicas(
+        &self,
+        project_id: &str,
+        replicas: u8,
+    ) -> Result<Value> {
+        self.inner
+            .put_json(
+                format!("/admin/projects/{project_id}/{replicas}"),
+                Option::<()>::None,
+            )
+            .await
+    }
+
     pub async fn update_project_owner(
         &self,
         project_id: &str,

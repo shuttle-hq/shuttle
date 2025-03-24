@@ -1,5 +1,5 @@
 use clap::{Parser, Subcommand};
-use shuttle_common::constants::SHUTTLE_API_URL;
+use shuttle_common::{constants::SHUTTLE_API_URL, models::user::AccountTier};
 
 #[derive(Parser, Debug)]
 pub struct Args {
@@ -71,6 +71,11 @@ pub enum Command {
     /// Delete a user
     DeleteUser {
         user_id: String,
+    },
+
+    SetAccountTier {
+        user_id: String,
+        tier: AccountTier,
     },
 
     /// Get info about everything in a user account

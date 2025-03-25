@@ -137,4 +137,13 @@ impl Client {
             .delete_json(format!("/admin/users/{user_id}"))
             .await
     }
+
+    pub async fn set_user_tier(&self, user_id: &str, tier: &str) -> Result<String> {
+        self.inner
+            .put_json(
+                format!("/admin/users/{user_id}/tier/{tier}"),
+                Option::<()>::None,
+            )
+            .await
+    }
 }

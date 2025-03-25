@@ -93,6 +93,13 @@ pub async fn run(args: Args) {
             let msg = client.delete_user(&user_id).await.unwrap();
             println!("{msg}");
         }
+        Command::SetAccountTier { user_id, tier } => {
+            client
+                .set_user_tier(&user_id, &tier.to_string())
+                .await
+                .unwrap();
+            println!("Set {user_id} to {tier}");
+        }
         Command::Everything { query } => {
             let v = client.get_user_everything(&query).await.unwrap();
             println!("{}", serde_json::to_string_pretty(&v).unwrap());

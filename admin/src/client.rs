@@ -138,12 +138,14 @@ impl Client {
             .await
     }
 
-    pub async fn set_user_tier(&self, user_id: &str, tier: &str) -> Result<String> {
+    pub async fn set_user_tier(&self, user_id: &str, tier: &str) -> Result<()> {
         self.inner
-            .put_json(
+            .put(
                 format!("/admin/users/{user_id}/tier/{tier}"),
                 Option::<()>::None,
             )
-            .await
+            .await?;
+
+        Ok(())
     }
 }

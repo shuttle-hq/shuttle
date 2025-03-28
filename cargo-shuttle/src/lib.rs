@@ -826,7 +826,7 @@ impl Shuttle {
             )
         });
         let _ = webbrowser::open(&url);
-        eprintln!("Complete login in Shuttle Console to authenticate CLI.");
+        eprintln!("Complete login in Shuttle Console to authenticate the Shuttle CLI.");
         eprintln!("If your browser did not automatically open, go to {url}");
         eprintln!();
         eprintln!("{}", format!("Token: {token}").bold());

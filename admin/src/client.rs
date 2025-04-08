@@ -58,15 +58,15 @@ impl Client {
             .await
     }
 
-    pub async fn update_lb_project_replicas(
+    pub async fn update_project_scale(
         &self,
         project_id: &str,
-        replicas: u8,
+        update_config: &Value,
     ) -> Result<Value> {
         self.inner
             .put_json(
-                format!("/admin/projects/{project_id}/{replicas}"),
-                Option::<()>::None,
+                format!("/admin/projects/{project_id}/scale"),
+                Some(update_config),
             )
             .await
     }

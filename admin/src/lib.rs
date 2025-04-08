@@ -31,11 +31,7 @@ pub async fn run(args: Args) {
             let certs = client.get_old_certificates().await.unwrap();
             eprintln!("Starting renewals of {} certs in 5 seconds...", certs.len());
             tokio::time::sleep(tokio::time::Duration::from_millis(5000)).await;
-            for (cert_id, subject, acm) in certs {
-                if acm.is_some() {
-                    println!("Skipping {cert_id} {subject}, is ACM");
-                    continue;
-                }
+            for (cert_id, subject, _) in certs {
                 println!("--> {cert_id} {subject}");
                 println!("{:?}", client.renew_certificate(&cert_id).await);
                 // prevent api rate limiting

@@ -17,7 +17,7 @@ impl Client {
         }
     }
 
-    pub async fn get_old_certificates(&self) -> Result<Vec<(String, String)>> {
+    pub async fn get_old_certificates(&self) -> Result<Vec<(String, String, Option<String>)>> {
         self.inner.get_json("/admin/certificates").await
     }
 

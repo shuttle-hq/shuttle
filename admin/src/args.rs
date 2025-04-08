@@ -57,7 +57,7 @@ pub enum Command {
         /// Compute tier to set for the given project
         #[arg(long, visible_alias = "tier")]
         compute_tier: Option<ComputeTier>,
-        /// Compute tier to set for the given project
+        /// Replica count to set for the given project
         #[arg(long)]
         replicas: Option<u8>,
     },

@@ -40,7 +40,7 @@ dirs = "6.0.0"
 dunce = "1.0.4"
 futures = "0.3.27"
 git2 = { version = "0.20.0", default-features = false }
-gix = { version = "0.70.0", default-features = false }
+gix = { version = "0.71.0", default-features = false }
 globset = "0.4.13"
 headers = "0.4.0"
 http = "1.2.0"

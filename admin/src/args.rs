@@ -1,5 +1,8 @@
 use clap::{Parser, Subcommand};
-use shuttle_common::{constants::SHUTTLE_API_URL, models::user::AccountTier};
+use shuttle_common::{
+    constants::SHUTTLE_API_URL,
+    models::{project::ComputeTier, user::AccountTier},
+};
 
 #[derive(Parser, Debug)]
 pub struct Args {
@@ -46,14 +49,17 @@ pub enum Command {
         project_id: String,
     },
 
-    /// Update replica count for a project with a dedicated load balancer.
-    UpdateLbProjectReplicas {
+    /// Update compute tier for a given project.
+    UpdateProjectScale {
         /// Project to update
         #[arg(long, visible_alias = "id")]
         project_id: String,
-        /// Replicas to set for the given project
+        /// Compute tier to set for the given project
+        #[arg(long, visible_alias = "tier")]
+        compute_tier: Option<ComputeTier>,
+        /// Replica count to set for the given project
         #[arg(long)]
-        replicas: u8,
+        replicas: Option<u8>,
     },
 
     /// Renew all old custom domain certificates

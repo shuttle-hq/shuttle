@@ -52,12 +52,15 @@ pub async fn run(args: Args) {
             let res = client.upgrade_project_to_lb(&project_id).await.unwrap();
             println!("{res:#?}");
         }
-        Command::UpdateLbProjectReplicas {
+        Command::UpdateProjectScale {
             project_id,
+            compute_tier,
             replicas,
         } => {
+            let update_config =
+                serde_json::json!({"compute_tier": compute_tier, "replicas": replicas});
             let res = client
-                .update_lb_project_replicas(&project_id, replicas)
+                .update_project_scale(&project_id, &update_config)
                 .await
                 .unwrap();
             println!("{res:#?}");

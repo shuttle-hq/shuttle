@@ -30,6 +30,7 @@ async fn shuttle_run(working_directory: &str, external: bool) -> String {
     let runner = Shuttle::new(cargo_shuttle::Binary::Shuttle).unwrap().run(
         ShuttleArgs {
             api_url: Some("http://shuttle.invalid:80".to_string()),
+            admin: false,
             project_args: ProjectArgs {
                 working_directory: working_directory.clone(),
                 name_or_id: None,

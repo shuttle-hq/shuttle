@@ -14,6 +14,7 @@ async fn shuttle_command(cmd: Command, working_directory: &str) -> anyhow::Resul
         .run(
             ShuttleArgs {
                 api_url: Some("http://shuttle.invalid:80".to_string()),
+                admin: false,
                 project_args: ProjectArgs {
                     working_directory,
                     name_or_id: None,

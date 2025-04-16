@@ -499,8 +499,9 @@ pub fn init_tracing_subscriber(
 
     if endpoint.is_none() {
         tracing::warn!(
-            "No value set for `OTEL_EXPORTER_OTLP_ENDPOINT` env var, \
-            declining to attach OTLP exporter to default tracing subscriber"
+            "No value set for `{}` env var, \
+            declining to attach OTLP exporter to default tracing subscriber",
+            OTEL_EXPORTER_OTLP_ENDPOINT,
         );
     }
 

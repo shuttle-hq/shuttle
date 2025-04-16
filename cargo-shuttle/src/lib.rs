@@ -156,7 +156,10 @@ impl Shuttle {
             // TODO: refactor so that beta local run does not need to know project id / always uses crate name ???
             matches!(args.cmd, Command::Run(..))
         ) {
-            if let Some(ref url) = args.api_url {
+            let api_url = args
+                .api_url
+                .map(|u| if args.admin { format!("{u}/admin") } else { u });
+            if let Some(ref url) = api_url {
                 if url != SHUTTLE_API_URL {
                     eprintln!(
                         "{}",
@@ -167,7 +170,7 @@ impl Shuttle {
                     eprintln!("WARNING: API URL is probably incorrect. Ends with '/': {url}");
                 }
             }
-            self.ctx.set_api_url(args.api_url);
+            self.ctx.set_api_url(api_url);
 
             let client = ShuttleApiClient::new(
                 self.ctx.api_url(),

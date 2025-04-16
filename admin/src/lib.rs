@@ -2,8 +2,6 @@ pub mod args;
 pub mod client;
 pub mod config;
 
-use tracing::trace;
-
 use crate::{
     args::{Args, Command},
     client::Client,
@@ -11,10 +9,14 @@ use crate::{
 };
 
 pub async fn run(args: Args) {
-    trace!(?args, "starting with args");
+    tracing::trace!(?args, "starting with args");
 
     let api_key = get_api_key();
-    let client = Client::new(args.api_url.clone(), api_key, args.client_timeout);
+    let client = Client::new(
+        format!("{}/admin", args.api_url),
+        api_key,
+        args.client_timeout,
+    );
 
     match args.command {
         Command::ChangeProjectOwner {

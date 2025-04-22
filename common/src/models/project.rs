@@ -13,6 +13,7 @@ use super::deployment::DeploymentState;
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub struct ProjectCreateRequest {
+    #[cfg_attr(feature = "utoipa", schema(pattern = "^[a-zA-Z0-9-]{1,32}"))]
     pub name: String,
 }
 

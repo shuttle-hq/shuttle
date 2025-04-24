@@ -136,11 +136,11 @@ _install_binary() {
 
 _install_rust_and_cargo() {
   while ! command -v cargo &>/dev/null; do
-    read -r -p "Do you wish to attempt to install Rust and Cargo via rustup? [Y/N] " yn </dev/tty
+    read -r -p "Install Rust and Cargo via rustup? [Y/n] " yn </dev/tty
     case $yn in
-    [Yy]*)
-      curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s
-      source "$HOME/.cargo/env"
+    [Yy]*|"")
+      curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+      source "$HOME/.cargo/env" # TODO: this only affects this script's env. Print hint to do this manually after installation for the user's shell
       ;;
     [Nn]*) exit ;;
     *) echo "Please answer yes or no." ;;
@@ -166,23 +166,23 @@ _install_default() {
     if ! command -v rustup &>/dev/null; then
       _install_rust_and_cargo
     else
-      echo "rustup was found, but cargo wasn't. Something is up with your install"
+      echo "rustup was found, but cargo wasn't. Something is up with your Rust installation."
       exit 1
     fi
   fi
 
   while true; do
-    read -r -p "Do you wish to attempt to install the pre-built binary? [Y/N] " yn </dev/tty
+    read -r -p "Install the pre-built binary? [Y/n] " yn </dev/tty
     case $yn in
-    [Yy]*)
+    [Yy]*|"")
       echo "Installing pre-built binary..."
       _install_binary
       break
       ;;
     [Nn]*)
-      read -r -p "Do you wish to attempt an install with cargo? [Y/N] " yn </dev/tty
+      read -r -p "Install from source with cargo? [Y/n] " yn </dev/tty
       case $yn in
-      [Yy]*)
+      [Yy]*|"")
         _install_with_cargo
         break
         ;;

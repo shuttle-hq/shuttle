@@ -17,33 +17,30 @@ Please file an issue if you encounter any problems!
     $TempDir = $Env:TEMP
 
     if (!(Get-Command -CommandType Application -ErrorAction SilentlyContinue cargo.exe)) {
-        if ($Arch -in "AMD64", "x86") {
-			Write-Host "Could not find cargo.exe, Rust may not be installed" -ForegroundColor Red
-			$Confirm = Read-Host -Prompt "Would you like to install Rust via Rustup? [y/N]"
-			if ($Confirm -inotin "y", "yes") {
-				Write-Host "Skipping rustup install, cargo-shuttle not installed"
-				return
-			}
-			$RustupUrl = if ($Arch -eq "AMD64") { "https://win.rustup.rs/x86_64" } else { "https://win.rustup.rs/i686" }
-			Invoke-WebRequest $RustupUrl -OutFile "$TempDir\rustup.exe"
-			& "$TempDir\rustup.exe" toolchain install stable
-			if ($?) {
-				Remove-Item -ErrorAction SilentlyContinue "$TempDir\rustup.exe"
-				Write-Host "Rust installed via Rustup, please re-run this script, you may need reopen your terminal" -ForegroundColor Green
-				return
-			}
-			else {
-				Remove-Item -ErrorAction SilentlyContinue "$TempDir\rustup.exe"
-				Write-Host "Rust install via Rustup failed, please install Rust manually: https://rustup.rs/" -ForegroundColor Red
-				return
-			}
-		}
-		else {
-			Write-Host "Could not find cargo.exe, Rust may not be installed." -ForegroundColor Red
+        Write-Host "Could not find cargo.exe, Rust may not be installed." -ForegroundColor Red
+        if ($Arch -inotin "AMD64", "x86") {
 			Write-Host "Rustup is only provided for x86 and x86_64, not $Arch" -ForegroundColor Red
 			Write-Host "Please install Rust manually, more info at: https://rust-lang.github.io/rustup/installation/other.html" -ForegroundColor Red
 			return
 		}
+        $Confirm = Read-Host -Prompt "Would you like to install Rust via Rustup? [Y/n]"
+        if ($Confirm -inotin "y", "Y", "yes", "") {
+            Write-Host "Skipping rustup install, cargo-shuttle not installed"
+            return
+        }
+        $RustupUrl = if ($Arch -eq "AMD64") { "https://win.rustup.rs/x86_64" } else { "https://win.rustup.rs/i686" }
+        Invoke-WebRequest $RustupUrl -OutFile "$TempDir\rustup.exe"
+        & "$TempDir\rustup.exe" toolchain install stable
+        if ($?) {
+            Remove-Item -ErrorAction SilentlyContinue "$TempDir\rustup.exe"
+            Write-Host "Rust installed via Rustup, please re-run this script, you may need reopen your terminal" -ForegroundColor Green
+            return
+        }
+        else {
+            Remove-Item -ErrorAction SilentlyContinue "$TempDir\rustup.exe"
+            Write-Host "Rust install via Rustup failed, please install Rust manually: https://rustup.rs/" -ForegroundColor Red
+            return
+        }
     }
 
     if (Get-Command -CommandType Application -ErrorAction SilentlyContinue cargo-binstall.exe) {

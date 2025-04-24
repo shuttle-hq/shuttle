@@ -6,6 +6,10 @@ const fn default_betterstack_host() -> Cow<'static, str> {
     Cow::Borrowed("in-otel.logs.betterstack.com")
 }
 
+const fn default_logfire_host() -> Cow<'static, str> {
+    Cow::Borrowed("logfire-api.pydantic.dev")
+}
+
 /// Status of a telemetry export configuration for an external sink
 #[derive(Eq, Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
@@ -23,6 +27,7 @@ pub struct TelemetryConfigResponse {
     betterstack: Option<TelemetrySinkStatus>,
     datadog: Option<TelemetrySinkStatus>,
     grafana_cloud: Option<TelemetrySinkStatus>,
+    logfire: Option<TelemetrySinkStatus>,
 }
 
 impl From<Vec<TelemetrySinkConfig>> for TelemetryConfigResponse {
@@ -40,6 +45,9 @@ impl From<Vec<TelemetrySinkConfig>> for TelemetryConfigResponse {
                 }
                 TelemetrySinkConfig::GrafanaCloud(_) => {
                     instance.grafana_cloud = Some(TelemetrySinkStatus { enabled: true })
+                }
+                TelemetrySinkConfig::Logfire(_) => {
+                    instance.logfire = Some(TelemetrySinkStatus { enabled: true })
                 }
             }
         }
@@ -83,6 +91,9 @@ pub enum TelemetrySinkConfig {
 
     /// [Grafana Cloud](https://grafana.com/docs/grafana-cloud/send-data/otlp/)
     GrafanaCloud(GrafanaCloudConfig),
+
+    /// [Logfire](https://logfire.pydantic.dev/docs/how-to-guides/alternative-clients/)
+    Logfire(LogfireConfig),
 
     /// Internal Debugging
     #[doc(hidden)]
@@ -161,6 +172,26 @@ impl Default for GrafanaCloudConfig {
     }
 }
 
+#[derive(Eq, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "integration-tests", derive(Debug))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[typeshare::typeshare]
+pub struct LogfireConfig {
+    #[serde(default = "default_logfire_host")]
+    pub endpoint: Cow<'static, str>,
+    pub write_token: String,
+}
+
+#[cfg(any(test, feature = "integration-tests"))]
+impl Default for LogfireConfig {
+    fn default() -> Self {
+        Self {
+            endpoint: default_logfire_host(),
+            write_token: "some-write-token".into(),
+        }
+    }
+}
+
 #[cfg(feature = "integration-tests")]
 impl From<BetterstackConfig> for TelemetrySinkConfig {
     fn from(value: BetterstackConfig) -> Self {
@@ -179,6 +210,13 @@ impl From<DatadogConfig> for TelemetrySinkConfig {
 impl From<GrafanaCloudConfig> for TelemetrySinkConfig {
     fn from(value: GrafanaCloudConfig) -> Self {
         TelemetrySinkConfig::GrafanaCloud(value)
+    }
+}
+
+#[cfg(feature = "integration-tests")]
+impl From<LogfireConfig> for TelemetrySinkConfig {
+    fn from(value: LogfireConfig) -> Self {
+        TelemetrySinkConfig::Logfire(value)
     }
 }
 
@@ -214,6 +252,15 @@ impl std::str::FromStr for TelemetrySinkConfig {
                         "cannot deserialize config as valid GrafanaCloud configuration",
                     )
                 }))
+            .or(serde_json::from_str::<LogfireConfig>(config)
+                .map(Self::from)
+                .inspect_err(|error| {
+                    tracing::debug!(
+                        %config,
+                        %error,
+                        "cannot deserialize config as valid Logfire configuration",
+                    )
+                }))
             .map_err(|_| {
                 <serde_json::Error as serde::de::Error>::custom(format!(
                     "configuration does not match any known external telemetry sink: {}",
@@ -246,6 +293,10 @@ mod tests {
                         sink.as_db_type()
                     );
                 }
+                sink @ TelemetrySinkConfig::Logfire(_) => {
+                    assert_eq!("logfire", sink.as_ref());
+                    assert_eq!("project::telemetry::logfire::config", sink.as_db_type());
+                }
                 sink @ TelemetrySinkConfig::Debug(_) => {
                     assert_eq!("debug", sink.as_ref());
                     assert_eq!("project::telemetry::debug::config", sink.as_db_type());
@@ -273,6 +324,13 @@ mod tests {
                     assert_eq!("grafana_cloud", discriminant.as_ref());
                     assert_eq!(
                         r#""grafana_cloud""#,
+                        serde_json::to_string(&discriminant).unwrap()
+                    );
+                }
+                discriminant @ TelemetrySinkConfigDiscriminants::Logfire => {
+                    assert_eq!("logfire", discriminant.as_ref());
+                    assert_eq!(
+                        r#""logfire""#,
                         serde_json::to_string(&discriminant).unwrap()
                     );
                 }

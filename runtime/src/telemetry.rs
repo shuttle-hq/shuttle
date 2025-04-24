@@ -18,7 +18,7 @@ use opentelemetry_sdk::{
     propagation::TraceContextPropagator,
     resource::{Resource, ResourceDetector, TelemetryResourceDetector},
     runtime,
-    trace::TracerProvider,
+    trace::{Tracer, TracerProvider},
 };
 use opentelemetry_semantic_conventions::{
     attribute::{CODE_FILEPATH, CODE_LINENO, SERVICE_NAME, SERVICE_VERSION},
@@ -32,10 +32,9 @@ use tracing_core::{
 use tracing_log::AsLog;
 use tracing_opentelemetry::{MetricsLayer, OpenTelemetryLayer, OtelData};
 use tracing_subscriber::{
-    layer::{Context, SubscriberExt},
+    layer::{Context, Layered},
     registry::LookupSpan,
-    util::SubscriberInitExt,
-    EnvFilter, Layer,
+    Layer, Registry,
 };
 
 #[derive(Clone, Debug)]
@@ -361,7 +360,7 @@ pub(crate) fn log_level_as_severity(level: log::Level) -> Severity {
 }
 
 // Create a Resource that captures information about the entity for which telemetry is recorded.
-pub fn resource(crate_name: &'static str, package_version: &'static str) -> Resource {
+fn resource(crate_name: &'static str, package_version: &'static str) -> Resource {
     let project_name = std::env::var("SHUTTLE_PROJECT_NAME").ok();
 
     // `TelemetryResourceDetector::detect()` automatically provides:
@@ -395,7 +394,7 @@ pub fn resource(crate_name: &'static str, package_version: &'static str) -> Reso
         )))
 }
 
-pub fn init_log_subscriber(endpoint: &Option<String>, resource: Resource) -> LoggerProvider {
+fn init_log_subscriber(endpoint: &Option<String>, resource: Resource) -> LoggerProvider {
     let mut builder = LoggerProvider::builder().with_resource(resource);
 
     if let Some(endpoint) = endpoint {
@@ -412,7 +411,7 @@ pub fn init_log_subscriber(endpoint: &Option<String>, resource: Resource) -> Log
 }
 
 // Construct MeterProvider for MetricsLayer
-pub fn init_meter_provider(endpoint: &Option<String>, resource: Resource) -> SdkMeterProvider {
+fn init_meter_provider(endpoint: &Option<String>, resource: Resource) -> SdkMeterProvider {
     let mut builder = MeterProviderBuilder::default().with_resource(resource);
 
     if let Some(endpoint) = endpoint {
@@ -438,7 +437,7 @@ pub fn init_meter_provider(endpoint: &Option<String>, resource: Resource) -> Sdk
 }
 
 // Construct TracerProvider for OpenTelemetryLayer
-pub fn init_tracer_provider(endpoint: &Option<String>, resource: Resource) -> TracerProvider {
+fn init_tracer_provider(endpoint: &Option<String>, resource: Resource) -> TracerProvider {
     // TODO(the-wondersmith): make trace sample rate & strategy configurable
     // let sampler = opentelemetry_sdk::trace::Sampler::ParentBased(Box::new(
     //     opentelemetry_sdk::trace::Sampler::TraceIdRatioBased(1.0),
@@ -465,11 +464,18 @@ pub fn init_tracer_provider(endpoint: &Option<String>, resource: Resource) -> Tr
     provider
 }
 
-// Initialize tracing-subscriber and return ExporterGuard for opentelemetry-related termination processing
-pub fn init_tracing_subscriber(
+// Construct tracing-subscriber layers and return ExporterGuard for opentelemetry-related termination processing
+pub fn otel_tracing_subscriber(
     crate_name: &'static str,
     package_version: &'static str,
-) -> ProviderGuard {
+) -> (
+    Layered<
+        LogCourier<Registry>,
+        Layered<OpenTelemetryLayer<Registry, Tracer>, MetricsLayer<Registry>, Registry>,
+        Registry,
+    >,
+    ProviderGuard,
+) {
     global::set_text_map_propagator(TraceContextPropagator::new());
 
     let resource = resource(crate_name, package_version);
@@ -481,21 +487,13 @@ pub fn init_tracing_subscriber(
     let meter = init_meter_provider(&endpoint, resource.clone());
     let logger = init_log_subscriber(&endpoint, resource);
 
-    let level_filter =
-        std::env::var("RUST_LOG").unwrap_or_else(|_| format!("info,{}=debug", crate_name));
-
-    let layers = EnvFilter::from(&level_filter)
-        .and_then(MetricsLayer::new(meter.clone()))
+    let layers: Layered<
+        LogCourier<Registry>,
+        Layered<OpenTelemetryLayer<Registry, Tracer>, MetricsLayer<Registry>, Registry>,
+        Registry,
+    > = MetricsLayer::new(meter.clone())
         .and_then(OpenTelemetryLayer::new(tracer.tracer("shuttle-telemetry")))
-        .and_then(
-            tracing_subscriber::fmt::layer()
-                .compact()
-                .with_level(true)
-                .with_target(true),
-        )
         .and_then(LogCourier::new(logger.logger("shuttle-telemetry")));
-
-    tracing_subscriber::registry().with(layers).init();
 
     if endpoint.is_none() {
         tracing::warn!(
@@ -505,9 +503,12 @@ pub fn init_tracing_subscriber(
         );
     }
 
-    ProviderGuard {
-        logger,
-        tracer,
-        meter,
-    }
+    (
+        layers,
+        ProviderGuard {
+            logger,
+            tracer,
+            meter,
+        },
+    )
 }

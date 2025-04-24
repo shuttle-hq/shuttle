@@ -259,7 +259,7 @@ fn edit_shuttle_toml(path: &Path, set_name: Option<&str>) -> Result<()> {
 
         doc.remove("name");
 
-        if doc.len() == 0 {
+        if doc.is_empty() {
             // if "name" was the only property in the doc, delete the file
             let _ = std::fs::remove_file(&path);
 

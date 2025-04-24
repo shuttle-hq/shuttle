@@ -464,18 +464,16 @@ fn init_tracer_provider(endpoint: &Option<String>, resource: Resource) -> Tracer
     provider
 }
 
+pub type OtelLayerType = Layered<
+    LogCourier<Registry>,
+    Layered<OpenTelemetryLayer<Registry, Tracer>, MetricsLayer<Registry>, Registry>,
+    Registry,
+>;
 // Construct tracing-subscriber layers and return ExporterGuard for opentelemetry-related termination processing
 pub fn otel_tracing_subscriber(
     crate_name: &'static str,
     package_version: &'static str,
-) -> (
-    Layered<
-        LogCourier<Registry>,
-        Layered<OpenTelemetryLayer<Registry, Tracer>, MetricsLayer<Registry>, Registry>,
-        Registry,
-    >,
-    ProviderGuard,
-) {
+) -> (OtelLayerType, ProviderGuard) {
     global::set_text_map_propagator(TraceContextPropagator::new());
 
     let resource = resource(crate_name, package_version);
@@ -487,11 +485,7 @@ pub fn otel_tracing_subscriber(
     let meter = init_meter_provider(&endpoint, resource.clone());
     let logger = init_log_subscriber(&endpoint, resource);
 
-    let layers: Layered<
-        LogCourier<Registry>,
-        Layered<OpenTelemetryLayer<Registry, Tracer>, MetricsLayer<Registry>, Registry>,
-        Registry,
-    > = MetricsLayer::new(meter.clone())
+    let layers: OtelLayerType = MetricsLayer::new(meter.clone())
         .and_then(OpenTelemetryLayer::new(tracer.tracer("shuttle-telemetry")))
         .and_then(LogCourier::new(logger.logger("shuttle-telemetry")));
 

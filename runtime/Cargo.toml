@@ -62,7 +62,7 @@ setup-tracing = [
     "tracing-subscriber/std",
     "tracing-subscriber/tracing-log",
 ]
-setup-otel-exporter = [
+otel-exporter = [
     "setup-tracing",
     "dep:log",
     "dep:opentelemetry",
@@ -78,3 +78,4 @@ setup-otel-exporter = [
     "tracing-subscriber/tracing",
     "tracing-subscriber/tracing-serde",
 ]
+setup-otel-exporter = ["otel-exporter"]

@@ -158,6 +158,11 @@ export interface LogItem {
 	line: string;
 }
 
+export interface LogfireConfig {
+	endpoint: string;
+	write_token: string;
+}
+
 export interface LogsResponse {
 	logs: LogItem[];
 }
@@ -320,6 +325,7 @@ export interface TelemetryConfigResponse {
 	betterstack?: TelemetrySinkStatus;
 	datadog?: TelemetrySinkStatus;
 	grafana_cloud?: TelemetrySinkStatus;
+	logfire?: TelemetrySinkStatus;
 }
 
 export interface UploadArchiveResponse {
@@ -365,5 +371,7 @@ export type TelemetrySinkConfig =
 	/** [Datadog](https://docs.datadoghq.com/opentelemetry/collector_exporter/otel_collector_datadog_exporter) */
 	| { type: "datadog", content: DatadogConfig }
 	/** [Grafana Cloud](https://grafana.com/docs/grafana-cloud/send-data/otlp/) */
-	| { type: "grafana_cloud", content: GrafanaCloudConfig };
+	| { type: "grafana_cloud", content: GrafanaCloudConfig }
+	/** [Logfire](https://logfire.pydantic.dev/docs/how-to-guides/alternative-clients/) */
+	| { type: "logfire", content: LogfireConfig };
 

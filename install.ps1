@@ -87,6 +87,25 @@ Please open an issue if you encounter any problems!
         Send-Telemetry
     }
 
+    $RepoUrl = "https://github.com/shuttle-hq/shuttle"
+    (Invoke-WebRequest "$RepoUrl/releases/latest" -Headers @{ "Accept" = "application/json" }).Content -match '"tag_name":"([^"]*)"' | Out-Null
+    if (!$?) { return Exit-Failure "check-latest-release" }
+    $LatestRelease = $Matches.1
+    if ($LatestRelease -eq $null) { return Exit-Failure "parse-latest-version" }
+
+    if (Get-Command -CommandType Application -ErrorAction SilentlyContinue cargo-shuttle.exe) {
+        $NEW_INSTALL = "false"
+        $LatestReleaseStripped = $LatestRelease -replace '^v', ''
+        $CurrentVersion = & cargo-shuttle.exe -V -replace '^cargo-shuttle ', ''
+        if ($LatestReleaseStripped -eq $CurrentVersion) {
+            Write-Host "Shuttle CLI is already at the latest version!" -ForegroundColor Green
+            return
+        }
+        else {
+            Write-Host "Updating Shuttle CLI to $LATEST_VERSION"
+        }
+    }
+
     $Arch = [Environment]::GetEnvironmentVariable("PROCESSOR_ARCHITECTURE", [EnvironmentVariableTarget]::Machine)
     $TempDir = $Env:TEMP
 
@@ -126,18 +145,10 @@ Please open an issue if you encounter any problems!
         }
         return Exit-Success
     }
-    else {
-        Write-Host "cargo-binstall not found, trying manual binary download" -ForegroundColor Red
-    }
-
-    $RepoUrl = "https://github.com/shuttle-hq/shuttle"
-    $CargoHome = if ($null -ne $Env:CARGO_HOME) { $Env:CARGO_HOME } else { "$HOME\.cargo" }
+    Write-Host "cargo-binstall not found, trying manual binary download" -ForegroundColor Red
 
     if (($Arch -eq "AMD64") -and (Get-Command -CommandType Application -ErrorAction SilentlyContinue tar.exe)) {
         $INSTALL_METHOD = "binary-download"
-        (Invoke-WebRequest "$RepoUrl/releases/latest" -Headers @{ "Accept" = "application/json" }).Content -match '"tag_name":"([^"]*)"' | Out-Null
-        if (!$?) { return Exit-Failure "check-latest-release" }
-        $LatestRelease = $Matches.1
         $BinaryUrl = "$RepoUrl/releases/download/$LatestRelease/cargo-shuttle-$LatestRelease-x86_64-pc-windows-msvc.tar.gz"
         Invoke-WebRequest $BinaryUrl -OutFile "$TempDir\cargo-shuttle.tar.gz"
         if (!$?) { return Exit-Failure "download-binary" }
@@ -145,6 +156,7 @@ Please open an issue if you encounter any problems!
         if (!$?) { return Exit-Failure "temp-folder" }
         tar.exe -xzf "$TempDir\cargo-shuttle.tar.gz" -C "$TempDir\cargo-shuttle"
         if (!$?) { return Exit-Failure "tar-extract-binary" }
+        $CargoHome = if ($null -ne $Env:CARGO_HOME) { $Env:CARGO_HOME } else { "$HOME\.cargo" }
         Move-Item -Force "$TempDir\cargo-shuttle\cargo-shuttle-x86_64-pc-windows-msvc-$LatestRelease\cargo-shuttle.exe" "$CargoHome\bin\cargo-shuttle.exe"
         if (!$?) { return Exit-Failure "move-binary" }
         Move-Item -Force "$TempDir\cargo-shuttle\cargo-shuttle-x86_64-pc-windows-msvc-$LatestRelease\shuttle.exe" "$CargoHome\bin\shuttle.exe"

@@ -105,7 +105,7 @@ Please open an issue if you encounter any problems!
         $RustupUrl = if ($Arch -eq "AMD64") { "https://win.rustup.rs/x86_64" } else { "https://win.rustup.rs/i686" }
         Invoke-WebRequest $RustupUrl -OutFile "$TempDir\rustup-init.exe"
         & "$TempDir\rustup-init.exe" # toolchain install stable
-        # if ($LASTEXITCODE -ne 0) { return Exit-Failure "get-rustup" }
+        # if ($? -ne $true) { return Exit-Failure "get-rustup" }
         if ($?) {
             Remove-Item -ErrorAction SilentlyContinue "$TempDir\rustup.exe"
             Write-Host "Rust installed via Rustup, please re-run this script, you may need reopen your terminal" -ForegroundColor Green
@@ -130,7 +130,7 @@ Please open an issue if you encounter any problems!
         }
     }
     else {
-        Write-Host "Cargo binstall not found, trying manual binary download" -ForegroundColor Red
+        Write-Host "cargo-binstall not found, trying manual binary download" -ForegroundColor Red
     }
 
     $RepoUrl = "https://github.com/shuttle-hq/shuttle"
@@ -138,19 +138,19 @@ Please open an issue if you encounter any problems!
 
     if (($Arch -eq "AMD64") -and (Get-Command -CommandType Application -ErrorAction SilentlyContinue tar.exe)) {
         (Invoke-WebRequest "$RepoUrl/releases/latest" -Headers @{ "Accept" = "application/json" }).Content -match '"tag_name":"([^"]*)"' | Out-Null
-        if ($LASTEXITCODE -ne 0) { return Exit-Failure "check-latest-release" }
+        if ($? -ne $true) { return Exit-Failure "check-latest-release" }
         $LatestRelease = $Matches.1
         $BinaryUrl = "$RepoUrl/releases/download/$LatestRelease/cargo-shuttle-$LatestRelease-x86_64-pc-windows-msvc.tar.gz"
         Invoke-WebRequest $BinaryUrl -OutFile "$TempDir\cargo-shuttle.tar.gz"
-        if ($LASTEXITCODE -ne 0) { return Exit-Failure "download-binary" }
+        if ($? -ne $true) { return Exit-Failure "download-binary" }
         New-Item -ItemType Directory -Force "$TempDir\cargo-shuttle"
-        if ($LASTEXITCODE -ne 0) { return Exit-Failure "temp-folder" }
+        if ($? -ne $true) { return Exit-Failure "temp-folder" }
         tar.exe -xzf "$TempDir\cargo-shuttle.tar.gz" -C "$TempDir\cargo-shuttle"
-        if ($LASTEXITCODE -ne 0) { return Exit-Failure "tar-extract-binary" }
+        if ($? -ne $true) { return Exit-Failure "tar-extract-binary" }
         Move-Item -Force "$TempDir\cargo-shuttle\cargo-shuttle-x86_64-pc-windows-msvc-$LatestRelease\cargo-shuttle.exe" "$CargoHome\bin\cargo-shuttle.exe"
-        if ($LASTEXITCODE -ne 0) { return Exit-Failure "move-binary" }
+        if ($? -ne $true) { return Exit-Failure "move-binary" }
         Move-Item -Force "$TempDir\cargo-shuttle\cargo-shuttle-x86_64-pc-windows-msvc-$LatestRelease\shuttle.exe" "$CargoHome\bin\shuttle.exe"
-        if ($LASTEXITCODE -ne 0) { return Exit-Failure "move-binary" }
+        if ($? -ne $true) { return Exit-Failure "move-binary" }
         Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "$TempDir\cargo-shuttle.tar.gz", "$TempDir\cargo-shuttle"
         return Exit-Success
     }

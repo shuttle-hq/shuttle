@@ -241,7 +241,7 @@ _install_binary() {
   temp_dir=$(mktemp -d)
   [ $? -ne 0 ] && _exit_failure "mktemp"
   pushd "$temp_dir" >/dev/null || _exit_failure "pushd"
-  curl -LO "$REPO_URL/releases/download/$LATEST_VERSION/cargo-shuttle-$LATEST_VERSION-$target.tar.gz" || _exit_failure "curl-download-binary"
+  curl -LO "$REPO_URL/releases/download/$LATEST_VERSION/cargo-shuttle-$LATEST_VERSION-$target.tar.gz" || _exit_failure "download-binary"
   if ! command -v tar &>/dev/null; then
     _exit_failure "tar-not-found"
   fi
@@ -286,7 +286,7 @@ _install_default() {
   if command -v cargo-binstall &>/dev/null; then
     echo "Installing with cargo-binstall"
     INSTALL_METHOD="cargo-binstall"
-    cargo binstall -y --force --locked cargo-shuttle || _exit_failure "cargo-binstall"
+    cargo-binstall -y --force --locked cargo-shuttle || _exit_failure "cargo-binstall"
     return 0
   fi
 

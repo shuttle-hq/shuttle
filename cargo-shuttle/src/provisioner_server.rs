@@ -564,6 +564,7 @@ async fn provision(
                     config: shuttle_resource.config,
                     output: serde_json::to_value(&state.secrets).unwrap(),
                 },
+                ResourceType::Unknown => bail!("request for unknown resource type recieved"),
             };
 
             let table = get_resource_tables(&[response.clone()], "local service", false, true);

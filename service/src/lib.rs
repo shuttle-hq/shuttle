@@ -35,7 +35,7 @@ pub mod error;
 pub trait ResourceInputBuilder: Default {
     /// The input for requesting this resource.
     ///
-    /// If the input is a [`shuttle_common::resource::ProvisionResourceRequest`],
+    /// If the input is a [`shuttle_common::models::resource::ProvisionResourceRequest`],
     /// then the resource will be provisioned and the associated output type will
     /// be put in [`ResourceInputBuilder::Output`].
     type Input: Serialize + DeserializeOwned;

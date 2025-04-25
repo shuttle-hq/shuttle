@@ -35,6 +35,13 @@ pub enum ResourceState {
     Ready,
     Deleting,
     Deleted,
+
+    /// Forward compatibility
+    #[doc(hidden)]
+    #[typeshare(skip)]
+    #[serde(other, skip_serializing)]
+    #[strum(to_string = "[UNKNOWN]")]
+    Unknown,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -92,6 +99,13 @@ pub enum ResourceType {
     #[strum(to_string = "container")]
     #[serde(rename = "container")]
     Container,
+
+    /// Forward compatibility
+    #[doc(hidden)]
+    #[typeshare(skip)]
+    #[serde(other, skip_serializing)]
+    #[strum(to_string = "[UNKNOWN]")]
+    Unknown,
 }
 
 #[cfg(test)]

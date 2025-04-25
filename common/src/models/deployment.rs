@@ -22,7 +22,12 @@ pub enum DeploymentState {
     Stopped,
     Stopping,
     Failed,
-    /// Fallback
+
+    /// Forward compatibility
+    #[doc(hidden)]
+    #[typeshare(skip)]
+    #[serde(other, skip_serializing)]
+    #[strum(to_string = "[UNKNOWN]")]
     Unknown,
 }
 
@@ -125,6 +130,8 @@ pub enum DeploymentRequest {
     // TODO?: Add GitRepo(DeploymentRequestGitRepo)
     /// Use this image directly. Can be used to skip the build step.
     Image(DeploymentRequestImage),
+    //
+    // No Unknown variant: is a Request type and should only be deserialized on backend
 }
 
 #[derive(Default, Deserialize, Serialize)]
@@ -140,14 +147,14 @@ pub struct DeploymentRequestBuildArchive {
     pub build_meta: Option<BuildMeta>,
 }
 
-#[derive(Deserialize, Serialize, Default)]
+#[derive(Deserialize, Serialize)]
 #[serde(tag = "type", content = "content")]
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub enum BuildArgs {
     Rust(BuildArgsRust),
-    #[default]
-    Unknown,
+    //
+    // No Unknown variant: is a Request type and should only be deserialized on backend
 }
 
 #[derive(Deserialize, Serialize)]
@@ -246,6 +253,8 @@ pub enum Environment {
     Local,
     #[strum(serialize = "production")] // Keep this around for a while for backward compat
     Deployment,
+    //
+    // No Unknown variant: is not deserialized in user facing libraries (just FromStr parsed)
 }
 
 #[cfg(test)]

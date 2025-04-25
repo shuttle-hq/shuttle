@@ -63,6 +63,13 @@ pub enum TeamRole {
     Owner,
     Admin,
     Member,
+
+    /// Forward compatibility
+    #[doc(hidden)]
+    #[typeshare(skip)]
+    #[serde(other, skip_serializing)]
+    #[strum(to_string = "[UNKNOWN]")]
+    Unknown,
 }
 
 /// Provide user id to add user.

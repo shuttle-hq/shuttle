@@ -88,6 +88,13 @@ pub enum AccountTier {
     Employee,
     /// Unlimited resources, full API access, admin endpoint access
     Admin,
+
+    /// Forward compatibility
+    #[doc(hidden)]
+    #[typeshare(skip)]
+    #[serde(other, skip_serializing)]
+    #[strum(to_string = "[UNKNOWN]")]
+    Unknown,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -131,4 +138,32 @@ pub struct SubscriptionRequest {
 pub enum SubscriptionType {
     Pro,
     Rds,
+
+    /// Forward compatibility
+    #[doc(hidden)]
+    #[typeshare(skip)]
+    #[serde(other, skip_serializing)]
+    #[strum(to_string = "[UNKNOWN]")]
+    Unknown,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn unknown_deser() {
+        assert_eq!(
+            serde_json::from_str::<AccountTier>("\"basic\"").unwrap(),
+            AccountTier::Basic
+        );
+        assert_eq!(
+            serde_json::from_str::<AccountTier>("\"\"").unwrap(),
+            AccountTier::Unknown
+        );
+        assert_eq!(
+            serde_json::from_str::<AccountTier>("\"hisshiss\"").unwrap(),
+            AccountTier::Unknown
+        );
+        assert!(serde_json::to_string(&AccountTier::Unknown).is_err());
+    }
 }

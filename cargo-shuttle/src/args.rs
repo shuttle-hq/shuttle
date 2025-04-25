@@ -94,6 +94,7 @@ impl ProjectArgs {
     }
 }
 
+#[allow(rustdoc::bare_urls)]
 /// CLI for the Shuttle platform (https://www.shuttle.dev/)
 ///
 /// See the CLI docs for more information: https://docs.shuttle.dev/guides/cli

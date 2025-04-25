@@ -31,7 +31,6 @@ impl From<Vec<TelemetrySinkConfig>> for TelemetryConfigResponse {
 
         for sink in value {
             match sink {
-                TelemetrySinkConfig::Debug(_) => {}
                 TelemetrySinkConfig::Betterstack(_) => {
                     instance.betterstack = Some(TelemetrySinkStatus { enabled: true })
                 }
@@ -41,6 +40,7 @@ impl From<Vec<TelemetrySinkConfig>> for TelemetryConfigResponse {
                 TelemetrySinkConfig::GrafanaCloud(_) => {
                     instance.grafana_cloud = Some(TelemetrySinkStatus { enabled: true })
                 }
+                TelemetrySinkConfig::Debug(_) => {}
             }
         }
 
@@ -89,6 +89,17 @@ pub enum TelemetrySinkConfig {
     #[typeshare(skip)]
     #[strum_discriminants(doc(hidden))]
     Debug(serde_json::Value),
+    //
+    // No Unknown variant: is not deserialized in user facing libraries
+    // (this is what it would look like 💀)
+    //   #[doc(hidden)]
+    //   #[typeshare(skip)]
+    //   #[serde(other, skip_serializing)]
+    //   #[strum(to_string = "[UNKNOWN]")]
+    //   #[strum_discriminants(doc(hidden))]
+    //   #[strum_discriminants(serde(other, skip_serializing))]
+    //   #[strum_discriminants(strum(to_string = "[UNKNOWN]"))]
+    //   Unknown,
 }
 
 impl TelemetrySinkConfig {

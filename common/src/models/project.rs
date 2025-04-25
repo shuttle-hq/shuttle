@@ -105,4 +105,11 @@ pub enum ComputeTier {
     L,
     XL,
     XXL,
+
+    /// Forward compatibility
+    #[doc(hidden)]
+    #[typeshare(skip)]
+    #[serde(other, skip_serializing)]
+    #[strum(to_string = "[UNKNOWN]")]
+    Unknown,
 }

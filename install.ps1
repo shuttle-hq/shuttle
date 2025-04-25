@@ -104,30 +104,27 @@ Please open an issue if you encounter any problems!
         }
         $RustupUrl = if ($Arch -eq "AMD64") { "https://win.rustup.rs/x86_64" } else { "https://win.rustup.rs/i686" }
         Invoke-WebRequest $RustupUrl -OutFile "$TempDir\rustup-init.exe"
-        & "$TempDir\rustup-init.exe" # toolchain install stable
-        # if ($? -ne $true) { return Exit-Failure "get-rustup" }
-        if ($?) {
-            Remove-Item -ErrorAction SilentlyContinue "$TempDir\rustup.exe"
-            Write-Host "Rust installed via Rustup, please re-run this script, you probably need reopen your terminal" -ForegroundColor Green
-            return Exit-Neutral
-        }
-        else {
+        if (!$?) { return Exit-Failure "get-rustup" }
+        & "$TempDir\rustup-init.exe"
+        if (!$?) {
             Remove-Item -ErrorAction SilentlyContinue "$TempDir\rustup.exe"
             Write-Host "Rust install via Rustup failed, please install Rust manually: https://rustup.rs/" -ForegroundColor Red
             return Exit-Failure "install-rust"
         }
+        Remove-Item -ErrorAction SilentlyContinue "$TempDir\rustup.exe"
+        Write-Host "Rust installed via Rustup, please re-run this script, you probably need reopen your terminal" -ForegroundColor Green
+        return Exit-Neutral
     }
 
     if (Get-Command -CommandType Application -ErrorAction SilentlyContinue cargo-binstall.exe) {
         Write-Host "Installing Shuttle CLI using cargo-binstall"
+        $INSTALL_METHOD = "cargo-binstall"
         cargo-binstall.exe -y --force --locked cargo-shuttle
-        if ($?) {
-            return Exit-Success
-        }
-        else {
+        if (!$?) {
             Write-Host "Could not install from release using cargo-binstall" -ForegroundColor Red
             return Exit-Failure "cargo-binstall"
         }
+        return Exit-Success
     }
     else {
         Write-Host "cargo-binstall not found, trying manual binary download" -ForegroundColor Red
@@ -137,20 +134,21 @@ Please open an issue if you encounter any problems!
     $CargoHome = if ($null -ne $Env:CARGO_HOME) { $Env:CARGO_HOME } else { "$HOME\.cargo" }
 
     if (($Arch -eq "AMD64") -and (Get-Command -CommandType Application -ErrorAction SilentlyContinue tar.exe)) {
+        $INSTALL_METHOD = "binary-download"
         (Invoke-WebRequest "$RepoUrl/releases/latest" -Headers @{ "Accept" = "application/json" }).Content -match '"tag_name":"([^"]*)"' | Out-Null
-        if ($? -ne $true) { return Exit-Failure "check-latest-release" }
+        if (!$?) { return Exit-Failure "check-latest-release" }
         $LatestRelease = $Matches.1
         $BinaryUrl = "$RepoUrl/releases/download/$LatestRelease/cargo-shuttle-$LatestRelease-x86_64-pc-windows-msvc.tar.gz"
         Invoke-WebRequest $BinaryUrl -OutFile "$TempDir\cargo-shuttle.tar.gz"
-        if ($? -ne $true) { return Exit-Failure "download-binary" }
+        if (!$?) { return Exit-Failure "download-binary" }
         New-Item -ItemType Directory -Force "$TempDir\cargo-shuttle" | Out-Null
-        if ($? -ne $true) { return Exit-Failure "temp-folder" }
+        if (!$?) { return Exit-Failure "temp-folder" }
         tar.exe -xzf "$TempDir\cargo-shuttle.tar.gz" -C "$TempDir\cargo-shuttle"
-        if ($? -ne $true) { return Exit-Failure "tar-extract-binary" }
+        if (!$?) { return Exit-Failure "tar-extract-binary" }
         Move-Item -Force "$TempDir\cargo-shuttle\cargo-shuttle-x86_64-pc-windows-msvc-$LatestRelease\cargo-shuttle.exe" "$CargoHome\bin\cargo-shuttle.exe"
-        if ($? -ne $true) { return Exit-Failure "move-binary" }
+        if (!$?) { return Exit-Failure "move-binary" }
         Move-Item -Force "$TempDir\cargo-shuttle\cargo-shuttle-x86_64-pc-windows-msvc-$LatestRelease\shuttle.exe" "$CargoHome\bin\shuttle.exe"
-        if ($? -ne $true) { return Exit-Failure "move-binary" }
+        if (!$?) { return Exit-Failure "move-binary" }
         Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "$TempDir\cargo-shuttle.tar.gz", "$TempDir\cargo-shuttle"
         return Exit-Success
     }
@@ -161,16 +159,15 @@ Please open an issue if you encounter any problems!
         Write-Host "Could not find tar.exe, skipping manual binary download (required to extract the release asset)" -ForegroundColor Red
     }
 
-
-    if (Get-Command -CommandType Application -ErrorAction SilentlyContinue cargo.exe) {
-        Write-Host "Installing cargo-shuttle using cargo install (from source)"
-        cargo.exe install --locked cargo-shuttle
-        if ($LASTEXITCODE -ne 0) { return Exit-Failure "cargo-install" }
-        return Exit-Success
-    }
-    else {
+    $INSTALL_METHOD = "cargo"
+    if (!(Get-Command -CommandType Application -ErrorAction SilentlyContinue cargo.exe)) {
         return Exit-Failure "cargo-not-found"
     }
+
+    Write-Host "Installing cargo-shuttle using cargo install (from source)"
+    cargo.exe install --locked cargo-shuttle
+    if (!$?) { return Exit-Failure "cargo-install" }
+    return Exit-Success
 }
 
 

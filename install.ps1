@@ -69,7 +69,7 @@ Please open an issue if you encounter any problems!
         $OUTCOME = "success"
         Send-Telemetry
         Write-Host ""
-        Write-Host "Thanks for installing Shuttle CLI! 🚀" -ForegroundColor Green
+        Write-Host "Thanks for installing Shuttle CLI!" -ForegroundColor Green
     }
 
     function Exit-Neutral {
@@ -108,7 +108,7 @@ Please open an issue if you encounter any problems!
         # if ($? -ne $true) { return Exit-Failure "get-rustup" }
         if ($?) {
             Remove-Item -ErrorAction SilentlyContinue "$TempDir\rustup.exe"
-            Write-Host "Rust installed via Rustup, please re-run this script, you may need reopen your terminal" -ForegroundColor Green
+            Write-Host "Rust installed via Rustup, please re-run this script, you probably need reopen your terminal" -ForegroundColor Green
             return Exit-Neutral
         }
         else {
@@ -143,7 +143,7 @@ Please open an issue if you encounter any problems!
         $BinaryUrl = "$RepoUrl/releases/download/$LatestRelease/cargo-shuttle-$LatestRelease-x86_64-pc-windows-msvc.tar.gz"
         Invoke-WebRequest $BinaryUrl -OutFile "$TempDir\cargo-shuttle.tar.gz"
         if ($? -ne $true) { return Exit-Failure "download-binary" }
-        New-Item -ItemType Directory -Force "$TempDir\cargo-shuttle"
+        New-Item -ItemType Directory -Force "$TempDir\cargo-shuttle" | Out-Null
         if ($? -ne $true) { return Exit-Failure "temp-folder" }
         tar.exe -xzf "$TempDir\cargo-shuttle.tar.gz" -C "$TempDir\cargo-shuttle"
         if ($? -ne $true) { return Exit-Failure "tar-extract-binary" }

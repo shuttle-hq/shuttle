@@ -85,7 +85,7 @@ _send_telemetry() {
   }
 }"
     [ -n "${SHUTTLE_DEBUG:-}" ] && echo -e "Sending telemetry data:\n$telemetry_data"
-    curl -sL -H 'Content-Type: application/json' -d "$telemetry_data" https://console.shuttle.dev/ingest/i/v0/e/ > /dev/null
+    curl -sL -H 'Content-Type: application/json' -d "$telemetry_data" https://console.shuttle.dev/ingest/i/v0/e > /dev/null
   fi
 }
 

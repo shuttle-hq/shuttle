@@ -61,7 +61,7 @@ Please open an issue if you encounter any problems!
             if ($env:SHUTTLE_DEBUG) {
                 Write-Host "Sending telemetry data:`n$telemetry_data"
             }
-            Invoke-RestMethod -Uri "https://console.shuttle.dev/ingest/i/v0/e/" -Method Post -ContentType "application/json" -Body $telemetry_data -ErrorAction SilentlyContinue | Out-Null
+            Invoke-RestMethod -Uri "https://console.shuttle.dev/ingest/i/v0/e" -Method Post -ContentType "application/json" -Body $telemetry_data -ErrorAction SilentlyContinue | Out-Null
         }
     }
 

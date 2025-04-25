@@ -18,7 +18,7 @@ Please open an issue if you encounter any problems!
 
     # Anonymous telemetry
     $TELEMETRY = "1"
-    $PLATFORM = ""
+    $PLATFORM = "windows"
     $NEW_INSTALL = "true"
     $INSTALL_METHOD = ""
     $OUTCOME = ""
@@ -103,8 +103,8 @@ Please open an issue if you encounter any problems!
             return Exit-Neutral
         }
         $RustupUrl = if ($Arch -eq "AMD64") { "https://win.rustup.rs/x86_64" } else { "https://win.rustup.rs/i686" }
-        Invoke-WebRequest $RustupUrl -OutFile "$TempDir\rustup.exe"
-        & "$TempDir\rustup.exe" toolchain install stable
+        Invoke-WebRequest $RustupUrl -OutFile "$TempDir\rustup-init.exe"
+        & "$TempDir\rustup-init.exe" # toolchain install stable
         # if ($LASTEXITCODE -ne 0) { return Exit-Failure "get-rustup" }
         if ($?) {
             Remove-Item -ErrorAction SilentlyContinue "$TempDir\rustup.exe"

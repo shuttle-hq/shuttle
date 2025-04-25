@@ -2,14 +2,28 @@
 
 set -uo pipefail
 
-echo -e "\
+if [[ "${TERM:-}" = "xterm-256color" ]]; then
+  SUPPORTS_COLOR="1"
+  echo -e "\
 \e[40;38;5;208m       ___                                  \e[0m
 \e[40;38;5;208m      /   \\ \e[37m   _           _   _   _        \e[0m
 \e[40;38;5;208m   __/    /\e[37m___| |__  _   _| |_| |_| | ___   \e[0m
 \e[40;38;5;208m  /_     /\e[37m/ __| '_ \\| | | | __| __| |/ _ \\  \e[0m
 \e[40;38;5;208m   _|_  | \e[37m\__ \\ | | | |_| | |_| |_| |  __/  \e[0m
 \e[40;38;5;208m  |_| |/  \e[37m|___/_| |_|\\__,_|\\__|\\__|_|\\___|  \e[0m
-\e[40m                                            \e[0m
+\e[40m                                            \e[0m"
+else
+  SUPPORTS_COLOR="0"
+  echo "\
+       ___
+      /   \\    _           _   _   _
+   __/    /___| |__  _   _| |_| |_| | ___
+  /_     // __| '_ \\| | | | __| __| |/ _ \\
+   _|_  | \__ \\ | | | |_| | |_| |_| |  __/
+  |_| |/  |___/_| |_|\\__,_|\\__|\\__|_|\\___|
+"
+fi
+echo "
 
 https://docs.shuttle.dev
 https://discord.gg/shuttle
@@ -42,10 +56,11 @@ if [[ \
 fi
 
 if [[ "$TELEMETRY" = "1" ]]; then
-  echo -en "\e[2m"
+  [[ "$SUPPORTS_COLOR" = "1" ]] && echo -en "\e[2m"
   echo "Anonymous telemetry enabled. More info and opt-out:"
   echo "https://docs.shuttle.dev/getting-started/installation#install-script"
-  echo -e "\e[0m"
+  [[ "$SUPPORTS_COLOR" = "1" ]] && echo -en "\e[0m"
+  echo
 fi
 
 _send_telemetry() {
@@ -78,7 +93,9 @@ _exit_success() {
   OUTCOME="success"
   _send_telemetry
   echo
-  echo -e "\e[32mThanks for installing Shuttle CLI!\e[0m 🚀"
+  [[ "$SUPPORTS_COLOR" = "1" ]] && echo -en "\e[32m" # green
+  echo "Thanks for installing Shuttle CLI! 🚀"
+  [[ "$SUPPORTS_COLOR" = "1" ]] && echo -en "\e[0m"
   exit 0
 }
 
@@ -92,7 +109,9 @@ _exit_failure() {
   STEP_FAILED="$1"
   OUTCOME="fail"
   echo
-  echo -e "\e[31mShuttle installation script failed with reason: $STEP_FAILED\e[0m"
+  [[ "$SUPPORTS_COLOR" = "1" ]] && echo -en "\e[31m" # red
+  echo "Shuttle installation script failed with reason: $STEP_FAILED"
+  [[ "$SUPPORTS_COLOR" = "1" ]] && echo -en "\e[0m"
   echo "If you have any problems, please open an issue on GitHub or visit our Discord!"
   _send_telemetry
   exit 1
@@ -116,7 +135,9 @@ LATEST_VERSION=$(echo "$LATEST_RELEASE" | sed -e 's/.*"tag_name":"\([^"]*\)".*/\
 if command -v cargo-shuttle &>/dev/null; then
   NEW_INSTALL="false"
   if [[ "$(cargo-shuttle -V)" = *"${LATEST_VERSION#v}" ]]; then
-    echo -e "\e[32mShuttle CLI is already at the latest version!\e[0m"
+    [[ "$SUPPORTS_COLOR" = "1" ]] && echo -en "\e[32m" # green
+    echo "Shuttle CLI is already at the latest version!"
+    [[ "$SUPPORTS_COLOR" = "1" ]] && echo -en "\e[0m"
     exit 0 # skip telemetry and instantly exit
   else
     echo "Updating Shuttle CLI to $LATEST_VERSION"

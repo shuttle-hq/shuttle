@@ -1,12 +1,13 @@
 function Install-Cargo-Shuttle {
+    Write-Host "       ___                                  " -NoNewline -ForegroundColor Red -BackgroundColor Black; Write-Host "" -ForegroundColor White -BackgroundColor Black
+    Write-Host "      /   \" -NoNewline -ForegroundColor Red -BackgroundColor Black; Write-Host "    _           _   _   _        " -ForegroundColor White -BackgroundColor Black
+    Write-Host "   __/    /" -NoNewline -ForegroundColor Red -BackgroundColor Black; Write-Host "___| |__  _   _| |_| |_| | ___   " -ForegroundColor White -BackgroundColor Black
+    Write-Host "  /_     /" -NoNewline -ForegroundColor Red -BackgroundColor Black; Write-Host "/ __| '_ \| | | | __| __| |/ _ \  " -ForegroundColor White -BackgroundColor Black
+    Write-Host "   _|_  | " -NoNewline -ForegroundColor Red -BackgroundColor Black; Write-Host "\__ \ | | | |_| | |_| |_| |  __/  " -ForegroundColor White -BackgroundColor Black
+    Write-Host "  |_| |/  " -NoNewline -ForegroundColor Red -BackgroundColor Black; Write-Host "|___/_| |_|\__,_|\__|\__|_|\___|  " -ForegroundColor White -BackgroundColor Black
+    Write-Host "                                            " -ForegroundColor White -BackgroundColor Black
+    Write-Host
     Write-Host @"
-       ___
-      /   \    _           _   _   _
-   __/    /___| |__  _   _| |_| |_| | ___
-  /_     // __| '_ \| | | | __| __| |/ _ \
-   _|_  | \__ \ | | | |_| | |_| |_| |  __/
-  |_| |/  |___/_| |_|\__,_|\__|\__|_|\___|
-
 https://docs.shuttle.dev
 https://discord.gg/shuttle
 https://github.com/shuttle-hq/shuttle

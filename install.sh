@@ -11,7 +11,8 @@ if [[ "${TERM:-}" = "xterm-256color" ]]; then
 \e[40;38;5;208m  /_     /\e[37m/ __| '_ \\| | | | __| __| |/ _ \\  \e[0m
 \e[40;38;5;208m   _|_  | \e[37m\__ \\ | | | |_| | |_| |_| |  __/  \e[0m
 \e[40;38;5;208m  |_| |/  \e[37m|___/_| |_|\\__,_|\\__|\\__|_|\\___|  \e[0m
-\e[40m                                            \e[0m"
+\e[40m                                            \e[0m
+"
 else
   SUPPORTS_COLOR="0"
   echo "\
@@ -24,7 +25,6 @@ else
 "
 fi
 echo "
-
 https://docs.shuttle.dev
 https://discord.gg/shuttle
 https://github.com/shuttle-hq/shuttle

@@ -96,13 +96,14 @@ Please open an issue if you encounter any problems!
     if (Get-Command -CommandType Application -ErrorAction SilentlyContinue cargo-shuttle.exe) {
         $NEW_INSTALL = "false"
         $LatestReleaseStripped = $LatestRelease -replace '^v', ''
-        $CurrentVersion = & cargo-shuttle.exe -V -replace '^cargo-shuttle ', ''
-        if ($LatestReleaseStripped -eq $CurrentVersion) {
+        $CurrentVersion = & cargo-shuttle.exe -V
+        $CurrentVersionStripped = $CurrentVersion -replace '^cargo-shuttle ', ''
+        if ($LatestReleaseStripped -eq $CurrentVersionStripped) {
             Write-Host "Shuttle CLI is already at the latest version!" -ForegroundColor Green
             return
         }
         else {
-            Write-Host "Updating Shuttle CLI to $LATEST_VERSION"
+            Write-Host "Updating Shuttle CLI to $LatestRelease"
         }
     }
 
@@ -157,8 +158,10 @@ Please open an issue if you encounter any problems!
         tar.exe -xzf "$TempDir\cargo-shuttle.tar.gz" -C "$TempDir\cargo-shuttle"
         if (!$?) { return Exit-Failure "tar-extract-binary" }
         $CargoHome = if ($null -ne $Env:CARGO_HOME) { $Env:CARGO_HOME } else { "$HOME\.cargo" }
+        Write-Host "Installing to $CargoHome\bin\cargo-shuttle.exe"
         Move-Item -Force "$TempDir\cargo-shuttle\cargo-shuttle-x86_64-pc-windows-msvc-$LatestRelease\cargo-shuttle.exe" "$CargoHome\bin\cargo-shuttle.exe"
         if (!$?) { return Exit-Failure "move-binary" }
+        Write-Host "Installing to $CargoHome\bin\shuttle.exe"
         Move-Item -Force "$TempDir\cargo-shuttle\cargo-shuttle-x86_64-pc-windows-msvc-$LatestRelease\shuttle.exe" "$CargoHome\bin\shuttle.exe"
         if (!$?) { return Exit-Failure "move-binary" }
         Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "$TempDir\cargo-shuttle.tar.gz", "$TempDir\cargo-shuttle"

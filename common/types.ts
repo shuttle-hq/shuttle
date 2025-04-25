@@ -104,8 +104,6 @@ export enum DeploymentState {
 	Stopped = "stopped",
 	Stopping = "stopping",
 	Failed = "failed",
-	/** Fallback */
-	Unknown = "unknown",
 }
 
 export interface DeploymentResponse {
@@ -124,8 +122,7 @@ export interface DeploymentListResponse {
 }
 
 export type BuildArgs = 
-	| { type: "Rust", content: BuildArgsRust }
-	| { type: "Unknown", content?: undefined };
+	| { type: "Rust", content: BuildArgsRust };
 
 export interface DeploymentRequestBuildArchive {
 	/** The S3 object version ID of the archive to use */

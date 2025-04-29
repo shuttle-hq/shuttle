@@ -81,7 +81,7 @@ Please open an issue if you encounter any problems!
     function Exit-Failure {
         param($StepFailed)
         $STEP_FAILED = $StepFailed
-        $OUTCOME = "fail"
+        $OUTCOME = "failure"
         Write-Host ""
         Write-Host "Shuttle installation script failed with reason: $STEP_FAILED" -ForegroundColor Red
         Write-Host "If you have any problems, please open an issue on GitHub or visit our Discord!"

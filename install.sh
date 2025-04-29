@@ -114,7 +114,7 @@ _exit_neutral() {
 
 _exit_failure() {
   STEP_FAILED="$1"
-  OUTCOME="fail"
+  OUTCOME="failure"
   echo
   [[ "$SUPPORTS_COLOR" = "1" ]] && echo -en "\e[31m" # red
   echo "Shuttle installation script failed with reason: $STEP_FAILED"

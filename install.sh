@@ -68,6 +68,8 @@ fi
 echo "==================================================="
 echo
 
+INSTALLED_RUST=""
+
 _send_telemetry() {
   if [[ "$TELEMETRY" = "1" ]]; then
     ENDED_AT=""
@@ -101,6 +103,12 @@ _exit_success() {
   [[ "$SUPPORTS_COLOR" = "1" ]] && echo -en "\e[32m" # green
   echo "Thanks for installing Shuttle CLI! 🚀"
   [[ "$SUPPORTS_COLOR" = "1" ]] && echo -en "\e[0m"
+  if [[ "$INSTALLED_RUST" = "yes" ]]; then
+    echo
+    [[ "$SUPPORTS_COLOR" = "1" ]] && echo -en "\e[33m" # yellow
+    echo "Remember to 'source \"$HOME/.cargo/env\"' or restart your shell to run cargo and shuttle commands!"
+    [[ "$SUPPORTS_COLOR" = "1" ]] && echo -en "\e[0m"
+  fi
   exit 0
 }
 
@@ -278,7 +286,7 @@ _install_rust_and_cargo() {
     case $yn in
     [Yy]*|"")
       curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y || _exit_failure "install-rust"
-      source "$HOME/.cargo/env" # TODO: this only affects this script's env. Print hint to do this manually after installation for the user's shell
+      source "$HOME/.cargo/env" # (this only affects this script's env, user has to source or restart shell to apply to their shell)
       break
       ;;
     [Nn]*)
@@ -336,6 +344,7 @@ _install_default() {
 if ! command -v cargo &>/dev/null; then
   if ! command -v rustup &>/dev/null; then
     _install_rust_and_cargo
+    INSTALLED_RUST="yes"
     echo
   else
     echo "rustup was found, but cargo wasn't. Something is up with your Rust installation."

@@ -58,16 +58,16 @@ https://docs.shuttle.dev
 https://discord.gg/shuttle
 https://github.com/shuttle-hq/shuttle
 
-Please open an issue if you encounter any problems!
-===================================================
-"
-
+Please open an issue if you encounter any problems!"
 if [[ "$TELEMETRY" = "1" ]]; then
   [[ "$SUPPORTS_COLOR" = "1" ]] && echo -en "\e[2m"
-  echo "Anonymous telemetry enabled. More info and opt-out: https://docs.shuttle.dev/install-script"
+  echo "Anonymous telemetry enabled. More info and opt-out:"
+  echo "https://docs.shuttle.dev/install-script"
   [[ "$SUPPORTS_COLOR" = "1" ]] && echo -en "\e[0m"
   echo
 fi
+echo "==================================================="
+echo
 
 _send_telemetry() {
   if [[ "$TELEMETRY" = "1" ]]; then

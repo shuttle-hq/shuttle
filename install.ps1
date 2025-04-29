@@ -1,22 +1,4 @@
 function Install-Cargo-Shuttle {
-    Write-Host "       ___                                  " -NoNewline -ForegroundColor Red -BackgroundColor Black; Write-Host "" -ForegroundColor White -BackgroundColor Black
-    Write-Host "      /   \" -NoNewline -ForegroundColor Red -BackgroundColor Black; Write-Host "    _           _   _   _        " -ForegroundColor White -BackgroundColor Black
-    Write-Host "   __/    /" -NoNewline -ForegroundColor Red -BackgroundColor Black; Write-Host "___| |__  _   _| |_| |_| | ___   " -ForegroundColor White -BackgroundColor Black
-    Write-Host "  /_     /" -NoNewline -ForegroundColor Red -BackgroundColor Black; Write-Host "/ __| '_ \| | | | __| __| |/ _ \  " -ForegroundColor White -BackgroundColor Black
-    Write-Host "   _|_  | " -NoNewline -ForegroundColor Red -BackgroundColor Black; Write-Host "\__ \ | | | |_| | |_| |_| |  __/  " -ForegroundColor White -BackgroundColor Black
-    Write-Host "  |_| |/  " -NoNewline -ForegroundColor Red -BackgroundColor Black; Write-Host "|___/_| |_|\__,_|\__|\__|_|\___|  " -ForegroundColor White -BackgroundColor Black
-    Write-Host "                                            " -ForegroundColor White -BackgroundColor Black
-    Write-Host
-    Write-Host @"
-https://docs.shuttle.dev
-https://discord.gg/shuttle
-https://github.com/shuttle-hq/shuttle
-
-Please open an issue if you encounter any problems!
-===================================================
-
-"@
-
     # Anonymous telemetry
     $TELEMETRY = "1"
     $PLATFORM = "windows"
@@ -34,10 +16,27 @@ Please open an issue if you encounter any problems!
         $TELEMETRY = "0"
     }
 
+    Write-Host "       ___                                  " -NoNewline -ForegroundColor Red -BackgroundColor Black; Write-Host "" -ForegroundColor White -BackgroundColor Black
+    Write-Host "      /   \" -NoNewline -ForegroundColor Red -BackgroundColor Black; Write-Host "    _           _   _   _        " -ForegroundColor White -BackgroundColor Black
+    Write-Host "   __/    /" -NoNewline -ForegroundColor Red -BackgroundColor Black; Write-Host "___| |__  _   _| |_| |_| | ___   " -ForegroundColor White -BackgroundColor Black
+    Write-Host "  /_     /" -NoNewline -ForegroundColor Red -BackgroundColor Black; Write-Host "/ __| '_ \| | | | __| __| |/ _ \  " -ForegroundColor White -BackgroundColor Black
+    Write-Host "   _|_  | " -NoNewline -ForegroundColor Red -BackgroundColor Black; Write-Host "\__ \ | | | |_| | |_| |_| |  __/  " -ForegroundColor White -BackgroundColor Black
+    Write-Host "  |_| |/  " -NoNewline -ForegroundColor Red -BackgroundColor Black; Write-Host "|___/_| |_|\__,_|\__|\__|_|\___|  " -ForegroundColor White -BackgroundColor Black
+    Write-Host "                                            " -ForegroundColor White -BackgroundColor Black
+    Write-Host
+    Write-Host @"
+https://docs.shuttle.dev
+https://discord.gg/shuttle
+https://github.com/shuttle-hq/shuttle
+
+Please open an issue if you encounter any problems!
+"@
     if ($TELEMETRY -eq "1") {
-        Write-Host "Anonymous telemetry enabled. More info and opt-out: https://docs.shuttle.dev/install-script" -ForegroundColor Gray
-        Write-Host ""
+        Write-Host "Anonymous telemetry enabled. More info and opt-out:" -ForegroundColor Gray
+        Write-Host "https://docs.shuttle.dev/install-script" -ForegroundColor Gray
     }
+    Write-Host "==================================================="
+    Write-Host
 
     function Send-Telemetry {
         if ($TELEMETRY -eq "1") {

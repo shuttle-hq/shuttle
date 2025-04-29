@@ -53,7 +53,7 @@ else
   |_| |/  |___/_| |_|\\__,_|\\__|\\__|_|\\___|
 "
 fi
-echo "
+echo "\
 https://docs.shuttle.dev
 https://discord.gg/shuttle
 https://github.com/shuttle-hq/shuttle

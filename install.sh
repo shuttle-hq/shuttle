@@ -201,9 +201,9 @@ _install_arch_linux() {
 _install_alpine_linux() {
   echo "Alpine Linux detected!"
   if command -v apk &>/dev/null; then
-    if apk search -q cargo-shuttle; then
+    if [ -z "$(apk search -q cargo-shuttle)" ]; then
       while true; do
-        read -r -p "cargo-shuttle is not available in the testing repository. Do you want to enable the testing repository? [Y/n] " yn </dev/tty
+        read -r -p "cargo-shuttle apk package not found. Do you want to enable the testing repository? [Y/n] " yn </dev/tty
         case $yn in
         [Yy]*|"")
           echo "@testing http://dl-cdn.alpinelinux.org/alpine/edge/testing" | tee -a /etc/apk/repositories
@@ -218,7 +218,7 @@ _install_alpine_linux() {
         esac
       done
     fi
-    if ! apk info cargo-shuttle; then
+    if ! apk info -q --installed cargo-shuttle; then
       echo "Installing with apk"
       INSTALL_METHOD="apk"
       apk add cargo-shuttle@testing || _exit_failure "apk-add"
@@ -228,7 +228,9 @@ _install_alpine_linux() {
         echo "cargo-shuttle is not updated in the testing repository, ping @orhun!!!"
         _install_default
       else
-        echo "cargo-shuttle is already up to date."
+        echo "Installing with apk"
+        INSTALL_METHOD="apk"
+        apk upgrade cargo-shuttle || _exit_failure "apk-upgrade"
       fi
     fi
   else

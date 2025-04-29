@@ -151,7 +151,7 @@ _install_linux() {
     OS="ubuntuwsl"
   elif ! command -v lsb_release &>/dev/null; then
     [ -n "${SHUTTLE_DEBUG:-}" ] && echo "lsb_release could not be found. Falling back to /etc/os-release"
-    OS="$(grep -Po '(?<=^ID=).*$' /etc/os-release | tr '[:upper:]' '[:lower:]')" 2>/dev/null
+    OS="$(grep -Eo '^ID=.*$' /etc/os-release | cut -d '=' -f 2 | tr '[:upper:]' '[:lower:]')" 2>/dev/null
   else
     OS=$(lsb_release -i | awk '{ print $3 }' | tr '[:upper:]' '[:lower:]')
   fi

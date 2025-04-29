@@ -202,15 +202,21 @@ _install_alpine_linux() {
   echo "Alpine Linux detected!"
   if command -v apk &>/dev/null; then
     if apk search -q cargo-shuttle; then
-      echo "cargo-shuttle is not available in the testing repository. Do you want to enable the testing repository? (y/n)"
-      read -r enable_testing
-      if [ "$enable_testing" = "y" ]; then
-        echo "@testing http://dl-cdn.alpinelinux.org/alpine/edge/testing" | tee -a /etc/apk/repositories
-        apk update || _exit_failure "apk-update"
-      else
-        _install_default
-        return 0
-      fi
+      while true; do
+        read -r -p "cargo-shuttle is not available in the testing repository. Do you want to enable the testing repository? [Y/n] " yn </dev/tty
+        case $yn in
+        [Yy]*|"")
+          echo "@testing http://dl-cdn.alpinelinux.org/alpine/edge/testing" | tee -a /etc/apk/repositories
+          apk update || _exit_failure "apk-update"
+          break
+          ;;
+        [Nn]*)
+          _install_default
+          return 0
+          ;;
+        *) echo "Please answer yes or no." ;;
+        esac
+      done
     fi
     if ! apk info cargo-shuttle; then
       echo "Installing with apk"

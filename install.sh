@@ -64,8 +64,7 @@ Please open an issue if you encounter any problems!
 
 if [[ "$TELEMETRY" = "1" ]]; then
   [[ "$SUPPORTS_COLOR" = "1" ]] && echo -en "\e[2m"
-  echo "Anonymous telemetry enabled. More info and opt-out:"
-  echo "https://docs.shuttle.dev/getting-started/installation#install-script"
+  echo "Anonymous telemetry enabled. More info and opt-out: https://docs.shuttle.dev/install-script"
   [[ "$SUPPORTS_COLOR" = "1" ]] && echo -en "\e[0m"
   echo
 fi

@@ -35,8 +35,7 @@ Please open an issue if you encounter any problems!
     }
 
     if ($TELEMETRY -eq "1") {
-        Write-Host "Anonymous telemetry enabled. More info and opt-out:" -ForegroundColor Gray
-        Write-Host "https://docs.shuttle.dev/getting-started/installation#install-script" -ForegroundColor Gray
+        Write-Host "Anonymous telemetry enabled. More info and opt-out: https://docs.shuttle.dev/install-script" -ForegroundColor Gray
         Write-Host ""
     }
 

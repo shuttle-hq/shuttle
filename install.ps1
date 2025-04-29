@@ -60,7 +60,7 @@ Please open an issue if you encounter any problems!
             } | ConvertTo-Json -Depth 3
 
             if ($env:SHUTTLE_DEBUG) {
-                Write-Host "Sending telemetry data:`n$telemetry_data"
+                Write-Host "DEBUG: Sending telemetry data:`n$telemetry_data"
             }
             Invoke-RestMethod -Uri "https://console.shuttle.dev/ingest/i/v0/e" -Method Post -ContentType "application/json" -Body $telemetry_data -ErrorAction SilentlyContinue | Out-Null
         }
@@ -74,8 +74,10 @@ Please open an issue if you encounter any problems!
     }
 
     function Exit-Neutral {
+        $OUTCOME = "neutral"
         Write-Host ""
         Write-Host "If you have any problems, please open an issue on GitHub or visit our Discord!"
+        Send-Telemetry
     }
 
     function Exit-Failure {

@@ -91,7 +91,7 @@ _send_telemetry() {
     \"dont_track_ip\":true
   }
 }"
-    [ -n "${SHUTTLE_DEBUG:-}" ] && echo -e "Sending telemetry data:\n$telemetry_data"
+    [ -n "${SHUTTLE_DEBUG:-}" ] && echo -e "DEBUG: Sending telemetry data:\n$telemetry_data"
     curl -sL -H 'Content-Type: application/json' -d "$telemetry_data" https://console.shuttle.dev/ingest/i/v0/e > /dev/null
   fi
 }
@@ -107,8 +107,10 @@ _exit_success() {
 }
 
 _exit_neutral() {
+  OUTCOME="neutral"
   echo
   echo "If you have any problems, please open an issue on GitHub or visit our Discord!"
+  _send_telemetry
   exit 0
 }
 
@@ -157,7 +159,7 @@ _install_linux() {
   if (uname -a | grep -qi "Microsoft"); then
     OS="ubuntuwsl"
   elif ! command -v lsb_release &>/dev/null; then
-    [ -n "${SHUTTLE_DEBUG:-}" ] && echo "lsb_release could not be found. Falling back to /etc/os-release"
+    [ -n "${SHUTTLE_DEBUG:-}" ] && echo "DEBUG: lsb_release could not be found. Falling back to /etc/os-release"
     OS="$(grep -Eo '^ID=.*$' /etc/os-release | cut -d '=' -f 2 | tr '[:upper:]' '[:lower:]')" 2>/dev/null
   else
     OS=$(lsb_release -i | awk '{ print $3 }' | tr '[:upper:]' '[:lower:]')

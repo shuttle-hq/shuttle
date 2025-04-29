@@ -1,8 +1,37 @@
 #!/usr/bin/env bash
 
+# -e is not set so that we can check for errors ourselves
 set -uo pipefail
 
-if [[ "${TERM:-}" = "xterm-256color" ]]; then
+# Anonymous telemetry
+TELEMETRY="1"
+PLATFORM=""
+NEW_INSTALL="true"
+INSTALL_METHOD=""
+OUTCOME=""
+STEP_FAILED="N/A"
+STARTED_AT=""
+if command -v date &>/dev/null; then
+  STARTED_AT="$(date -u -Iseconds)"
+fi
+case "$OSTYPE" in
+linux*) PLATFORM="linux" ;;
+darwin*) PLATFORM="macos" ;;
+*) PLATFORM="unknown" ;;
+esac
+
+# disable telemetry if any opt-out vars are set
+if [[ \
+    "${DO_NOT_TRACK:-}" == "1" || "${DO_NOT_TRACK:-}" == "true" || \
+    "${DISABLE_TELEMETRY:-}" == "1" || "${DISABLE_TELEMETRY:-}" == "true" || \
+    "${SHUTTLE_DISABLE_TELEMETRY:-}" == "1" || "${SHUTTLE_DISABLE_TELEMETRY:-}" == "true" || \
+    "${CI:-}" == "1" || "${CI:-}" == "true"
+  ]]; then
+  TELEMETRY=0
+fi
+
+# default terminal on mac gives xterm-256color but still doesn't show colors
+if [[ "${TERM:-}" = "xterm-256color" && "$PLATFORM" != "macos" ]]; then
   SUPPORTS_COLOR="1"
   echo -e "\
 \e[40;38;5;208m       ___                                  \e[0m
@@ -32,33 +61,6 @@ https://github.com/shuttle-hq/shuttle
 Please open an issue if you encounter any problems!
 ===================================================
 "
-
-# Anonymous telemetry
-TELEMETRY="1"
-PLATFORM=""
-NEW_INSTALL="true"
-INSTALL_METHOD=""
-OUTCOME=""
-STEP_FAILED="N/A"
-STARTED_AT=""
-if command -v date &>/dev/null; then
-  STARTED_AT="$(date -u -Iseconds)"
-fi
-case "$OSTYPE" in
-linux*) PLATFORM="linux" ;;
-darwin*) PLATFORM="macos" ;;
-*) PLATFORM="unknown" ;;
-esac
-
-# disable telemetry if any opt-out vars are set
-if [[ \
-    "${DO_NOT_TRACK:-}" == "1" || "${DO_NOT_TRACK:-}" == "true" || \
-    "${DISABLE_TELEMETRY:-}" == "1" || "${DISABLE_TELEMETRY:-}" == "true" || \
-    "${SHUTTLE_DISABLE_TELEMETRY:-}" == "1" || "${SHUTTLE_DISABLE_TELEMETRY:-}" == "true" || \
-    "${CI:-}" == "1" || "${CI:-}" == "true"
-  ]]; then
-  TELEMETRY=0
-fi
 
 if [[ "$TELEMETRY" = "1" ]]; then
   [[ "$SUPPORTS_COLOR" = "1" ]] && echo -en "\e[2m"

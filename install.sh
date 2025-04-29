@@ -44,6 +44,11 @@ STARTED_AT=""
 if command -v date &>/dev/null; then
   STARTED_AT="$(date -u -Iseconds)"
 fi
+case "$OSTYPE" in
+linux*) PLATFORM="linux" ;;
+darwin*) PLATFORM="macos" ;;
+*) PLATFORM="unknown" ;;
+esac
 
 # disable telemetry if any opt-out vars are set
 if [[ \
@@ -329,18 +334,9 @@ if ! command -v cargo &>/dev/null; then
 fi
 
 case "$OSTYPE" in
-linux*)
-  PLATFORM="linux"
-  _install_linux
-  ;;
-darwin*)
-  PLATFORM="macos"
-  _install_mac
-  ;;
-*)
-  PLATFORM="unknown"
-  _install_default
-  ;;
+linux*) _install_linux ;;
+darwin*) _install_mac ;;
+*) _install_default ;;
 esac
 
 _exit_success

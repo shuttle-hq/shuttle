@@ -278,6 +278,7 @@ pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + S
             }
         }
     };
+
     #[cfg(target_family = "windows")]
     let interrupted = {
         let mut ctrl_break_notif = tokio::signal::windows::ctrl_break()
@@ -322,7 +323,7 @@ pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + S
         }
     };
 
-    if interrupted {
-        exit(10);
-    }
+    // if interrupted {
+    //     exit(10);
+    // }
 }

@@ -15,19 +15,23 @@ pub(crate) fn tokens(_attr: TokenStream, item: TokenStream) -> TokenStream {
     Into::into(quote! {
         fn main() {
             // manual expansion of #[tokio::main]
-            ::shuttle_runtime::tokio::runtime::Builder::new_multi_thread()
+            let rt = ::shuttle_runtime::tokio::runtime::Builder::new_multi_thread()
                 .enable_all()
                 .build()
-                .unwrap()
-                .block_on(async {
-                    ::shuttle_runtime::__internals::start(
-                        __loader,
-                        __runner,
-                        env!("CARGO_CRATE_NAME"),
-                        env!("CARGO_PKG_VERSION"),
-                    )
-                    .await;
-                })
+                .unwrap();
+
+            rt.block_on(async {
+                ::shuttle_runtime::__internals::start(
+                    __loader,
+                    __runner,
+                    env!("CARGO_CRATE_NAME"),
+                    env!("CARGO_PKG_VERSION"),
+                )
+                .await;
+            });
+
+            rt.shutdown_timeout(::std::time::Duration::from_secs(30))
+
         }
 
         #loader_runner

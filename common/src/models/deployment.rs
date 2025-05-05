@@ -24,6 +24,7 @@ pub enum DeploymentState {
     Failed,
 
     /// Forward compatibility
+    #[cfg(feature = "unknown-variants")]
     #[doc(hidden)]
     #[typeshare(skip)]
     #[serde(untagged, skip_serializing)]
@@ -44,6 +45,7 @@ impl DeploymentState {
             Self::Stopped => Color::DarkBlue,
             Self::Stopping => Color::Blue,
             Self::Failed => Color::Red,
+            #[cfg(feature = "unknown-variants")]
             Self::Unknown(_) => Color::Grey,
         }
     }
@@ -59,6 +61,7 @@ impl DeploymentState {
             Self::Stopped => Color::DarkBlue,
             Self::Stopping => Color::Blue,
             Self::Failed => Color::Red,
+            #[cfg(feature = "unknown-variants")]
             Self::Unknown(_) => Color::Grey,
         }
     }
@@ -263,7 +266,7 @@ mod tests {
     use std::str::FromStr;
 
     #[test]
-    fn deploymnet_state_from_and_to_str() {
+    fn deployment_state_from_and_to_str() {
         assert_eq!(
             DeploymentState::Building,
             DeploymentState::from_str("Building").unwrap()
@@ -280,6 +283,11 @@ mod tests {
             DeploymentState::Building.to_string(),
             "building".to_string()
         );
+    }
+
+    #[cfg(feature = "unknown-variants")]
+    #[test]
+    fn unknown_state() {
         assert_eq!(
             DeploymentState::Unknown("flying".to_string()),
             DeploymentState::from_str("flying").unwrap()

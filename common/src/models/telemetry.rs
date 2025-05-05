@@ -103,6 +103,7 @@ pub enum TelemetrySinkConfig {
     //
     // No Unknown variant: is not deserialized in user facing libraries
     // (this is what it would look like 💀):
+    //   #[cfg(feature = "unknown-variants")]
     //   #[doc(hidden)]
     //   #[typeshare(skip)]
     //   #[serde(untagged, skip_serializing)]

@@ -65,6 +65,7 @@ pub enum TeamRole {
     Member,
 
     /// Forward compatibility
+    #[cfg(feature = "unknown-variants")]
     #[doc(hidden)]
     #[typeshare(skip)]
     #[serde(untagged, skip_serializing)]

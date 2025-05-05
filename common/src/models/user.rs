@@ -89,6 +89,7 @@ pub enum AccountTier {
     Admin,
 
     /// Forward compatibility
+    #[cfg(feature = "unknown-variants")]
     #[doc(hidden)]
     #[typeshare(skip)]
     #[serde(untagged, skip_serializing)]
@@ -139,6 +140,7 @@ pub enum SubscriptionType {
     Rds,
 
     /// Forward compatibility
+    #[cfg(feature = "unknown-variants")]
     #[doc(hidden)]
     #[typeshare(skip)]
     #[serde(untagged, skip_serializing)]
@@ -150,11 +152,15 @@ pub enum SubscriptionType {
 mod tests {
     use super::*;
     #[test]
-    fn unknown_deser() {
+    fn deser() {
         assert_eq!(
             serde_json::from_str::<AccountTier>("\"basic\"").unwrap(),
             AccountTier::Basic
         );
+    }
+    #[cfg(feature = "unknown-variants")]
+    #[test]
+    fn unknown_deser() {
         assert_eq!(
             serde_json::from_str::<AccountTier>("\"\"").unwrap(),
             AccountTier::Unknown("".to_string())
@@ -164,5 +170,11 @@ mod tests {
             AccountTier::Unknown("hisshiss".to_string())
         );
         assert!(serde_json::to_string(&AccountTier::Unknown("asdf".to_string())).is_err());
+    }
+    #[cfg(not(feature = "unknown-variants"))]
+    #[test]
+    fn not_unknown_deser() {
+        assert!(serde_json::from_str::<AccountTier>("\"\"").is_err());
+        assert!(serde_json::from_str::<AccountTier>("\"hisshiss\"").is_err());
     }
 }

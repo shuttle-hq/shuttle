@@ -105,6 +105,7 @@ pub enum ComputeTier {
     XXL,
 
     /// Forward compatibility
+    #[cfg(feature = "unknown-variants")]
     #[doc(hidden)]
     #[typeshare(skip)]
     #[serde(untagged, skip_serializing)]

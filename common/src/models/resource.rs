@@ -37,6 +37,7 @@ pub enum ResourceState {
     Deleted,
 
     /// Forward compatibility
+    #[cfg(feature = "unknown-variants")]
     #[doc(hidden)]
     #[typeshare(skip)]
     #[serde(untagged, skip_serializing)]
@@ -100,6 +101,7 @@ pub enum ResourceType {
     Container,
 
     /// Forward compatibility
+    #[cfg(feature = "unknown-variants")]
     #[doc(hidden)]
     #[typeshare(skip)]
     #[serde(untagged, skip_serializing)]

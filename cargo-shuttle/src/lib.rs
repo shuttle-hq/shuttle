@@ -1632,7 +1632,8 @@ impl Shuttle {
         raw: bool,
     ) -> Result<()> {
         let client = self.client.as_ref().unwrap();
-        if self.track_deployment_status(proj_id, depl_id).await? {
+        let failed = self.track_deployment_status(proj_id, depl_id).await?;
+        if failed {
             for log in client.get_deployment_logs(proj_id, depl_id).await?.logs {
                 if raw {
                     println!("{}", log.line);
@@ -1640,6 +1641,7 @@ impl Shuttle {
                     println!("{log}");
                 }
             }
+            return Err(anyhow!("Deployment failed"));
         }
 
         Ok(())

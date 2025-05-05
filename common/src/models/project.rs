@@ -90,9 +90,7 @@ pub struct ProjectUpdateRequest {
     pub config: Option<serde_json::Value>,
 }
 
-#[derive(
-    Debug, Default, Clone, Copy, PartialEq, Eq, Display, Serialize, Deserialize, EnumString,
-)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, Display, Serialize, Deserialize, EnumString)]
 #[serde(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
@@ -109,7 +107,7 @@ pub enum ComputeTier {
     /// Forward compatibility
     #[doc(hidden)]
     #[typeshare(skip)]
-    #[serde(other, skip_serializing)]
-    #[strum(to_string = "[UNKNOWN]")]
-    Unknown,
+    #[serde(untagged, skip_serializing)]
+    #[strum(default, to_string = "Unknown: {0}")]
+    Unknown(String),
 }

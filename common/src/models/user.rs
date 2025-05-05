@@ -57,7 +57,6 @@ impl UserResponse {
 #[derive(
     // std
     Clone,
-    Copy,
     Debug,
     Default,
     Eq,
@@ -92,9 +91,9 @@ pub enum AccountTier {
     /// Forward compatibility
     #[doc(hidden)]
     #[typeshare(skip)]
-    #[serde(other, skip_serializing)]
-    #[strum(to_string = "[UNKNOWN]")]
-    Unknown,
+    #[serde(untagged, skip_serializing)]
+    #[strum(default, to_string = "Unknown: {0}")]
+    Unknown(String),
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -142,9 +141,9 @@ pub enum SubscriptionType {
     /// Forward compatibility
     #[doc(hidden)]
     #[typeshare(skip)]
-    #[serde(other, skip_serializing)]
-    #[strum(to_string = "[UNKNOWN]")]
-    Unknown,
+    #[serde(untagged, skip_serializing)]
+    #[strum(default, to_string = "Unknown: {0}")]
+    Unknown(String),
 }
 
 #[cfg(test)]
@@ -158,12 +157,12 @@ mod tests {
         );
         assert_eq!(
             serde_json::from_str::<AccountTier>("\"\"").unwrap(),
-            AccountTier::Unknown
+            AccountTier::Unknown("".to_string())
         );
         assert_eq!(
             serde_json::from_str::<AccountTier>("\"hisshiss\"").unwrap(),
-            AccountTier::Unknown
+            AccountTier::Unknown("hisshiss".to_string())
         );
-        assert!(serde_json::to_string(&AccountTier::Unknown).is_err());
+        assert!(serde_json::to_string(&AccountTier::Unknown("asdf".to_string())).is_err());
     }
 }

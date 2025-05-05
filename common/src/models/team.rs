@@ -67,9 +67,9 @@ pub enum TeamRole {
     /// Forward compatibility
     #[doc(hidden)]
     #[typeshare(skip)]
-    #[serde(other, skip_serializing)]
-    #[strum(to_string = "[UNKNOWN]")]
-    Unknown,
+    #[serde(untagged, skip_serializing)]
+    #[strum(default, to_string = "Unknown: {0}")]
+    Unknown(String),
 }
 
 /// Provide user id to add user.

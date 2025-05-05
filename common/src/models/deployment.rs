@@ -26,9 +26,9 @@ pub enum DeploymentState {
     /// Forward compatibility
     #[doc(hidden)]
     #[typeshare(skip)]
-    #[serde(other, skip_serializing)]
-    #[strum(to_string = "[UNKNOWN]")]
-    Unknown,
+    #[serde(untagged, skip_serializing)]
+    #[strum(default, to_string = "Unknown: {0}")]
+    Unknown(String),
 }
 
 impl DeploymentState {
@@ -44,7 +44,7 @@ impl DeploymentState {
             Self::Stopped => Color::DarkBlue,
             Self::Stopping => Color::Blue,
             Self::Failed => Color::Red,
-            Self::Unknown => Color::Grey,
+            Self::Unknown(_) => Color::Grey,
         }
     }
     #[cfg(all(feature = "tables", feature = "display"))]
@@ -59,7 +59,7 @@ impl DeploymentState {
             Self::Stopped => Color::DarkBlue,
             Self::Stopping => Color::Blue,
             Self::Failed => Color::Red,
-            Self::Unknown => Color::Grey,
+            Self::Unknown(_) => Color::Grey,
         }
     }
     #[cfg(feature = "display")]
@@ -263,7 +263,7 @@ mod tests {
     use std::str::FromStr;
 
     #[test]
-    fn test_state_deser() {
+    fn deploymnet_state_from_and_to_str() {
         assert_eq!(
             DeploymentState::Building,
             DeploymentState::from_str("Building").unwrap()
@@ -276,10 +276,22 @@ mod tests {
             DeploymentState::Building,
             DeploymentState::from_str("building").unwrap()
         );
+        assert_eq!(
+            DeploymentState::Building.to_string(),
+            "building".to_string()
+        );
+        assert_eq!(
+            DeploymentState::Unknown("flying".to_string()),
+            DeploymentState::from_str("flying").unwrap()
+        );
+        assert_eq!(
+            DeploymentState::Unknown("flying".to_string()).to_string(),
+            "Unknown: flying".to_string()
+        );
     }
 
     #[test]
-    fn test_env_deser() {
+    fn env_from_str() {
         assert_eq!(Environment::Local, Environment::from_str("local").unwrap());
         assert_eq!(
             Environment::Deployment,

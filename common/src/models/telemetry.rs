@@ -102,15 +102,15 @@ pub enum TelemetrySinkConfig {
     Debug(serde_json::Value),
     //
     // No Unknown variant: is not deserialized in user facing libraries
-    // (this is what it would look like 💀)
+    // (this is what it would look like 💀):
     //   #[doc(hidden)]
     //   #[typeshare(skip)]
-    //   #[serde(other, skip_serializing)]
-    //   #[strum(to_string = "[UNKNOWN]")]
+    //   #[serde(untagged, skip_serializing)]
+    //   #[strum(default, to_string = "Unknown: {0}")]
     //   #[strum_discriminants(doc(hidden))]
-    //   #[strum_discriminants(serde(other, skip_serializing))]
-    //   #[strum_discriminants(strum(to_string = "[UNKNOWN]"))]
-    //   Unknown,
+    //   #[strum_discriminants(serde(untagged, skip_serializing))]
+    //   #[strum_discriminants(strum(default, to_string = "Unknown: {0}"))]
+    //   Unknown(String),
 }
 
 impl TelemetrySinkConfig {

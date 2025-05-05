@@ -904,7 +904,7 @@ impl Shuttle {
                     DeploymentState::Building // a building deployment should take it back to InProgress then Running, so don't follow that sequence
                     | DeploymentState::Failed
                     | DeploymentState::Stopped
-                    | DeploymentState::Unknown => Ok(Some(cleanup)),
+                    | DeploymentState::Unknown(_) => Ok(Some(cleanup)),
                 }
         })
         .await?;
@@ -1616,7 +1616,7 @@ impl Shuttle {
                 DeploymentState::Running
                 | DeploymentState::Stopped
                 | DeploymentState::Stopping
-                | DeploymentState::Unknown
+                | DeploymentState::Unknown(_)
                 | DeploymentState::Failed => Ok(Some(cleanup)),
             }
         })

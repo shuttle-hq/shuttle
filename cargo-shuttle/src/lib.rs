@@ -1038,10 +1038,9 @@ impl Shuttle {
             println!("{}", deployment.to_string_colored());
             return Ok(());
         }
-        self.track_deployment_status_and_print_logs_on_fail(pid, &deployment.id, tracking_args.raw)
-            .await?;
 
-        Ok(())
+        self.track_deployment_status_and_print_logs_on_fail(pid, &deployment.id, tracking_args.raw)
+            .await
     }
 
     async fn resources_list(&self, table_args: TableArgs, show_secrets: bool) -> Result<()> {
@@ -1473,14 +1472,13 @@ impl Shuttle {
                 return Ok(());
             }
 
-            self.track_deployment_status_and_print_logs_on_fail(
-                pid,
-                &deployment.id,
-                args.tracking_args.raw,
-            )
-            .await?;
-
-            return Ok(());
+            return self
+                .track_deployment_status_and_print_logs_on_fail(
+                    pid,
+                    &deployment.id,
+                    args.tracking_args.raw,
+                )
+                .await;
         }
 
         // Build archive deployment mode
@@ -1591,9 +1589,7 @@ impl Shuttle {
             &deployment.id,
             args.tracking_args.raw,
         )
-        .await?;
-
-        Ok(())
+        .await
     }
 
     /// Returns true if the deployment failed

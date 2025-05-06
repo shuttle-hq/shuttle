@@ -36,7 +36,6 @@ impl From<Vec<TelemetrySinkConfig>> for TelemetryConfigResponse {
 
         for sink in value {
             match sink {
-                TelemetrySinkConfig::Debug(_) => {}
                 TelemetrySinkConfig::Betterstack(_) => {
                     instance.betterstack = Some(TelemetrySinkStatus { enabled: true })
                 }
@@ -49,6 +48,7 @@ impl From<Vec<TelemetrySinkConfig>> for TelemetryConfigResponse {
                 TelemetrySinkConfig::Logfire(_) => {
                     instance.logfire = Some(TelemetrySinkStatus { enabled: true })
                 }
+                TelemetrySinkConfig::Debug(_) => {}
             }
         }
 
@@ -100,6 +100,18 @@ pub enum TelemetrySinkConfig {
     #[typeshare(skip)]
     #[strum_discriminants(doc(hidden))]
     Debug(serde_json::Value),
+    //
+    // No Unknown variant: is not deserialized in user facing libraries
+    // (this is what it would look like 💀):
+    //   #[cfg(feature = "unknown-variants")]
+    //   #[doc(hidden)]
+    //   #[typeshare(skip)]
+    //   #[serde(untagged, skip_serializing)]
+    //   #[strum(default, to_string = "Unknown: {0}")]
+    //   #[strum_discriminants(doc(hidden))]
+    //   #[strum_discriminants(serde(untagged, skip_serializing))]
+    //   #[strum_discriminants(strum(default, to_string = "Unknown: {0}"))]
+    //   Unknown(String),
 }
 
 impl TelemetrySinkConfig {

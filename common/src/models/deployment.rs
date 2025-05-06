@@ -22,8 +22,14 @@ pub enum DeploymentState {
     Stopped,
     Stopping,
     Failed,
-    /// Fallback
-    Unknown,
+
+    /// Forward compatibility
+    #[cfg(feature = "unknown-variants")]
+    #[doc(hidden)]
+    #[typeshare(skip)]
+    #[serde(untagged, skip_serializing)]
+    #[strum(default, to_string = "Unknown: {0}")]
+    Unknown(String),
 }
 
 impl DeploymentState {
@@ -39,7 +45,8 @@ impl DeploymentState {
             Self::Stopped => Color::DarkBlue,
             Self::Stopping => Color::Blue,
             Self::Failed => Color::Red,
-            Self::Unknown => Color::Grey,
+            #[cfg(feature = "unknown-variants")]
+            Self::Unknown(_) => Color::Grey,
         }
     }
     #[cfg(all(feature = "tables", feature = "display"))]
@@ -54,7 +61,8 @@ impl DeploymentState {
             Self::Stopped => Color::DarkBlue,
             Self::Stopping => Color::Blue,
             Self::Failed => Color::Red,
-            Self::Unknown => Color::Grey,
+            #[cfg(feature = "unknown-variants")]
+            Self::Unknown(_) => Color::Grey,
         }
     }
     #[cfg(feature = "display")]
@@ -125,6 +133,8 @@ pub enum DeploymentRequest {
     // TODO?: Add GitRepo(DeploymentRequestGitRepo)
     /// Use this image directly. Can be used to skip the build step.
     Image(DeploymentRequestImage),
+    //
+    // No Unknown variant: is a Request type and should only be deserialized on backend
 }
 
 #[derive(Default, Deserialize, Serialize)]
@@ -140,14 +150,14 @@ pub struct DeploymentRequestBuildArchive {
     pub build_meta: Option<BuildMeta>,
 }
 
-#[derive(Deserialize, Serialize, Default)]
+#[derive(Deserialize, Serialize)]
 #[serde(tag = "type", content = "content")]
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub enum BuildArgs {
     Rust(BuildArgsRust),
-    #[default]
-    Unknown,
+    //
+    // No Unknown variant: is a Request type and should only be deserialized on backend
 }
 
 #[derive(Deserialize, Serialize)]
@@ -246,6 +256,8 @@ pub enum Environment {
     Local,
     #[strum(serialize = "production")] // Keep this around for a while for backward compat
     Deployment,
+    //
+    // No Unknown variant: is not deserialized in user facing libraries (just FromStr parsed)
 }
 
 #[cfg(test)]
@@ -254,7 +266,7 @@ mod tests {
     use std::str::FromStr;
 
     #[test]
-    fn test_state_deser() {
+    fn deployment_state_from_and_to_str() {
         assert_eq!(
             DeploymentState::Building,
             DeploymentState::from_str("Building").unwrap()
@@ -267,10 +279,27 @@ mod tests {
             DeploymentState::Building,
             DeploymentState::from_str("building").unwrap()
         );
+        assert_eq!(
+            DeploymentState::Building.to_string(),
+            "building".to_string()
+        );
+    }
+
+    #[cfg(feature = "unknown-variants")]
+    #[test]
+    fn unknown_state() {
+        assert_eq!(
+            DeploymentState::Unknown("flying".to_string()),
+            DeploymentState::from_str("flying").unwrap()
+        );
+        assert_eq!(
+            DeploymentState::Unknown("flying".to_string()).to_string(),
+            "Unknown: flying".to_string()
+        );
     }
 
     #[test]
-    fn test_env_deser() {
+    fn env_from_str() {
         assert_eq!(Environment::Local, Environment::from_str("local").unwrap());
         assert_eq!(
             Environment::Deployment,

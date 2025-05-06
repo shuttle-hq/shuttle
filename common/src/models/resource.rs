@@ -35,6 +35,14 @@ pub enum ResourceState {
     Ready,
     Deleting,
     Deleted,
+
+    /// Forward compatibility
+    #[cfg(feature = "unknown-variants")]
+    #[doc(hidden)]
+    #[typeshare(skip)]
+    #[serde(untagged, skip_serializing)]
+    #[strum(default, to_string = "Unknown: {0}")]
+    Unknown(String),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -58,7 +66,6 @@ pub struct ResourceListResponse {
 
 #[derive(
     Clone,
-    Copy,
     Debug,
     Deserialize,
     Serialize,
@@ -92,10 +99,18 @@ pub enum ResourceType {
     #[strum(to_string = "container")]
     #[serde(rename = "container")]
     Container,
+
+    /// Forward compatibility
+    #[cfg(feature = "unknown-variants")]
+    #[doc(hidden)]
+    #[typeshare(skip)]
+    #[serde(untagged, skip_serializing)]
+    #[strum(default, to_string = "Unknown: {0}")]
+    Unknown(String),
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
     use std::str::FromStr;
 
     use super::*;

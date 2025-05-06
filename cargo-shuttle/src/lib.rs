@@ -74,13 +74,22 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 /// Returns the args and whether the PATH arg of the init command was explicitly given
 pub fn parse_args() -> (ShuttleArgs, bool) {
     let matches = ShuttleArgs::command().get_matches();
-    let args =
+    let mut args =
         ShuttleArgs::from_arg_matches(&matches).expect("args to already be parsed successfully");
     let provided_path_to_init = matches
         .subcommand_matches("init")
         .is_some_and(|init_matches| {
             init_matches.value_source("path") == Some(ValueSource::CommandLine)
         });
+
+    // don't use an override if production is targetted
+    if args
+        .shuttle_api_env
+        .as_ref()
+        .is_some_and(|e| e == "prod" || e == "production")
+    {
+        args.shuttle_api_env = None;
+    }
 
     (args, provided_path_to_init)
 }
@@ -125,7 +134,12 @@ pub struct Shuttle {
 
 impl Shuttle {
     pub fn new(bin: Binary, env_override: Option<String>) -> Result<Self> {
-        let ctx = RequestContext::load_global(env_override)?;
+        let ctx = RequestContext::load_global(env_override.inspect(|e| {
+            eprintln!(
+                "{}",
+                format!("INFO: Using non-default global config file: {e}").yellow(),
+            )
+        }))?;
         Ok(Self {
             ctx,
             client: None,

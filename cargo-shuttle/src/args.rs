@@ -32,7 +32,7 @@ pub struct ShuttleArgs {
     /// Modify Shuttle API URL to use admin endpoints
     #[arg(global = true, long, env = "SHUTTLE_ADMIN", hide = true)]
     pub admin: bool,
-    /// Target a different Shuttle API env (use a separate global config) (default: None (production))
+    /// Target a different Shuttle API env (use a separate global config) (default: None (= prod = production))
     // (SHUTTLE_ENV is used for user-facing environments (agnostic of Shuttle API env))
     #[arg(global = true, long, env = "SHUTTLE_API_ENV", hide = true)]
     pub shuttle_api_env: Option<String>,

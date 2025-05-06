@@ -3,7 +3,6 @@ use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Context, Result};
-use crossterm::style::Stylize;
 use serde::{Deserialize, Serialize};
 use shuttle_common::constants::SHUTTLE_API_URL;
 use tracing::trace;
@@ -285,12 +284,6 @@ pub struct RequestContext {
 impl RequestContext {
     /// Create a [`RequestContext`], only loading in the global configuration details.
     pub fn load_global(env_override: Option<String>) -> Result<Self> {
-        if let Some(ref e) = env_override {
-            eprintln!(
-                "{}",
-                format!("INFO: Using non-default global config file: {e}").yellow(),
-            );
-        }
         let mut global = Config::new(GlobalConfigManager::new(env_override)?);
         if !global.exists() {
             global.create()?;

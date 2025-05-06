@@ -29,7 +29,12 @@ impl UserResponse {
         let mut s = String::new();
         writeln!(&mut s, "{}", "Account info:".bold()).unwrap();
         writeln!(&mut s, "  User ID: {}", self.id).unwrap();
-        writeln!(&mut s, "  Account tier: {}", self.account_tier).unwrap();
+        writeln!(
+            &mut s,
+            "  Account tier: {}",
+            self.account_tier.as_str_fancy()
+        )
+        .unwrap();
         if !self.subscriptions.is_empty() {
             writeln!(&mut s, "  Subscriptions:").unwrap();
             for sub in &self.subscriptions {
@@ -93,6 +98,20 @@ pub enum AccountTier {
     Employee,
     /// No limits, full API access, admin endpoint access
     Admin,
+}
+impl AccountTier {
+    pub const fn as_str_fancy(&self) -> &'static str {
+        match self {
+            Self::Basic => "Community",
+            Self::ProTrial => "Pro Trial",
+            Self::PendingPaymentPro => "Community (pending payment for Pro)",
+            Self::CancelledPro => "Pro (subscription cancelled)",
+            Self::Pro => "Pro",
+            Self::Growth => "Growth",
+            Self::Employee => "Employee",
+            Self::Admin => "Admin",
+        }
+    }
 }
 
 #[derive(Debug, Deserialize, Serialize)]

@@ -30,8 +30,8 @@ use reqwest::header::HeaderMap;
 use shuttle_api_client::ShuttleApiClient;
 use shuttle_common::{
     constants::{
-        headers::X_CARGO_SHUTTLE_VERSION, EXAMPLES_REPO, RUNTIME_NAME, SHUTTLE_API_URL,
-        SHUTTLE_CONSOLE_URL, STORAGE_DIRNAME, TEMPLATES_SCHEMA_VERSION,
+        headers::X_CARGO_SHUTTLE_VERSION, other_env_api_url, EXAMPLES_REPO, RUNTIME_NAME,
+        SHUTTLE_API_URL, SHUTTLE_CONSOLE_URL, STORAGE_DIRNAME, TEMPLATES_SCHEMA_VERSION,
     },
     models::{
         auth::{KeyMessage, TokenMessage},
@@ -124,8 +124,8 @@ pub struct Shuttle {
 }
 
 impl Shuttle {
-    pub fn new(bin: Binary) -> Result<Self> {
-        let ctx = RequestContext::load_global()?;
+    pub fn new(bin: Binary, env_override: Option<String>) -> Result<Self> {
+        let ctx = RequestContext::load_global(env_override)?;
         Ok(Self {
             ctx,
             client: None,
@@ -158,6 +158,13 @@ impl Shuttle {
         ) {
             let api_url = args
                 .api_url
+                // calculate env-specific url if no explicit url given but an env was given
+                .or_else(|| {
+                    args.shuttle_api_env
+                        .as_ref()
+                        .map(|env| other_env_api_url(&env))
+                })
+                // add /admin prefix if in admin mode
                 .map(|u| if args.admin { format!("{u}/admin") } else { u });
             if let Some(ref url) = api_url {
                 if url != SHUTTLE_API_URL {
@@ -1935,7 +1942,7 @@ mod tests {
         project_args: ProjectArgs,
         deploy_args: DeployArgs,
     ) -> Vec<String> {
-        let mut shuttle = Shuttle::new(crate::Binary::Shuttle).unwrap();
+        let mut shuttle = Shuttle::new(crate::Binary::Shuttle, None).unwrap();
         shuttle
             .load_project(&project_args, false, false)
             .await

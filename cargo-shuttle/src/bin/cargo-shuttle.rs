@@ -7,7 +7,7 @@ async fn main() -> Result<()> {
 
     setup_tracing(args.debug);
 
-    Shuttle::new(Binary::CargoShuttle)?
+    Shuttle::new(Binary::CargoShuttle, args.shuttle_api_env.clone())?
         .run(args, provided_path_to_init)
         .await
 }

@@ -162,7 +162,7 @@ impl Shuttle {
                 .or_else(|| {
                     args.shuttle_api_env
                         .as_ref()
-                        .map(|env| other_env_api_url(&env))
+                        .map(|env| other_env_api_url(env))
                 })
                 // add /admin prefix if in admin mode
                 .map(|u| if args.admin { format!("{u}/admin") } else { u });

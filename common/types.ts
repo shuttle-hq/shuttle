@@ -338,6 +338,7 @@ export enum AccountTier {
 	/** A basic user that is pending a payment on the backend */
 	PendingPaymentPro = "pendingpaymentpro",
 	CancelledPro = "cancelledpro",
+	ProTrial = "protrial",
 	Pro = "pro",
 	Growth = "growth",
 	/** Higher limits and partial admin endpoint access */

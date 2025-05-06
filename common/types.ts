@@ -332,14 +332,17 @@ export interface UploadArchiveResponse {
 
 export enum AccountTier {
 	Basic = "basic",
-	/** A basic user that is pending a payment on the backend */
+	/** Partial access to Pro features and higher limits than Basic */
+	ProTrial = "protrial",
+	/** A Basic user that is pending a payment to go back to Pro */
 	PendingPaymentPro = "pendingpaymentpro",
+	/** Pro user with an expiring subscription */
 	CancelledPro = "cancelledpro",
 	Pro = "pro",
 	Growth = "growth",
-	/** Higher limits and partial admin endpoint access */
+	/** Growth tier but even higher limits */
 	Employee = "employee",
-	/** Unlimited resources, full API access, admin endpoint access */
+	/** No limits, full API access, admin endpoint access */
 	Admin = "admin",
 }
 

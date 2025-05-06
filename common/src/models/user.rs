@@ -29,7 +29,12 @@ impl UserResponse {
         let mut s = String::new();
         writeln!(&mut s, "{}", "Account info:".bold()).unwrap();
         writeln!(&mut s, "  User ID: {}", self.id).unwrap();
-        writeln!(&mut s, "  Account tier: {}", self.account_tier).unwrap();
+        writeln!(
+            &mut s,
+            "  Account tier: {}",
+            self.account_tier.as_str_fancy()
+        )
+        .unwrap();
         if !self.subscriptions.is_empty() {
             writeln!(&mut s, "  Subscriptions:").unwrap();
             for sub in &self.subscriptions {
@@ -78,14 +83,19 @@ impl UserResponse {
 pub enum AccountTier {
     #[default]
     Basic,
-    /// A basic user that is pending a payment on the backend
+    /// Partial access to Pro features and higher limits than Basic
+    ProTrial,
+    /// A Basic user that is pending a payment to go back to Pro
+    // soft-deprecated
     PendingPaymentPro,
+    /// Pro user with an expiring subscription
+    // soft-deprecated
     CancelledPro,
     Pro,
     Growth,
-    /// Higher limits and partial admin endpoint access
+    /// Growth tier but even higher limits
     Employee,
-    /// Unlimited resources, full API access, admin endpoint access
+    /// No limits, full API access, admin endpoint access
     Admin,
 
     /// Forward compatibility
@@ -95,6 +105,20 @@ pub enum AccountTier {
     #[serde(untagged, skip_serializing)]
     #[strum(default, to_string = "Unknown: {0}")]
     Unknown(String),
+}
+impl AccountTier {
+    pub const fn as_str_fancy(&self) -> &'static str {
+        match self {
+            Self::Basic => "Community",
+            Self::ProTrial => "Pro Trial",
+            Self::PendingPaymentPro => "Community (pending payment for Pro)",
+            Self::CancelledPro => "Pro (subscription cancelled)",
+            Self::Pro => "Pro",
+            Self::Growth => "Growth",
+            Self::Employee => "Employee",
+            Self::Admin => "Admin",
+        }
+    }
 }
 
 #[derive(Debug, Deserialize, Serialize)]

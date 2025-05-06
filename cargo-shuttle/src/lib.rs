@@ -84,11 +84,11 @@ pub fn parse_args() -> (ShuttleArgs, bool) {
 
     // don't use an override if production is targetted
     if args
-        .shuttle_api_env
+        .api_env
         .as_ref()
         .is_some_and(|e| e == "prod" || e == "production")
     {
-        args.shuttle_api_env = None;
+        args.api_env = None;
     }
 
     (args, provided_path_to_init)
@@ -173,11 +173,7 @@ impl Shuttle {
             let api_url = args
                 .api_url
                 // calculate env-specific url if no explicit url given but an env was given
-                .or_else(|| {
-                    args.shuttle_api_env
-                        .as_ref()
-                        .map(|env| other_env_api_url(env))
-                })
+                .or_else(|| args.api_env.as_ref().map(|env| other_env_api_url(env)))
                 // add /admin prefix if in admin mode
                 .map(|u| if args.admin { format!("{u}/admin") } else { u });
             if let Some(ref url) = api_url {

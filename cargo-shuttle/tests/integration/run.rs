@@ -33,7 +33,7 @@ async fn shuttle_run(working_directory: &str, external: bool) -> String {
             ShuttleArgs {
                 api_url: Some("http://shuttle.invalid:80".to_string()),
                 admin: false,
-                shuttle_api_env: None,
+                api_env: None,
                 project_args: ProjectArgs {
                     working_directory: working_directory.clone(),
                     name_or_id: None,

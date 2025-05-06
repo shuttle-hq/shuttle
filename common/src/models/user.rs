@@ -79,15 +79,19 @@ impl UserResponse {
 pub enum AccountTier {
     #[default]
     Basic,
-    /// A basic user that is pending a payment on the backend
-    PendingPaymentPro,
-    CancelledPro,
+    /// Partial access to Pro features and higher limits than Basic
     ProTrial,
+    /// A Basic user that is pending a payment to go back to Pro
+    // soft-deprecated
+    PendingPaymentPro,
+    /// Pro user with an expiring subscription
+    // soft-deprecated
+    CancelledPro,
     Pro,
     Growth,
-    /// Higher limits and partial admin endpoint access
+    /// Growth tier but even higher limits
     Employee,
-    /// Unlimited resources, full API access, admin endpoint access
+    /// No limits, full API access, admin endpoint access
     Admin,
 }
 

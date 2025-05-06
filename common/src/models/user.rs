@@ -82,6 +82,7 @@ pub enum AccountTier {
     /// A basic user that is pending a payment on the backend
     PendingPaymentPro,
     CancelledPro,
+    ProTrial,
     Pro,
     Growth,
     /// Higher limits and partial admin endpoint access

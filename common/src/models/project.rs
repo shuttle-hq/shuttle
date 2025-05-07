@@ -1,4 +1,4 @@
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 use strum::{Display, EnumString};
 
@@ -114,4 +114,43 @@ pub enum ComputeTier {
     #[serde(untagged, skip_serializing)]
     #[strum(default, to_string = "Unknown: {0}")]
     Unknown(String),
+}
+
+/// Response for the /project/{project}/usage backend endpoint
+#[derive(Debug, Default, Deserialize, Serialize, Clone)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[typeshare::typeshare]
+pub struct ProjectUsageResponse {
+    /// The start of this project's billing cycle
+    pub billing_cycle_start: NaiveDate,
+
+    /// Show the build minutes clocked against this Project.
+    pub build_minutes: ProjectUsageBuild,
+
+    /// Show the VCPU used by this project on the container platform.
+    pub vcpu: ProjectUsageVCPU,
+}
+
+/// Build Minutes subquery for the [`ProjectUsageResponse`] struct
+#[derive(Debug, Default, Deserialize, Serialize, Clone)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[typeshare::typeshare]
+pub struct ProjectUsageBuild {
+    /// Number of build minutes used by this project.
+    pub used: u32,
+
+    /// Limit of build minutes for this project, before additional charges are liable.
+    pub limit: u32,
+}
+
+/// VCPU subquery for the [`ProjectUsageResponse`] struct
+#[derive(Debug, Default, Deserialize, Serialize, Clone)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[typeshare::typeshare]
+pub struct ProjectUsageVCPU {
+    /// The VCPU reserved for this project
+    pub reserved: f32,
+
+    /// Cost accrued from VCPU usage for this project
+    pub billable_hours: f32,
 }

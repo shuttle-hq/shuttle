@@ -82,10 +82,10 @@ pub struct ProjectUpdateRequest {
     #[cfg_attr(feature = "utoipa", schema(pattern = "^[a-z0-9-]{1,32}$"))]
     pub name: Option<String>,
     /// Transfer to other user
-    #[cfg_attr(feature = "utoipa", schema(pattern = "^user_^[A-Z0-9]{26}$"))]
+    #[cfg_attr(feature = "utoipa", schema(pattern = "^user_[A-Z0-9]{26}$"))]
     pub user_id: Option<String>,
     /// Transfer to a team
-    #[cfg_attr(feature = "utoipa", schema(pattern = "^team_^[A-Z0-9]{26}$"))]
+    #[cfg_attr(feature = "utoipa", schema(pattern = "^team_[A-Z0-9]{26}$"))]
     pub team_id: Option<String>,
     /// Transfer away from current team
     pub remove_from_team: Option<bool>,

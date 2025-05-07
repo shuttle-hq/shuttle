@@ -121,9 +121,6 @@ pub enum ComputeTier {
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub struct ProjectUsageResponse {
-    /// The start of this project's billing cycle
-    pub billing_cycle_start: NaiveDate,
-
     /// Show the build minutes clocked against this Project.
     pub build_minutes: ProjectUsageBuild,
 

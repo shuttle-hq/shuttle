@@ -250,8 +250,6 @@ export interface ProjectUsageVCPU {
 
 /** Response for the /project/{project}/usage backend endpoint */
 export interface ProjectUsageResponse {
-	/** The start of this project's billing cycle */
-	billing_cycle_start: NaiveDate;
 	/** Show the build minutes clocked against this Project. */
 	build_minutes: ProjectUsageBuild;
 	/** Show the VCPU used by this project on the container platform. */

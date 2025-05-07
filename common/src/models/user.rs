@@ -32,7 +32,7 @@ impl UserResponse {
         writeln!(
             &mut s,
             "  Account tier: {}",
-            self.account_tier.as_str_fancy()
+            self.account_tier.to_string_fancy()
         )
         .unwrap();
         if !self.subscriptions.is_empty() {
@@ -107,16 +107,18 @@ pub enum AccountTier {
     Unknown(String),
 }
 impl AccountTier {
-    pub const fn as_str_fancy(&self) -> &'static str {
+    pub fn to_string_fancy(&self) -> String {
         match self {
-            Self::Basic => "Community",
-            Self::ProTrial => "Pro Trial",
-            Self::PendingPaymentPro => "Community (pending payment for Pro)",
-            Self::CancelledPro => "Pro (subscription cancelled)",
-            Self::Pro => "Pro",
-            Self::Growth => "Growth",
-            Self::Employee => "Employee",
-            Self::Admin => "Admin",
+            Self::Basic => "Community".to_owned(),
+            Self::ProTrial => "Pro Trial".to_owned(),
+            Self::PendingPaymentPro => "Community (pending payment for Pro)".to_owned(),
+            Self::CancelledPro => "Pro (subscription cancelled)".to_owned(),
+            Self::Pro => "Pro".to_owned(),
+            Self::Growth => "Growth".to_owned(),
+            Self::Employee => "Employee".to_owned(),
+            Self::Admin => "Admin".to_owned(),
+            #[cfg(feature = "unknown-variants")]
+            Self::Unknown(_) => self.to_string(),
         }
     }
 }

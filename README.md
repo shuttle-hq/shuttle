@@ -191,10 +191,10 @@ Now, if we run `shuttle deploy`, we'll have an up and running project with a dat
 
 | Name | Description |
 |-|-|
-| [shuttle](https://github.com/shuttle-hq/shuttle) 🚀 (This repo) | The core Shuttle product. Contains all crates that users interact with. |
-| [shuttle-examples](https://github.com/shuttle-hq/shuttle-examples) 👨‍🏫 | Officially maintained examples of projects that can be deployed on Shuttle. Also has a list of [community examples](https://github.com/shuttle-hq/shuttle-examples#community-examples). |
+| [shuttle](https://github.com/shuttle-hq/shuttle) 🚀 (This repo) | All library crates and the Shuttle CLI. |
+| [shuttle-examples](https://github.com/shuttle-hq/shuttle-examples) 👨‍🏫 | Officially maintained examples of projects that can be deployed on Shuttle. |
 | [shuttle-docs](https://github.com/shuttle-hq/shuttle-docs) 📃 | Documentation hosted on [docs.shuttle.dev](https://docs.shuttle.dev/). |
-| [www](https://github.com/shuttle-hq/www) 🌍 | Our website [shuttle.dev](https://www.shuttle.dev/), including the [blog](https://www.shuttle.dev/blog/tags/all) and [Launchpad newsletter](https://www.shuttle.dev/launchpad). |
+| [www](https://github.com/shuttle-hq/www) 🌍 | Our website [shuttle.dev](https://www.shuttle.dev/), including the [blog](https://www.shuttle.dev/blog/tags/all) and more. |
 | [deploy-action](https://github.com/shuttle-hq/deploy-action) ⚙ | GitHub Action for continuous deployments. |
 | [awesome-shuttle](https://github.com/shuttle-hq/awesome-shuttle) 🌟 | An awesome list of Shuttle-hosted projects and resources that users can add to. |
 | [shuttlings](https://github.com/shuttle-hq/shuttlings) ⚔️ | A collection of Rust code challenges. A great way to get started with using Rust and Shuttle. |
@@ -213,19 +213,6 @@ For development of this repo, check the [development docs](./DEVELOPING.md).
 
 To offload work from the engineering team on low-priority issues, we will sometimes add a cash bounty to issues.
 Sign up to the [Algora Console](https://console.algora.io/org/shuttle/bounties?status=open) to find open issues with bounties.
-
-## Project Status
-
-We are currently in Public Beta.
-Watch "releases" of this repo to get notified of major updates!
-
-- [x] Alpha: We are testing Shuttle, API and deployments may be unstable
-- [x] Public Alpha: Anyone can sign up, but go easy on us,
-  there are a few kinks
-- [x] Public Beta: Stable enough for most non-enterprise use-cases
-- [ ] Public: Production-ready!
-<br>
-<br>
 
 ## Contributors ✨
 

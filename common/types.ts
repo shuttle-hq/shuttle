@@ -232,6 +232,32 @@ export interface ProjectUpdateRequest {
 	config?: any;
 }
 
+/** Build Minutes subquery for the [`ProjectUsageResponse`] struct */
+export interface ProjectUsageBuild {
+	/** Number of build minutes used by this project. */
+	used: number;
+	/** Limit of build minutes for this project, before additional charges are liable. */
+	limit: number;
+}
+
+/** VCPU subquery for the [`ProjectUsageResponse`] struct */
+export interface ProjectUsageVCPU {
+	/** The VCPU reserved for this project */
+	reserved: number;
+	/** Cost accrued from VCPU usage for this project */
+	billable_hours: number;
+}
+
+/** Response for the /project/{project}/usage backend endpoint */
+export interface ProjectUsageResponse {
+	/** The start of this project's billing cycle */
+	billing_cycle_start: NaiveDate;
+	/** Show the build minutes clocked against this Project. */
+	build_minutes: ProjectUsageBuild;
+	/** Show the VCPU used by this project on the container platform. */
+	vcpu: ProjectUsageVCPU;
+}
+
 export enum ResourceType {
 	DatabaseSharedPostgres = "database::shared::postgres",
 	DatabaseAwsRdsPostgres = "database::aws_rds::postgres",

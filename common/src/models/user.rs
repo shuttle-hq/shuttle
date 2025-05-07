@@ -107,7 +107,7 @@ pub enum AccountTier {
     Unknown(String),
 }
 impl AccountTier {
-    pub const fn as_str_fancy(&self) -> &'static str {
+    pub fn as_str_fancy(&self) -> &str {
         match self {
             Self::Basic => "Community",
             Self::ProTrial => "Pro Trial",
@@ -117,6 +117,7 @@ impl AccountTier {
             Self::Growth => "Growth",
             Self::Employee => "Employee",
             Self::Admin => "Admin",
+            Self::Unknown(s) => s.as_str(),
         }
     }
 }

@@ -73,6 +73,27 @@ export interface CertificateListResponse {
 	certificates: CertificateResponse[];
 }
 
+export enum AccountTier {
+	Basic = "basic",
+	/** Partial access to Pro features and higher limits than Basic */
+	ProTrial = "protrial",
+	/** A Basic user that is pending a payment to go back to Pro */
+	PendingPaymentPro = "pendingpaymentpro",
+	/** Pro user with an expiring subscription */
+	CancelledPro = "cancelledpro",
+	Pro = "pro",
+	Growth = "growth",
+	/** Growth tier but even higher limits */
+	Employee = "employee",
+	/** No limits, full API access, admin endpoint access */
+	Admin = "admin",
+}
+
+export interface CreateAccountRequest {
+	auth0_id: string;
+	account_tier: AccountTier;
+}
+
 /** Holds the data for building a database connection string. */
 export interface DatabaseInfo {
 	engine: string;
@@ -325,25 +346,13 @@ export interface TelemetryConfigResponse {
 	logfire?: TelemetrySinkStatus;
 }
 
+export interface UpdateAccountTierRequest {
+	account_tier: AccountTier;
+}
+
 export interface UploadArchiveResponse {
 	/** The S3 object version ID of the uploaded object */
 	archive_version_id: string;
-}
-
-export enum AccountTier {
-	Basic = "basic",
-	/** Partial access to Pro features and higher limits than Basic */
-	ProTrial = "protrial",
-	/** A Basic user that is pending a payment to go back to Pro */
-	PendingPaymentPro = "pendingpaymentpro",
-	/** Pro user with an expiring subscription */
-	CancelledPro = "cancelledpro",
-	Pro = "pro",
-	Growth = "growth",
-	/** Growth tier but even higher limits */
-	Employee = "employee",
-	/** No limits, full API access, admin endpoint access */
-	Admin = "admin",
 }
 
 export interface UserResponse {

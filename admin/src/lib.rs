@@ -102,10 +102,7 @@ pub async fn run(args: Args) {
             println!("{msg}");
         }
         Command::SetAccountTier { user_id, tier } => {
-            client
-                .set_user_tier(&user_id, &tier.to_string())
-                .await
-                .unwrap();
+            client.set_user_tier(&user_id, tier.clone()).await.unwrap();
             println!("Set {user_id} to {tier}");
         }
         Command::Everything { query } => {

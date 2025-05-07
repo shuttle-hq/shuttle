@@ -3,7 +3,7 @@ use serde_json::{json, Value};
 use shuttle_api_client::ShuttleApiClient;
 use shuttle_common::models::{
     project::{ProjectResponse, ProjectUpdateRequest},
-    user::UserResponse,
+    user::{AccountTier, UpdateAccountTierRequest, UserResponse},
 };
 
 pub struct Client {
@@ -141,11 +141,11 @@ impl Client {
             .await
     }
 
-    pub async fn set_user_tier(&self, user_id: &str, tier: &str) -> Result<()> {
+    pub async fn set_user_tier(&self, user_id: &str, account_tier: AccountTier) -> Result<()> {
         self.inner
             .put(
-                format!("/admin/users/{user_id}/tier/{tier}"),
-                Option::<()>::None,
+                format!("/admin/users/{user_id}/account_tier"),
+                Some(UpdateAccountTierRequest { account_tier }),
             )
             .await?;
 

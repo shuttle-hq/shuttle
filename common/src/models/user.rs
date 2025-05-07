@@ -16,6 +16,7 @@ pub struct UserResponse {
     pub name: Option<String>,
     /// Auth0 id
     pub auth0_id: Option<String>,
+    pub created_at: Option<DateTime<Utc>>,
     // deprecated
     pub key: Option<String>,
     pub account_tier: AccountTier,

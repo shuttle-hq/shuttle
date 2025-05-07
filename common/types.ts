@@ -361,6 +361,7 @@ export interface UserResponse {
 	name?: string;
 	/** Auth0 id */
 	auth0_id?: string;
+	created_at?: string;
 	key?: string;
 	account_tier: AccountTier;
 	subscriptions: Subscription[];

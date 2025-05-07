@@ -73,6 +73,24 @@ export interface CertificateListResponse {
 	certificates: CertificateResponse[];
 }
 
+export enum AccountTier {
+	Basic = "basic",
+	/** A basic user that is pending a payment on the backend */
+	PendingPaymentPro = "pendingpaymentpro",
+	CancelledPro = "cancelledpro",
+	Pro = "pro",
+	Growth = "growth",
+	/** Higher limits and partial admin endpoint access */
+	Employee = "employee",
+	/** Unlimited resources, full API access, admin endpoint access */
+	Admin = "admin",
+}
+
+export interface CreateAccountRequest {
+	auth0_id: string;
+	account_tier: AccountTier;
+}
+
 /** Holds the data for building a database connection string. */
 export interface DatabaseInfo {
 	engine: string;
@@ -323,6 +341,10 @@ export interface TelemetryConfigResponse {
 	datadog?: TelemetrySinkStatus;
 	grafana_cloud?: TelemetrySinkStatus;
 	logfire?: TelemetrySinkStatus;
+}
+
+export interface UpdateAccountTierRequest {
+	account_tier: AccountTier;
 }
 
 export interface UploadArchiveResponse {

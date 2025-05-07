@@ -204,3 +204,18 @@ mod tests {
         assert!(serde_json::from_str::<AccountTier>("\"hisshiss\"").is_err());
     }
 }
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[typeshare::typeshare]
+pub struct CreateAccountRequest {
+    pub auth0_id: String,
+    pub account_tier: AccountTier,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[typeshare::typeshare]
+pub struct UpdateAccountTierRequest {
+    pub account_tier: AccountTier,
+}

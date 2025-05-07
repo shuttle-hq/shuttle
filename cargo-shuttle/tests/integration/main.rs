@@ -9,12 +9,13 @@ use std::path::Path;
 async fn shuttle_command(cmd: Command, working_directory: &str) -> anyhow::Result<()> {
     let working_directory = Path::new(working_directory).to_path_buf();
 
-    Shuttle::new(cargo_shuttle::Binary::Shuttle)
+    Shuttle::new(cargo_shuttle::Binary::Shuttle, None)
         .unwrap()
         .run(
             ShuttleArgs {
                 api_url: Some("http://shuttle.invalid:80".to_string()),
                 admin: false,
+                api_env: None,
                 project_args: ProjectArgs {
                     working_directory,
                     name_or_id: None,

@@ -75,7 +75,21 @@ pub trait ConfigManager: Sized {
     }
 }
 
-pub struct GlobalConfigManager;
+pub struct GlobalConfigManager {
+    env_override: Option<String>,
+}
+
+impl GlobalConfigManager {
+    pub fn new(env_override: Option<String>) -> Result<Self> {
+        if let Some(ref s) = env_override {
+            if s.chars().any(|c| !c.is_ascii_alphanumeric()) {
+                return Err(anyhow!("Invalid Shuttle API Environment name"));
+            }
+        }
+
+        Ok(Self { env_override })
+    }
+}
 
 impl ConfigManager for GlobalConfigManager {
     fn directory(&self) -> PathBuf {
@@ -90,7 +104,10 @@ impl ConfigManager for GlobalConfigManager {
     }
 
     fn file(&self) -> PathBuf {
-        PathBuf::from("config.toml")
+        match self.env_override.as_ref() {
+            Some(env) => PathBuf::from(format!("config.{env}.toml")),
+            None => PathBuf::from("config.toml"),
+        }
     }
 }
 
@@ -266,8 +283,8 @@ pub struct RequestContext {
 
 impl RequestContext {
     /// Create a [`RequestContext`], only loading in the global configuration details.
-    pub fn load_global() -> Result<Self> {
-        let mut global = Config::new(GlobalConfigManager);
+    pub fn load_global(env_override: Option<String>) -> Result<Self> {
+        let mut global = Config::new(GlobalConfigManager::new(env_override)?);
         if !global.exists() {
             global.create()?;
         }

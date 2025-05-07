@@ -7,6 +7,10 @@ pub const STORAGE_DIRNAME: &str = ".shuttle-storage";
 pub const SHUTTLE_API_URL: &str = "https://api.shuttle.dev";
 pub const SHUTTLE_CONSOLE_URL: &str = "https://console.shuttle.dev";
 
+pub fn other_env_api_url(env: &str) -> String {
+    format!("https://api.{env}.shuttle.dev")
+}
+
 pub const SHUTTLE_INSTALL_DOCS_URL: &str = "https://docs.shuttle.dev/getting-started/installation";
 
 pub const SHUTTLE_GH_REPO_URL: &str = "https://github.com/shuttle-hq/shuttle";

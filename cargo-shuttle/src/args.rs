@@ -26,7 +26,11 @@ use shuttle_common::{constants::EXAMPLES_REPO, models::resource::ResourceType};
         .hide(true))
 )]
 pub struct ShuttleArgs {
-    /// URL for the Shuttle API to target (mainly for development)
+    /// Target a different Shuttle API env (use a separate global config) (default: None (= prod = production))
+    // ("SHUTTLE_ENV" is used for user-facing environments (agnostic of Shuttle API env))
+    #[arg(global = true, long, env = "SHUTTLE_API_ENV", hide = true)]
+    pub api_env: Option<String>,
+    /// URL for the Shuttle API to target (overrides inferred URL from api_env)
     #[arg(global = true, long, env = "SHUTTLE_API", hide = true)]
     pub api_url: Option<String>,
     /// Modify Shuttle API URL to use admin endpoints

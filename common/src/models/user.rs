@@ -117,6 +117,7 @@ impl AccountTier {
             Self::Growth => "Growth",
             Self::Employee => "Employee",
             Self::Admin => "Admin",
+            #[cfg(feature = "unknown-variants")]
             Self::Unknown(s) => s.as_str(),
         }
     }

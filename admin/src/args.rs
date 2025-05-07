@@ -26,6 +26,10 @@ pub enum Command {
         /// User id to switch ownership to
         new_user_id: String,
     },
+    AddUserToTeam {
+        team_user_id: String,
+        user_id: String,
+    },
 
     UpdateProjectConfig {
         /// Project to update

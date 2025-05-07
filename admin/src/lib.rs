@@ -29,6 +29,16 @@ pub async fn run(args: Args) {
                 .unwrap();
             println!("{res:?}");
         }
+        Command::AddUserToTeam {
+            team_user_id,
+            user_id,
+        } => {
+            client
+                .add_team_member(&team_user_id, user_id)
+                .await
+                .unwrap();
+            println!("added");
+        }
         Command::RenewCerts => {
             let certs = client.get_old_certificates().await.unwrap();
             eprintln!("Starting renewals of {} certs in 5 seconds...", certs.len());

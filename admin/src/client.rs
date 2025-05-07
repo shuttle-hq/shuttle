@@ -3,6 +3,7 @@ use serde_json::{json, Value};
 use shuttle_api_client::ShuttleApiClient;
 use shuttle_common::models::{
     project::{ProjectResponse, ProjectUpdateRequest},
+    team::AddTeamMemberRequest,
     user::{AccountTier, UpdateAccountTierRequest, UserResponse},
 };
 
@@ -88,6 +89,21 @@ impl Client {
                 }),
             )
             .await
+    }
+
+    pub async fn add_team_member(&self, team_user_id: &str, user_id: String) -> Result<()> {
+        self.inner
+            .post(
+                format!("/teams/{team_user_id}/members"),
+                Some(AddTeamMemberRequest {
+                    user_id: Some(user_id),
+                    email: None,
+                    role: None,
+                }),
+            )
+            .await?;
+
+        Ok(())
     }
 
     pub async fn feature_flag(&self, entity: &str, flag: &str, set: bool) -> Result<()> {

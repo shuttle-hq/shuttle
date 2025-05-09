@@ -253,7 +253,7 @@ impl RequestContext {
                     self.global.manager.path().display()
                 )
                 .context(anyhow!(
-                    "No valid API key found, try logging in first with `shuttle login`"
+                    "No valid API key found, try logging in with `shuttle login`"
                 ))),
             },
         }

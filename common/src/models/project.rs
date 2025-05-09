@@ -1,4 +1,4 @@
-use chrono::{DateTime, NaiveDate, Utc};
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use strum::{Display, EnumString};
 
@@ -116,7 +116,7 @@ pub enum ComputeTier {
     Unknown(String),
 }
 
-/// Response for the /project/{project}/usage backend endpoint
+/// Sub-Response for the /user/me/usage backend endpoint
 #[derive(Debug, Default, Deserialize, Serialize, Clone)]
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]

@@ -248,7 +248,7 @@ export interface ProjectUsageVCPU {
 	billable_hours: number;
 }
 
-/** Response for the /project/{project}/usage backend endpoint */
+/** Sub-Response for the /user/me/usage backend endpoint */
 export interface ProjectUsageResponse {
 	/** Show the build minutes clocked against this Project. */
 	build_minutes: ProjectUsageBuild;
@@ -390,6 +390,25 @@ export interface UserResponse {
 	account_tier: AccountTier;
 	subscriptions: Subscription[];
 	flags?: string[];
+}
+
+/** Response for the /user/me/usage backend endpoint */
+export interface UserUsageResponse {
+	/**
+	 * Billing cycle start, or monthly from user creation
+	 * depending on the account tier
+	 */
+	start: NaiveDate;
+	/**
+	 * Billing cycle end, or end of month from user creation
+	 * depending on the account tier
+	 */
+	end: NaiveDate;
+	/**
+	 * HashMap of project related metrics for this cycle
+	 * keyed by project_id
+	 */
+	projects: Record<string, ProjectUsageResponse>;
 }
 
 export type DeploymentRequest = 

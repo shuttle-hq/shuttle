@@ -1,19 +1,50 @@
 pub mod args;
 pub mod client;
-pub mod config;
+
+use shuttle_common::{
+    config::{Config, ConfigManager, GlobalConfig, GlobalConfigManager},
+    constants::{other_env_api_url, SHUTTLE_API_URL},
+};
 
 use crate::{
     args::{Args, Command},
     client::Client,
-    config::get_api_key,
 };
 
 pub async fn run(args: Args) {
     tracing::trace!(?args, "starting with args");
 
-    let api_key = get_api_key();
+    let api_key = match std::env::var("SHUTTLE_API_KEY") {
+        Ok(s) => s,
+        Err(_) => {
+            let mut global = Config::<_, GlobalConfig>::new(
+                GlobalConfigManager::new(args.api_env.clone()).unwrap(),
+            );
+            let path = global.manager.path();
+            tracing::trace!(?path, "looking for config");
+            if !global.exists() {
+                global.create().unwrap();
+            }
+            global.open().expect("load global configuration");
+            global
+                .as_ref()
+                .unwrap()
+                .api_key
+                .clone()
+                .expect("api key in config")
+        }
+    };
+    let api_url = args
+        .api_url
+        // calculate env-specific url if no explicit url given but an env was given
+        .or_else(|| args.api_env.as_ref().map(|env| other_env_api_url(env)))
+        .unwrap_or_else(|| SHUTTLE_API_URL.to_string());
+    let api_url = format!("{api_url}/admin");
+    tracing::trace!(?api_url, "");
+
     let client = Client::new(
-        format!("{}/admin", args.api_url),
+        // always in admin mode
+        api_url,
         api_key,
         args.client_timeout,
     );

@@ -3745,16 +3745,19 @@ dependencies = [
 name = "shuttle-common"
 version = "0.54.0"
 dependencies = [
+ "anyhow",
  "axum",
  "chrono",
  "comfy-table",
  "crossterm",
+ "dirs",
  "http",
  "rstest",
  "semver",
  "serde",
  "serde_json",
  "strum",
+ "toml",
  "tracing",
  "typeshare",
  "utoipa",

@@ -10,15 +10,18 @@ homepage = "https://www.shuttle.dev"
 rust-version = "1.81"
 
 [dependencies]
+anyhow = { workspace = true, optional = true }
 axum = { workspace = true, features = ["json"], optional = true }
 chrono = { workspace = true }
 comfy-table = { workspace = true, optional = true }
 crossterm = { workspace = true, optional = true }
+dirs = { workspace = true, optional = true }
 http = { workspace = true }
 semver = { workspace = true }
 serde = { workspace = true, features = ["derive", "std"] }
 serde_json = { workspace = true }
 strum = { workspace = true, features = ["derive"] }
+toml = { workspace = true, optional = true }
 tracing = { workspace = true, features = ["std"], optional = true }
 typeshare = { workspace = true }
 utoipa = { workspace = true, features = ["chrono"], optional = true }
@@ -30,6 +33,7 @@ rstest = "0.24.0"
 [features]
 # main features
 models = ["chrono/serde", "dep:tracing"]
+config = ["anyhow", "dirs", "toml"]
 
 # additional sub-features
 axum = ["dep:axum", "dep:tracing"]

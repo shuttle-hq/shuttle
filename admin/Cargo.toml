@@ -6,7 +6,7 @@ publish = false
 
 [dependencies]
 shuttle-api-client = { workspace = true, default-features = true }
-shuttle-common = { workspace = true, features = ["models"] }
+shuttle-common = { workspace = true, features = ["models", "config"] }
 
 anyhow = { workspace = true }
 clap = { workspace = true, features = ["env"] }

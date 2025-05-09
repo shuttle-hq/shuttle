@@ -1,14 +1,15 @@
 use clap::{Parser, Subcommand};
-use shuttle_common::{
-    constants::SHUTTLE_API_URL,
-    models::{project::ComputeTier, user::AccountTier},
-};
+use shuttle_common::models::{project::ComputeTier, user::AccountTier};
 
 #[derive(Parser, Debug)]
 pub struct Args {
-    /// run this command against the api at the supplied url
-    #[arg(long, env = "SHUTTLE_API", default_value = SHUTTLE_API_URL)]
-    pub api_url: String,
+    /// Target a different Shuttle API env (use a separate global config) (default: None (= prod = production))
+    // ("SHUTTLE_ENV" is used for user-facing environments (agnostic of Shuttle API env))
+    #[arg(global = true, long, env = "SHUTTLE_API_ENV")]
+    pub api_env: Option<String>,
+    /// URL for the Shuttle API to target (overrides inferred URL from api_env)
+    #[arg(global = true, long, env = "SHUTTLE_API")]
+    pub api_url: Option<String>,
 
     #[command(subcommand)]
     pub command: Command,

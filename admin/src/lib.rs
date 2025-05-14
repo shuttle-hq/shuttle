@@ -150,6 +150,20 @@ pub async fn run(args: Args) {
             let v = client.get_user_everything(&query).await.unwrap();
             println!("{}", serde_json::to_string_pretty(&v).unwrap());
         }
+        Command::DowngradeProTrials => {
+            let users = client.get_expired_protrials().await.unwrap();
+            eprintln!(
+                "Starting downgrade of {} users in 5 seconds...",
+                users.len()
+            );
+            tokio::time::sleep(tokio::time::Duration::from_millis(5000)).await;
+            for user_id in users {
+                println!("{user_id}");
+                println!("  {:?}", client.downgrade_protrial(&user_id).await);
+                // prevent api rate limiting
+                tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
+            }
+        }
     };
 }
 

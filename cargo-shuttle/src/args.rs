@@ -504,9 +504,6 @@ pub struct LogsArgs {
     /// View all log lines
     #[arg(long, group = "output_mode", hide = true)]
     pub all: bool,
-    /// Get logs from all deployments instead of one deployment
-    #[arg(long)]
-    pub all_deployments: bool,
 }
 
 /// Helper function to parse and return the absolute path

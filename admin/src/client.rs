@@ -167,4 +167,17 @@ impl Client {
 
         Ok(())
     }
+
+    pub async fn get_expired_protrials(&self) -> Result<Vec<String>> {
+        self.inner.get_json("/admin/users/protrial-downgrade").await
+    }
+
+    pub async fn downgrade_protrial(&self, user_id: &str) -> Result<String> {
+        self.inner
+            .put_json(
+                format!("/admin/users/protrial-downgrade/{user_id}"),
+                Option::<()>::None,
+            )
+            .await
+    }
 }

@@ -117,4 +117,6 @@ pub enum Command {
         /// user id / project id / email
         query: String,
     },
+
+    DowngradeProTrials,
 }

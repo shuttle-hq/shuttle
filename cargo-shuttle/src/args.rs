@@ -108,6 +108,8 @@ pub enum Command {
     Init(InitArgs),
     /// Run a project locally
     Run(RunArgs),
+    /// Build a project
+    Build,
     /// Deploy a project
     Deploy(DeployArgs),
     /// Manage deployments

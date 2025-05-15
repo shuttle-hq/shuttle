@@ -28,6 +28,7 @@ use indicatif::ProgressBar;
 use indoc::formatdoc;
 use reqwest::header::HeaderMap;
 use shuttle_api_client::ShuttleApiClient;
+use shuttle_builder::render_rust_dockerfile;
 use shuttle_common::{
     constants::{
         headers::X_CARGO_SHUTTLE_VERSION, other_env_api_url, EXAMPLES_REPO, RUNTIME_NAME,
@@ -204,7 +205,7 @@ impl Shuttle {
             self.client = Some(client);
         }
 
-        // All commands that need to know which project is being handled
+        // All commands that need to know which (local) project is being handled
         if matches!(
             args.cmd,
             Command::Deploy(..)
@@ -221,7 +222,7 @@ impl Shuttle {
                 )
                 | Command::Logs { .. }
         ) {
-            // Command::Run only uses load_local (below) instead of load_project since it does not target a project in the API
+            // Command::Run and Command::Build use load_local (below) instead of load_project since they don't target a project in the API
             self.load_project(
                 &args.project_args,
                 matches!(args.cmd, Command::Project(ProjectCommand::Link)),
@@ -255,6 +256,10 @@ impl Shuttle {
             Command::Run(run_args) => {
                 self.ctx.load_local(&args.project_args)?;
                 self.local_run(run_args, args.debug).await
+            }
+            Command::Build => {
+                self.ctx.load_local(&args.project_args)?;
+                self.local_docker_build().await
             }
             Command::Deploy(deploy_args) => self.deploy(deploy_args).await,
             Command::Logs(logs_args) => self.logs(logs_args).await,
@@ -1455,6 +1460,101 @@ impl Shuttle {
         Ok(())
     }
 
+    async fn gather_rust_build_args(manifest_path: &Path) -> Result<BuildArgsRust> {
+        let mut rust_build_args = BuildArgsRust::default();
+        let metadata = async_cargo_metadata(manifest_path).await?;
+        let packages = find_shuttle_packages(&metadata)?;
+        // TODO: support overriding this
+        let package = packages
+            .first()
+            .expect("Expected at least one crate with shuttle-runtime in the workspace");
+        let package_name = package.name.to_owned();
+        rust_build_args.package_name = Some(package_name);
+
+        // activate shuttle feature if present
+        let (no_default_features, features) = if package.features.contains_key("shuttle") {
+            (true, Some(vec!["shuttle".to_owned()]))
+        } else {
+            (false, None)
+        };
+        rust_build_args.no_default_features = no_default_features;
+        rust_build_args.features = features.map(|v| v.join(","));
+
+        rust_build_args.shuttle_runtime_version = package
+            .dependencies
+            .iter()
+            .find(|dependency| dependency.name == RUNTIME_NAME)
+            .expect("shuttle package to have runtime dependency")
+            .req
+            .comparators
+            .first()
+            // is "^0.X.0" when `shuttle-runtime = "0.X.0"` is in Cargo.toml
+            .and_then(|c| c.to_string().strip_prefix('^').map(ToOwned::to_owned));
+
+        // TODO: determine which (one) binary to build
+        // TODO: have all of the above be configurable in CLI and Shuttle.toml
+
+        Ok(rust_build_args)
+    }
+
+    async fn local_docker_build(&self) -> Result<()> {
+        let project_name = self.ctx.project_name().to_owned();
+        let working_directory = self.ctx.working_directory();
+        let manifest_path = working_directory.join("Cargo.toml");
+
+        let rust_build_args = Self::gather_rust_build_args(manifest_path.as_path()).await?;
+
+        let tmp = tempfile::Builder::new()
+            .prefix("shuttle-build-")
+            .tempdir()?
+            .into_path();
+        tracing::debug!(temp_dir = %tmp.display(), "building in");
+
+        // TODO: write in tmp instead
+        std::fs::write(working_directory.join("shuttle_prebuild.sh"), "").unwrap();
+        // TODO: use archiving rules to move files to tmp
+        // TODO: remove .dockerignore
+
+        let dfile = tmp.join("__shuttle.Dockerfile");
+        let content = render_rust_dockerfile(&rust_build_args);
+        std::fs::write(&dfile, content).unwrap();
+
+        eprintln!(
+            "\n    {} {} with docker\n",
+            "Building".bold().green(),
+            rust_build_args
+                .package_name
+                .or(rust_build_args.binary_name)
+                .unwrap_or_default()
+        );
+
+        let tag = format!("shuttle-{project_name}");
+        let docker = tokio::process::Command::new("docker")
+            .args([
+                "buildx",
+                "build",
+                "-f",
+                dfile.to_str().unwrap(),
+                "-t",
+                &tag,
+                working_directory.to_str().unwrap(),
+            ])
+            .kill_on_drop(true)
+            .spawn()
+            .unwrap()
+            .wait()
+            .await
+            .unwrap();
+
+        if !docker.success() {
+            bail!("Docker build error");
+        }
+
+        eprintln!("\n    {} building with docker\n", "Finished".bold().green());
+
+        Ok(())
+    }
+
     async fn deploy(&mut self, args: DeployArgs) -> Result<()> {
         let client = self.client.as_ref().unwrap();
         let working_directory = self.ctx.working_directory();
@@ -1491,42 +1591,9 @@ impl Shuttle {
             ..Default::default()
         };
         let mut build_meta = BuildMeta::default();
-        let mut rust_build_args = BuildArgsRust::default();
 
-        let metadata = async_cargo_metadata(manifest_path.as_path()).await?;
-        let packages = find_shuttle_packages(&metadata)?;
-        // TODO: support overriding this
-        let package = packages
-            .first()
-            .expect("Expected at least one crate with shuttle-runtime in the workspace");
-        let package_name = package.name.to_owned();
-        rust_build_args.package_name = Some(package_name);
-
-        // activate shuttle feature if present
-        let (no_default_features, features) = if package.features.contains_key("shuttle") {
-            (true, Some(vec!["shuttle".to_owned()]))
-        } else {
-            (false, None)
-        };
-        rust_build_args.no_default_features = no_default_features;
-        rust_build_args.features = features.map(|v| v.join(","));
-
-        rust_build_args.shuttle_runtime_version = package
-            .dependencies
-            .iter()
-            .find(|dependency| dependency.name == RUNTIME_NAME)
-            .expect("shuttle package to have runtime dependency")
-            .req
-            .comparators
-            .first()
-            // is "^0.X.0" when `shuttle-runtime = "0.X.0"` is in Cargo.toml
-            .and_then(|c| c.to_string().strip_prefix('^').map(ToOwned::to_owned));
-
-        // TODO: determine which (one) binary to build
-
+        let rust_build_args = Self::gather_rust_build_args(manifest_path.as_path()).await?;
         deployment_req.build_args = Some(BuildArgs::Rust(rust_build_args));
-
-        // TODO: have all of the above be configurable in CLI and Shuttle.toml
 
         if let Ok(repo) = Repository::discover(working_directory) {
             let repo_path = repo

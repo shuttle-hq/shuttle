@@ -80,7 +80,7 @@ RUN mv /app/target/release/hello /executable
 
 
 
-RUN for path in \$(tq -r '.build.assets // .build_assets // [] | join(" ")' Shuttle.toml); do find "\$path" -type f -exec echo Copying \{\} \; -exec install -D \{\} /build_assets/\{\} \; ; done
+RUN for path in $(tq -r '.build.assets // .build_assets // [] | join(" ")' Shuttle.toml); do find "$path" -type f -exec echo Copying \{\} \; -exec install -D \{\} /build_assets/\{\} \; ; done
 
 
 FROM runtime-base AS runtime

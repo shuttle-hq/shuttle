@@ -611,8 +611,8 @@ impl Shuttle {
                 // If API error contains message regarding format of error name, print that error and prompt again
                 if let Ok(api_error) = e.downcast::<ApiError>() {
                     // If the returned error string changes, this could break
-                    if api_error.message.contains("Invalid project name") {
-                        eprintln!("{}", api_error.message.yellow());
+                    if api_error.message().contains("Invalid project name") {
+                        eprintln!("{}", api_error.message().yellow());
                         eprintln!("{}", "Try a different name.".yellow());
                         return false;
                     }

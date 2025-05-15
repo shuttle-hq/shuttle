@@ -32,10 +32,13 @@ impl ToJson for reqwest::Response {
 
             let res: ApiError = match serde_json::from_str(&string) {
                 Ok(res) => res,
-                _ => ApiError {
-                    message: format!("Failed to parse response from the server:\n{}", string),
-                    status_code: status_code.as_u16(),
-                },
+                _ => ApiError::new(
+                    format!(
+                        "Failed to parse error response from the server:\n{}",
+                        string
+                    ),
+                    status_code,
+                ),
             };
 
             Err(res.into())

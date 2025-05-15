@@ -1,0 +1,69 @@
+{% if let Some(s) = cargo_chef_dockerfile %}{{s}}{% endif %}
+
+{% if let Some(s) = runtime_base_dockerfile %}{{s}}{% endif %}
+
+FROM {{ chef_image }} AS chef
+WORKDIR /app
+ENV SHUTTLE=true
+
+
+{% if build_args.cargo_chef %}
+FROM chef AS planner
+COPY . .
+RUN cargo chef prepare
+{% endif %}
+
+
+FROM chef AS builder
+
+COPY shuttle_prebuild.sh .
+RUN bash shuttle_prebuild.sh
+
+{% if build_args.mold %}
+export RUSTFLAGS="-C linker=clang -C link-arg=-fuse-ld=/usr/local/bin/mold"
+{% endif %}
+
+{% if build_args.cargo_chef %}
+COPY --from=planner /app/recipe.json recipe.json
+RUN cargo chef cook --release
+    {%- if let Some(s) = build_args.package_name %} --package {{s}}{% endif %}
+    {%- if let Some(s) = build_args.binary_name %} --bin {{s}}{% endif %}
+    {%- if let Some(s) = build_args.features %} --features {{s}}{% endif %}
+    {%- if build_args.no_default_features %} --no-default-features{% endif %}
+{% endif %}
+
+COPY . .
+
+{% if build_args.cargo_build %}
+RUN cargo build --release
+    {%- if let Some(s) = build_args.package_name %} --package {{s}}{% endif %}
+    {%- if let Some(s) = build_args.binary_name %} --bin {{s}}{% endif %}
+    {%- if let Some(s) = build_args.features %} --features {{s}}{% endif %}
+    {%- if build_args.no_default_features %} --no-default-features{% endif %}
+{% endif %}
+
+RUN bash shuttle_postbuild.sh
+
+RUN mv /app/target/release/
+    {%- if let Some(s) = build_args.binary_name -%}
+    {{s}}
+    {%- else if let Some(s) = build_args.package_name -%}
+    {{s}}
+    {%- endif %} /executable
+
+{# Create folders and copy paths of all specified build assets #}
+{# For loop is used so that no find command is run when the array is empty #}
+RUN for path in \$(tq -r '.build.assets // .build_assets // [] | join(" ")' Shuttle.toml); do find "\$path" -type f -exec echo Copying \{\} \; -exec install -D \{\} /build_assets/\{\} \; ; done
+
+
+FROM {{ runtime_image }} AS runtime
+WORKDIR /app
+
+COPY --from=builder /app/shuttle_setup_container.sh /tmp
+RUN bash /tmp/shuttle_setup_container.sh; rm /tmp/shuttle_setup_container.sh
+
+COPY --from=builder /build_assets /app
+COPY --from=builder /executable /usr/local/bin/runtime
+
+ENTRYPOINT ["/usr/local/bin/runtime"]
+

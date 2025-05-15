@@ -7,7 +7,11 @@ impl axum::response::IntoResponse for ApiError {
         #[cfg(feature = "tracing-in-errors")]
         tracing::warn!("{}", self.message);
 
-        (self.status(), axum::Json(self)).into_response()
+        (
+            self.status().unwrap_or(StatusCode::INTERNAL_SERVER_ERROR),
+            axum::Json(self),
+        )
+            .into_response()
     }
 }
 

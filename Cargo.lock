@@ -472,6 +472,7 @@ dependencies = [
  "serde",
  "serde_json",
  "shuttle-api-client",
+ "shuttle-builder",
  "shuttle-common",
  "strum",
  "tempfile",

@@ -11,6 +11,7 @@ use std::fs;
 use std::io::{Read, Write};
 use std::net::{Ipv4Addr, SocketAddr};
 use std::path::{Path, PathBuf};
+use std::process::Stdio;
 use std::sync::Arc;
 
 use anyhow::{anyhow, bail, Context, Result};
@@ -28,6 +29,7 @@ use indicatif::ProgressBar;
 use indoc::formatdoc;
 use reqwest::header::HeaderMap;
 use shuttle_api_client::ShuttleApiClient;
+use shuttle_builder::render_rust_dockerfile;
 use shuttle_common::{
     constants::{
         headers::X_CARGO_SHUTTLE_VERSION, other_env_api_url, EXAMPLES_REPO, SHUTTLE_API_URL,
@@ -36,9 +38,9 @@ use shuttle_common::{
     models::{
         auth::{KeyMessage, TokenMessage},
         deployment::{
-            BuildArgs, BuildArgsRust, BuildMeta, DeploymentRequest, DeploymentRequestBuildArchive,
-            DeploymentRequestImage, DeploymentResponse, DeploymentState, Environment,
-            GIT_STRINGS_MAX_LENGTH,
+            BuildArgs as CommonBuildArgs, BuildArgsRust, BuildMeta, DeploymentRequest,
+            DeploymentRequestBuildArchive, DeploymentRequestImage, DeploymentResponse,
+            DeploymentState, Environment, GIT_STRINGS_MAX_LENGTH,
         },
         error::ApiError,
         log::LogItem,
@@ -54,14 +56,15 @@ use tokio::time::{sleep, Duration};
 use tokio_tungstenite::tungstenite::Message;
 use tracing::{debug, error, info, trace, warn};
 use tracing_subscriber::{fmt, prelude::*, registry, EnvFilter};
+use util::cargo_green_eprintln;
 use zip::write::FileOptions;
 
+pub use crate::args::{BuildArgs, Command, ProjectArgs, RunArgs, ShuttleArgs};
 use crate::args::{
     CertificateCommand, ConfirmationArgs, DeployArgs, DeploymentCommand, GenerateCommand, InitArgs,
     LoginArgs, LogoutArgs, LogsArgs, McpCommand, OutputMode, ProjectCommand, ProjectUpdateCommand,
     ResourceCommand, SecretsArgs, TableArgs, TemplateLocation,
 };
-pub use crate::args::{Command, ProjectArgs, RunArgs, ShuttleArgs};
 use crate::builder::{
     async_cargo_metadata, build_workspace, find_first_shuttle_package, BuiltService,
 };
@@ -220,7 +223,7 @@ impl Shuttle {
                 )
                 | Command::Logs { .. }
         ) {
-            // Command::Run only uses `load_local_config` (below) instead of `load_project` since it does not target a project in the API
+            // Command::Run and Command::Build use `load_local_config` (below) instead of `load_project` since they don't target a project in the API
             self.load_project(
                 &args.project_args,
                 matches!(args.cmd, Command::Project(ProjectCommand::Link)),
@@ -253,6 +256,14 @@ impl Shuttle {
             Command::Run(run_args) => {
                 self.ctx.load_local_config(&args.project_args)?;
                 self.local_run(run_args, args.debug).await
+            }
+            Command::Build(build_args) => {
+                self.ctx.load_local_config(&args.project_args)?;
+                if build_args.docker {
+                    self.local_docker_build(&build_args).await
+                } else {
+                    self.local_build(&build_args).await.map(|_| ())
+                }
             }
             Command::Deploy(deploy_args) => self.deploy(deploy_args).await,
             Command::Logs(logs_args) => self.logs(logs_args).await,
@@ -395,7 +406,7 @@ impl Shuttle {
 
                 let path = args::create_and_parse_path(OsString::from(directory_str))?;
 
-                if std::fs::read_dir(&path)
+                if fs::read_dir(&path)
                     .expect("init dir to exist and list entries")
                     .count()
                     > 0
@@ -1322,9 +1333,7 @@ impl Shuttle {
         Ok(Some(secrets))
     }
 
-    async fn pre_local_run(&self, run_args: &RunArgs) -> Result<BuiltService> {
-        trace!("starting a local run with args: {run_args:?}");
-
+    async fn local_build(&self, build_args: &BuildArgs) -> Result<BuiltService> {
         let (tx, mut rx) = tokio::sync::mpsc::channel::<String>(256);
         tokio::task::spawn(async move {
             while let Some(line) = rx.recv().await {
@@ -1334,13 +1343,9 @@ impl Shuttle {
 
         let project_directory = self.ctx.project_directory();
 
-        println!(
-            "{} {}",
-            "    Building".bold().green(),
-            project_directory.display()
-        );
+        cargo_green_eprintln("Building", project_directory.display());
 
-        build_workspace(project_directory, run_args.release, tx).await
+        build_workspace(project_directory, build_args.release, tx).await
     }
 
     fn find_available_port(run_args: &mut RunArgs) {
@@ -1365,27 +1370,40 @@ impl Shuttle {
         let project_name = self.ctx.project_name().to_owned();
         let project_directory = self.ctx.project_directory();
 
+        trace!("starting a local run with args: {run_args:?}");
+
         // Handle bacon mode
-        if run_args.bacon {
-            println!(
-                "\n    {} {} in watch mode using bacon\n",
-                "Starting".bold().green(),
-                project_name
+        if run_args.build_args.bacon {
+            cargo_green_eprintln(
+                "Starting",
+                format!("{} in watch mode using bacon", project_name),
             );
+            eprintln!();
             return bacon::run_bacon(project_directory).await;
         }
 
-        let service = self.pre_local_run(&run_args).await?;
-        trace!(path = ?service.executable_path, "runtime executable");
+        if run_args.build_args.docker {
+            eprintln!("WARN: Local run with --docker is EXPERIMENTAL. Please submit feedback on GitHub or Discord if you encounter issues.");
+        }
 
         let secrets = Shuttle::get_secrets(&run_args.secret_args, project_directory, true)?
             .unwrap_or_default();
         Shuttle::find_available_port(&mut run_args);
-        if let Some(warning) = check_and_warn_runtime_version(&service.executable_path).await? {
-            eprint!("{}", warning);
-        }
 
-        let runtime_executable = service.executable_path.clone();
+        let s_re = if !run_args.build_args.docker {
+            let service = self.local_build(&run_args.build_args).await?;
+            trace!(path = ?service.executable_path, "runtime executable");
+            if let Some(warning) = check_and_warn_runtime_version(&service.executable_path).await? {
+                eprint!("{}", warning);
+            }
+            let runtime_executable = service.executable_path.clone();
+
+            Some((service, runtime_executable))
+        } else {
+            self.local_docker_build(&run_args.build_args).await?;
+            None
+        };
+
         let api_port = portpicker::pick_unused_port()
             .expect("failed to find available port for local provisioner server");
         let api_addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), api_port);
@@ -1403,18 +1421,10 @@ impl Shuttle {
         });
         tokio::spawn(async move { ProvisionerServer::run(state, &api_addr).await });
 
-        println!(
-            "\n    {} {} on http://{}:{}\n",
-            "Starting".bold().green(),
-            service.target_name,
-            ip,
-            run_args.port,
-        );
-
         let mut envs = vec![
             ("SHUTTLE_BETA", "true".to_owned()),
             ("SHUTTLE_PROJECT_ID", "proj_LOCAL".to_owned()),
-            ("SHUTTLE_PROJECT_NAME", project_name),
+            ("SHUTTLE_PROJECT_NAME", project_name.clone()),
             ("SHUTTLE_ENV", Environment::Local.to_string()),
             ("SHUTTLE_RUNTIME_IP", ip.to_string()),
             ("SHUTTLE_RUNTIME_PORT", run_args.port.to_string()),
@@ -1424,27 +1434,71 @@ impl Shuttle {
         // Use a nice debugging tracing level if user does not provide their own
         if debug && std::env::var("RUST_LOG").is_err() {
             envs.push(("RUST_LOG", "info,shuttle=trace,reqwest=debug".to_owned()));
+        } else if let Ok(v) = std::env::var("RUST_LOG") {
+            // forward the RUST_LOG var into the container if using docker
+            envs.push(("RUST_LOG", v));
         }
 
-        info!(
-            path = %runtime_executable.display(),
-            "Spawning runtime process",
-        );
-        let mut runtime = tokio::process::Command::new(
-            dunce::canonicalize(runtime_executable).context("canonicalize path of executable")?,
-        )
-        .current_dir(&service.workspace_path)
-        .envs(envs)
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .kill_on_drop(true)
-        .spawn()
-        .context("spawning runtime process")?;
+        let name = format!("shuttle-run-{project_name}");
+        let mut child = if run_args.build_args.docker {
+            let image = format!("shuttle-build-{project_name}");
+            eprintln!();
+            cargo_green_eprintln(
+                "Starting",
+                format!("{} on http://{}:{}", image, ip, run_args.port),
+            );
+            eprintln!();
+            info!(image, "Spawning 'docker run' process");
+            let mut docker = tokio::process::Command::new("docker");
+            docker
+                .arg("run")
+                // the kill on docker run does not work as well as manual docker stop after quitting,
+                // but this is good to have regardless
+                .arg("--rm")
+                .arg("--network")
+                .arg("host")
+                .arg("--name")
+                .arg(&name);
+            for (k, v) in envs {
+                docker.arg("--env").arg(format!("{k}={v}"));
+            }
 
-        // Start background tasks for reading runtime's stdout and stderr
+            docker
+                .arg(&image)
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped())
+                .kill_on_drop(true)
+                .spawn()
+                .context("spawning 'docker run' process")?
+        } else {
+            let (service, runtime_executable) = s_re.expect("skill issue");
+            eprintln!();
+            cargo_green_eprintln(
+                "Starting",
+                format!("{} on http://{}:{}", service.target_name, ip, run_args.port),
+            );
+            eprintln!();
+            info!(
+                path = %runtime_executable.display(),
+                "Spawning runtime process",
+            );
+            tokio::process::Command::new(
+                dunce::canonicalize(runtime_executable)
+                    .context("canonicalize path of executable")?,
+            )
+            .current_dir(&service.workspace_path)
+            .envs(envs)
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .kill_on_drop(true)
+            .spawn()
+            .context("spawning runtime process")?
+        };
+
+        // Start background tasks for reading child's stdout and stderr
         let raw = run_args.raw;
         let mut stdout_reader = BufReader::new(
-            runtime
+            child
                 .stdout
                 .take()
                 .context("child process did not have a handle to stdout")?,
@@ -1461,7 +1515,7 @@ impl Shuttle {
             }
         });
         let mut stderr_reader = BufReader::new(
-            runtime
+            child
                 .stderr
                 .take()
                 .context("child process did not have a handle to stderr")?,
@@ -1500,15 +1554,15 @@ impl Shuttle {
                 tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())
                     .expect("Can not get the SIGINT signal receptor");
             tokio::select! {
-                exit_result = runtime.wait() => {
+                exit_result = child.wait() => {
                     Some(exit_result)
                 }
                 _ = sigterm_notif.recv() => {
-                    eprintln!("Received SIGTERM. Killing the runtime...");
+                    eprintln!("Received SIGTERM.");
                     None
                 },
                 _ = sigint_notif.recv() => {
-                    eprintln!("Received SIGINT. Killing the runtime...");
+                    eprintln!("Received SIGINT.");
                     None
                 }
             }
@@ -1562,9 +1616,117 @@ impl Shuttle {
                 bail!("Failed to wait for runtime process to exit: {e}");
             }
             None => {
-                runtime.kill().await?;
+                eprintln!("Stopping runtime.");
+                child.kill().await?;
+                if run_args.build_args.docker {
+                    let status = tokio::process::Command::new("docker")
+                        .arg("stop")
+                        .arg(name)
+                        .kill_on_drop(true)
+                        .stdout(Stdio::null())
+                        .spawn()
+                        .context("spawning 'docker stop'")?
+                        .wait()
+                        .await
+                        .context("waiting for 'docker stop'")?;
+
+                    if !status.success() {
+                        eprintln!("WARN: 'docker stop' failed");
+                    }
+                }
             }
         }
+
+        Ok(())
+    }
+
+    // TODO: use this in native local runs as well
+    async fn gather_rust_build_args(manifest_path: &Path) -> Result<BuildArgsRust> {
+        let mut rust_build_args = BuildArgsRust::default();
+
+        let metadata = async_cargo_metadata(manifest_path).await?;
+        let (package, target, runtime_version) = find_first_shuttle_package(&metadata)?;
+        rust_build_args.package_name = Some(package.name.to_string());
+        rust_build_args.binary_name = Some(target.name.clone());
+        rust_build_args.shuttle_runtime_version = runtime_version;
+
+        // activate shuttle feature if present
+        let (no_default_features, features) = if package.features.contains_key("shuttle") {
+            (true, Some(vec!["shuttle".to_owned()]))
+        } else {
+            (false, None)
+        };
+        rust_build_args.no_default_features = no_default_features;
+        rust_build_args.features = features.map(|v| v.join(","));
+
+        // TODO: have all of the above be configurable in CLI and Shuttle.toml
+
+        Ok(rust_build_args)
+    }
+
+    async fn local_docker_build(&self, build_args: &BuildArgs) -> Result<()> {
+        let project_name = self.ctx.project_name().to_owned();
+        let project_directory = self.ctx.project_directory();
+        let manifest_path = project_directory.join("Cargo.toml");
+
+        let rust_build_args = Self::gather_rust_build_args(manifest_path.as_path()).await?;
+
+        cargo_green_eprintln("Building", format!("{} with docker", project_name));
+
+        let tempdir = tempfile::Builder::new()
+            .prefix("shuttle-build-")
+            .tempdir()?
+            .keep();
+        tracing::debug!("Building in {}", tempdir.display());
+
+        let build_files = self.gather_build_files()?;
+        if build_files.is_empty() {
+            error!("No files included in build. Aborting...");
+            bail!("No files included in build");
+        }
+
+        // make sure this file exists
+        tracing::debug!("Creating prebuild script file");
+        fs::write(tempdir.join("shuttle_prebuild.sh"), "")?;
+        for (path, name) in build_files {
+            let dest = tempdir.join(&name);
+            tracing::debug!("Copying {} to tempdir", name.display());
+            fs::create_dir_all(dest.parent().expect("destination to not be the root"))?;
+            fs::copy(path, dest)?;
+        }
+        tracing::debug!("Removing any .dockerignore file");
+        // remove .dockerignore to not interfere
+        let _ = fs::remove_file(tempdir.join(".dockerignore"));
+
+        // TODO?: Support custom shuttle.Dockerfile
+        let dockerfile = tempdir.join("__shuttle.Dockerfile");
+        tracing::debug!("Writing dockerfile to {}", dockerfile.display());
+        fs::write(&dockerfile, render_rust_dockerfile(&rust_build_args))?;
+
+        let mut docker_cmd = tokio::process::Command::new("docker");
+        docker_cmd
+            .arg("buildx")
+            .arg("build")
+            .arg("--file")
+            .arg(dockerfile)
+            .arg("--tag")
+            .arg(format!("shuttle-build-{project_name}"));
+        if let Some(ref tag) = build_args.tag {
+            docker_cmd.arg("--tag").arg(tag);
+        }
+
+        let docker = docker_cmd.arg(tempdir).kill_on_drop(true).spawn();
+
+        let result = docker
+            .context("spawning docker build command")?
+            .wait()
+            .await
+            .context("waiting for docker build to exit")?;
+        if !result.success() {
+            bail!("Docker build error");
+        }
+
+        cargo_green_eprintln("Finished", "building with docker");
 
         Ok(())
     }
@@ -1613,30 +1775,13 @@ impl Shuttle {
             ..Default::default()
         };
         let mut build_meta = BuildMeta::default();
-        let mut rust_build_args = BuildArgsRust::default();
 
+        let rust_build_args = Self::gather_rust_build_args(manifest_path.as_path()).await?;
+        deployment_req.build_args = Some(CommonBuildArgs::Rust(rust_build_args));
+
+        // TODO: de-dupe metadata call
         let metadata = async_cargo_metadata(manifest_path.as_path()).await?;
-        // TODO: support overriding this
-        let (package, target, runtime_version) = find_first_shuttle_package(&metadata)?;
-        rust_build_args.package_name = Some(package.name.to_string());
-        rust_build_args.binary_name = Some(target.name.clone());
-        rust_build_args.shuttle_runtime_version = runtime_version;
-
-        // activate shuttle feature if present
-        let (no_default_features, features) = if package.features.contains_key("shuttle") {
-            (true, Some(vec!["shuttle".to_owned()]))
-        } else {
-            (false, None)
-        };
-        rust_build_args.no_default_features = no_default_features;
-        rust_build_args.features = features.map(|v| v.join(","));
-
-        // TODO: determine which (one) binary to build
-
-        deployment_req.build_args = Some(BuildArgs::Rust(rust_build_args));
-
-        // TODO: have all of the above be configurable in CLI and Shuttle.toml
-
+        let (_, target, _) = find_first_shuttle_package(&metadata)?;
         deployment_req.infra = parse_infra_from_code(
             &fs::read_to_string(target.src_path.as_path())
                 .context("reading target file when extracting infra annotations")?,
@@ -1674,12 +1819,12 @@ impl Shuttle {
             }
         }
 
-        eprintln!("Packing files...");
+        cargo_green_eprintln("Packing", "build files");
         let archive = self.make_archive()?;
 
         if let Some(path) = args.output_archive {
             eprintln!("Writing archive to {}", path.display());
-            std::fs::write(path, archive).context("writing archive")?;
+            fs::write(path, archive).context("writing archive")?;
 
             return Ok(());
         }
@@ -1688,12 +1833,12 @@ impl Shuttle {
 
         let pid = self.ctx.project_id();
 
-        eprintln!("Uploading code...");
+        cargo_green_eprintln("Uploading", "build archive");
         let arch = client.upload_archive(pid, archive).await?.into_inner();
         deployment_req.archive_version_id = arch.archive_version_id;
         deployment_req.build_meta = Some(build_meta);
 
-        eprintln!("Creating deployment...");
+        cargo_green_eprintln("Creating", "deployment");
         let (deployment, raw_json) = client
             .deploy(
                 pid,
@@ -1941,7 +2086,6 @@ impl Shuttle {
     /// Find list of all files to include in a build, ready for placing in a zip archive
     fn gather_build_files(&self) -> Result<BTreeMap<PathBuf, PathBuf>> {
         let include_patterns = self.ctx.include();
-
         let project_directory = self.ctx.project_directory();
 
         //
@@ -2014,8 +2158,8 @@ impl Shuttle {
     fn make_archive(&self) -> Result<Vec<u8>> {
         let archive_files = self.gather_build_files()?;
         if archive_files.is_empty() {
-            error!("No files included in upload. Aborting...");
-            bail!("No files included in upload.");
+            error!("No files included in build. Aborting...");
+            bail!("No files included in build");
         }
 
         let bytes = {
@@ -2099,7 +2243,7 @@ mod tests {
 
     use crate::args::ProjectArgs;
     use crate::Shuttle;
-    use std::fs::{self, canonicalize};
+    use std::fs;
     use std::io::Cursor;
     use std::path::PathBuf;
 
@@ -2128,7 +2272,7 @@ mod tests {
 
     #[tokio::test]
     async fn make_archive_respect_rules() {
-        let working_directory = canonicalize(path_from_workspace_root(
+        let working_directory = fs::canonicalize(path_from_workspace_root(
             "cargo-shuttle/tests/resources/archiving",
         ))
         .unwrap();

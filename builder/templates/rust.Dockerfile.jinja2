@@ -53,7 +53,7 @@ RUN mv /app/target/release/
 
 {# Create folders and copy paths of all specified build assets #}
 {# For loop is used so that no find command is run when the array is empty #}
-RUN for path in \$(tq -r '.build.assets // .build_assets // [] | join(" ")' Shuttle.toml); do find "\$path" -type f -exec echo Copying \{\} \; -exec install -D \{\} /build_assets/\{\} \; ; done
+RUN for path in $(tq -r '.build.assets // .build_assets // [] | join(" ")' Shuttle.toml); do find "$path" -type f -exec echo Copying \{\} \; -exec install -D \{\} /build_assets/\{\} \; ; done
 
 
 FROM {{ runtime_image }} AS runtime

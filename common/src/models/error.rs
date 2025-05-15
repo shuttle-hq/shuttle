@@ -71,11 +71,7 @@ impl ApiError {
     #[allow(unused_variables)]
     pub fn internal_safe<E: std::error::Error + 'static>(safe_msg: impl Display, error: E) -> Self {
         #[cfg(feature = "tracing-in-errors")]
-        tracing::error!(
-            error = &error as &dyn std::error::Error,
-            "{}",
-            safe_msg.into()
-        );
+        tracing::error!(error = &error as &dyn std::error::Error, "{}", safe_msg);
 
         // Return the raw error during debug builds
         #[cfg(debug_assertions)]

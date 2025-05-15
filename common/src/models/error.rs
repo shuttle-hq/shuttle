@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use http::{status::InvalidStatusCode, StatusCode};
 use serde::{Deserialize, Serialize};
 
@@ -25,9 +27,9 @@ pub struct ApiError {
 
 impl ApiError {
     #[inline(always)]
-    pub fn new(message: impl Into<String>, status_code: StatusCode) -> Self {
+    pub fn new(message: impl Display, status_code: StatusCode) -> Self {
         Self {
-            message: message.into(),
+            message: message.to_string(),
             status_code: status_code.as_u16(),
         }
     }
@@ -67,10 +69,7 @@ impl ApiError {
     /// Creates an internal error without exposing sensitive information to the user.
     #[inline(always)]
     #[allow(unused_variables)]
-    pub fn internal_safe<E: std::error::Error + 'static>(
-        safe_msg: impl Into<String>,
-        error: E,
-    ) -> Self {
+    pub fn internal_safe<E: std::error::Error + 'static>(safe_msg: impl Display, error: E) -> Self {
         #[cfg(feature = "tracing-in-errors")]
         tracing::error!(
             error = &error as &dyn std::error::Error,
@@ -81,7 +80,7 @@ impl ApiError {
         // Return the raw error during debug builds
         #[cfg(debug_assertions)]
         {
-            Self::_internal(error.to_string())
+            Self::_internal(error)
         }
         // Return the safe message during release builds
         #[cfg(not(debug_assertions))]
@@ -92,35 +91,35 @@ impl ApiError {
 
     // 5xx
     #[inline(always)]
-    fn _internal(error: impl Into<String>) -> Self {
-        Self::new(error.into(), StatusCode::INTERNAL_SERVER_ERROR)
+    fn _internal(error: impl Display) -> Self {
+        Self::new(error.to_string(), StatusCode::INTERNAL_SERVER_ERROR)
     }
     #[inline(always)]
-    pub fn service_unavailable(error: impl Into<String>) -> Self {
-        Self::new(error.into(), StatusCode::SERVICE_UNAVAILABLE)
+    pub fn service_unavailable(error: impl Display) -> Self {
+        Self::new(error.to_string(), StatusCode::SERVICE_UNAVAILABLE)
     }
     // 4xx
     #[inline(always)]
-    pub fn bad_request(error: impl Into<String>) -> Self {
-        Self::new(error.into(), StatusCode::BAD_REQUEST)
+    pub fn bad_request(error: impl Display) -> Self {
+        Self::new(error.to_string(), StatusCode::BAD_REQUEST)
     }
     #[inline(always)]
-    pub fn unauthorized(error: impl Into<String>) -> Self {
-        Self::new(error.into(), StatusCode::UNAUTHORIZED)
+    pub fn unauthorized(error: impl Display) -> Self {
+        Self::new(error.to_string(), StatusCode::UNAUTHORIZED)
     }
     #[inline(always)]
-    pub fn forbidden(error: impl Into<String>) -> Self {
-        Self::new(error.into(), StatusCode::FORBIDDEN)
+    pub fn forbidden(error: impl Display) -> Self {
+        Self::new(error.to_string(), StatusCode::FORBIDDEN)
     }
     #[inline(always)]
-    pub fn not_found(error: impl Into<String>) -> Self {
-        Self::new(error.into(), StatusCode::NOT_FOUND)
+    pub fn not_found(error: impl Display) -> Self {
+        Self::new(error.to_string(), StatusCode::NOT_FOUND)
     }
 }
 
 pub trait ErrorContext<T> {
     /// Make a new internal server error with the given message.
-    fn context_internal_error(self, message: impl Into<String>) -> Result<T, ApiError>;
+    fn context_internal_error(self, message: impl Display) -> Result<T, ApiError>;
 
     /// Make a new internal server error using the given function to create the message.
     #[inline(always)]
@@ -137,7 +136,7 @@ where
     E: std::error::Error + 'static,
 {
     #[inline(always)]
-    fn context_internal_error(self, message: impl Into<String>) -> Result<T, ApiError> {
+    fn context_internal_error(self, message: impl Display) -> Result<T, ApiError> {
         self.map_err(|error| ApiError::internal_safe(message, error))
     }
 }

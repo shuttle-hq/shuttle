@@ -7,7 +7,7 @@ mod util;
 
 use std::collections::{BTreeMap, HashMap};
 use std::ffi::OsString;
-use std::fs::{read_to_string, File};
+use std::fs;
 use std::io::{Read, Write};
 use std::net::{Ipv4Addr, SocketAddr};
 use std::path::{Path, PathBuf};
@@ -398,7 +398,7 @@ impl Shuttle {
 
                 let path = args::create_and_parse_path(OsString::from(directory_str))?;
 
-                if std::fs::read_dir(&path)
+                if fs::read_dir(&path)
                     .expect("init dir to exist and list entries")
                     .count()
                     > 0
@@ -1192,7 +1192,7 @@ impl Shuttle {
 
         Ok(if let Some(secrets_file) = secrets_file {
             trace!("Loading secrets from {}", secrets_file.display());
-            if let Ok(secrets_str) = read_to_string(secrets_file) {
+            if let Ok(secrets_str) = fs::read_to_string(secrets_file) {
                 let secrets = toml::from_str::<HashMap<String, String>>(&secrets_str)?;
 
                 trace!(keys = ?secrets.keys(), "available secrets");
@@ -1504,53 +1504,65 @@ impl Shuttle {
 
         let rust_build_args = Self::gather_rust_build_args(manifest_path.as_path()).await?;
 
-        let tmp = tempfile::Builder::new()
-            .prefix("shuttle-build-")
-            .tempdir()?
-            .into_path();
-        tracing::debug!(temp_dir = %tmp.display(), "building in");
-
-        // TODO: write in tmp instead
-        std::fs::write(working_directory.join("shuttle_prebuild.sh"), "").unwrap();
-        // TODO: use archiving rules to move files to tmp
-        // TODO: remove .dockerignore
-
-        let dfile = tmp.join("__shuttle.Dockerfile");
-        let content = render_rust_dockerfile(&rust_build_args);
-        std::fs::write(&dfile, content).unwrap();
-
         eprintln!(
-            "\n    {} {} with docker\n",
+            "    {} {} with docker",
             "Building".bold().green(),
-            rust_build_args
-                .package_name
-                .or(rust_build_args.binary_name)
-                .unwrap_or_default()
+            project_name,
         );
 
-        let tag = format!("shuttle-{project_name}");
+        let tempdir = tempfile::Builder::new()
+            .prefix("shuttle-build-")
+            .tempdir()?
+            .keep();
+        tracing::debug!("Building in {}", tempdir.display());
+
+        let build_files = self.gather_build_files(
+            None, // Secrets file does not matter in a local build
+        )?;
+        if build_files.is_empty() {
+            error!("No files included in build. Aborting...");
+            bail!("No files included in build");
+        }
+
+        // make sure this file exists
+        tracing::debug!("Creating prebuild script file");
+        fs::write(tempdir.join("shuttle_prebuild.sh"), "")?;
+        for (path, name) in build_files {
+            let dest = tempdir.join(&name);
+            tracing::debug!("Copying {} to tempdir", name.display());
+            fs::create_dir_all(dest.parent().expect("destination to not be the root"))?;
+            fs::copy(path, dest)?;
+        }
+        tracing::debug!("Removing any .dockerignore file");
+        // remove .dockerignore to not interfere
+        let _ = fs::remove_file(tempdir.join(".dockerignore"));
+
+        // TODO?: Support custom shuttle.Dockerfile
+        let dockerfile = tempdir.join("__shuttle.Dockerfile");
+        tracing::debug!("Writing dockerfile to {}", dockerfile.display());
+        fs::write(&dockerfile, render_rust_dockerfile(&rust_build_args))?;
+
         let docker = tokio::process::Command::new("docker")
-            .args([
-                "buildx",
-                "build",
-                "-f",
-                dfile.to_str().unwrap(),
-                "-t",
-                &tag,
-                working_directory.to_str().unwrap(),
-            ])
+            .arg("buildx")
+            .arg("build")
+            .arg("--file")
+            .arg(dockerfile)
+            .arg("--tag")
+            .arg(format!("shuttle-build-{project_name}"))
+            .arg(tempdir)
             .kill_on_drop(true)
-            .spawn()
-            .unwrap()
+            .spawn();
+
+        let result = docker
+            .context("spawning docker build command")?
             .wait()
             .await
-            .unwrap();
-
-        if !docker.success() {
+            .context("waiting for docker build to exit")?;
+        if !result.success() {
             bail!("Docker build error");
         }
 
-        eprintln!("\n    {} building with docker\n", "Finished".bold().green());
+        eprintln!("    {} building with docker", "Finished".bold().green());
 
         Ok(())
     }
@@ -1626,12 +1638,12 @@ impl Shuttle {
             }
         }
 
-        eprintln!("Packing files...");
+        eprintln!("     {} build files", "Packing".bold().green());
         let archive = self.make_archive(args.secret_args.secrets.clone())?;
 
         if let Some(path) = args.output_archive {
             eprintln!("Writing archive to {}", path.display());
-            std::fs::write(path, archive).context("writing archive")?;
+            fs::write(path, archive).context("writing archive")?;
 
             return Ok(());
         }
@@ -1640,12 +1652,12 @@ impl Shuttle {
 
         let pid = self.ctx.project_id();
 
-        eprintln!("Uploading code...");
+        eprintln!("   {} build archive", "Uploading".bold().green());
         let arch = client.upload_archive(pid, archive).await?;
         deployment_req.archive_version_id = arch.archive_version_id;
         deployment_req.build_meta = Some(build_meta);
 
-        eprintln!("Creating deployment...");
+        eprintln!("    {} deployment", "Creating".bold().green());
         let deployment = client
             .deploy(pid, DeploymentRequest::BuildArchive(deployment_req))
             .await?;
@@ -1817,9 +1829,12 @@ impl Shuttle {
         Ok(())
     }
 
-    fn make_archive(&self, secrets_file: Option<PathBuf>) -> Result<Vec<u8>> {
+    /// Find list of all files to include in a build, ready for placing in a zip archive
+    fn gather_build_files(
+        &self,
+        secrets_file: Option<PathBuf>,
+    ) -> Result<BTreeMap<PathBuf, PathBuf>> {
         let include_patterns = self.ctx.include();
-
         let working_directory = self.ctx.working_directory();
 
         //
@@ -1902,9 +1917,14 @@ impl Shuttle {
             archive_files.insert(path, name);
         }
 
+        Ok(archive_files)
+    }
+
+    fn make_archive(&self, secrets_file: Option<PathBuf>) -> Result<Vec<u8>> {
+        let archive_files = self.gather_build_files(secrets_file)?;
         if archive_files.is_empty() {
-            error!("No files included in upload. Aborting...");
-            bail!("No files included in upload.");
+            error!("No files included in build. Aborting...");
+            bail!("No files included in build");
         }
 
         let bytes = {
@@ -1918,7 +1938,7 @@ impl Shuttle {
                 zip.start_file(name, FileOptions::<()>::default())?;
 
                 let mut b = Vec::new();
-                File::open(path)?.read_to_end(&mut b)?;
+                fs::File::open(path)?.read_to_end(&mut b)?;
                 zip.write_all(&b)?;
             }
             let r = zip.finish().context("finish encoding zip archive")?;
@@ -1988,7 +2008,7 @@ mod tests {
 
     use crate::args::{DeployArgs, ProjectArgs, SecretsArgs};
     use crate::Shuttle;
-    use std::fs::{self, canonicalize};
+    use std::fs;
     use std::io::Cursor;
     use std::path::PathBuf;
 
@@ -2022,7 +2042,7 @@ mod tests {
 
     #[tokio::test]
     async fn make_archive_respect_rules() {
-        let working_directory = canonicalize(path_from_workspace_root(
+        let working_directory = fs::canonicalize(path_from_workspace_root(
             "cargo-shuttle/tests/resources/archiving",
         ))
         .unwrap();

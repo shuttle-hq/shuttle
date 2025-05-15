@@ -124,10 +124,16 @@ impl ProjectArgs {
 #[derive(Subcommand)]
 pub enum Command {
     /// Generate a Shuttle project from a template
+    #[command(visible_alias = "i")]
     Init(InitArgs),
     /// Run a project locally
+    #[command(visible_alias = "r")]
     Run(RunArgs),
+    /// Build a project
+    #[command(visible_alias = "b")]
+    Build(BuildArgs),
     /// Deploy a project
+    #[command(visible_alias = "d")]
     Deploy(DeployArgs),
     /// Manage deployments
     #[command(subcommand, visible_alias = "depl")]
@@ -372,18 +378,32 @@ pub struct RunArgs {
     /// Use 0.0.0.0 instead of localhost (for usage with local external devices)
     #[arg(long)]
     pub external: bool,
-    /// Use release mode for building the project
-    #[arg(long, short = 'r')]
-    pub release: bool,
     /// Don't display timestamps and log origin tags
     #[arg(long)]
     pub raw: bool,
+
+    #[command(flatten)]
+    pub secret_args: SecretsArgs,
+    #[command(flatten)]
+    pub build_args: BuildArgs,
+}
+
+#[derive(Args, Debug)]
+pub struct BuildArgs {
+    /// Use release mode for building the project
+    #[arg(long, short = 'r')]
+    pub release: bool,
     /// Uses bacon crate to run the project in watch mode
     #[arg(long)]
     pub bacon: bool,
 
-    #[command(flatten)]
-    pub secret_args: SecretsArgs,
+    // Docker-related args
+    /// Build/Run with docker instead of natively
+    #[arg(long, short = 'd')]
+    pub docker: bool,
+    /// Additional tag for the docker image
+    #[arg(long, short = 't')]
+    pub tag: Option<String>,
 }
 
 #[derive(Args, Debug, Default)]

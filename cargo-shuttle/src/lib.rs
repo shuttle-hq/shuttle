@@ -7,7 +7,7 @@ mod util;
 
 use std::collections::{BTreeMap, HashMap};
 use std::ffi::OsString;
-use std::fs::{read_to_string, File};
+use std::fs;
 use std::io::{Read, Write};
 use std::net::{Ipv4Addr, SocketAddr};
 use std::path::{Path, PathBuf};
@@ -28,6 +28,7 @@ use indicatif::ProgressBar;
 use indoc::formatdoc;
 use reqwest::header::HeaderMap;
 use shuttle_api_client::ShuttleApiClient;
+use shuttle_builder::render_rust_dockerfile;
 use shuttle_common::{
     constants::{
         headers::X_CARGO_SHUTTLE_VERSION, other_env_api_url, EXAMPLES_REPO, RUNTIME_NAME,
@@ -204,7 +205,7 @@ impl Shuttle {
             self.client = Some(client);
         }
 
-        // All commands that need to know which project is being handled
+        // All commands that need to know which (local) project is being handled
         if matches!(
             args.cmd,
             Command::Deploy(..)
@@ -221,7 +222,7 @@ impl Shuttle {
                 )
                 | Command::Logs { .. }
         ) {
-            // Command::Run only uses load_local (below) instead of load_project since it does not target a project in the API
+            // Command::Run and Command::Build use load_local (below) instead of load_project since they don't target a project in the API
             self.load_project(
                 &args.project_args,
                 matches!(args.cmd, Command::Project(ProjectCommand::Link)),
@@ -255,6 +256,10 @@ impl Shuttle {
             Command::Run(run_args) => {
                 self.ctx.load_local(&args.project_args)?;
                 self.local_run(run_args, args.debug).await
+            }
+            Command::Build => {
+                self.ctx.load_local(&args.project_args)?;
+                self.local_docker_build().await
             }
             Command::Deploy(deploy_args) => self.deploy(deploy_args).await,
             Command::Logs(logs_args) => self.logs(logs_args).await,
@@ -393,7 +398,7 @@ impl Shuttle {
 
                 let path = args::create_and_parse_path(OsString::from(directory_str))?;
 
-                if std::fs::read_dir(&path)
+                if fs::read_dir(&path)
                     .expect("init dir to exist and list entries")
                     .count()
                     > 0
@@ -1198,7 +1203,7 @@ impl Shuttle {
 
         Ok(if let Some(secrets_file) = secrets_file {
             trace!("Loading secrets from {}", secrets_file.display());
-            if let Ok(secrets_str) = read_to_string(secrets_file) {
+            if let Ok(secrets_str) = fs::read_to_string(secrets_file) {
                 let secrets = toml::from_str::<HashMap<String, String>>(&secrets_str)?;
 
                 trace!(keys = ?secrets.keys(), "available secrets");
@@ -1466,6 +1471,113 @@ impl Shuttle {
         Ok(())
     }
 
+    async fn gather_rust_build_args(manifest_path: &Path) -> Result<BuildArgsRust> {
+        let mut rust_build_args = BuildArgsRust::default();
+        let metadata = async_cargo_metadata(manifest_path).await?;
+        let packages = find_shuttle_packages(&metadata)?;
+        // TODO: support overriding this
+        let package = packages
+            .first()
+            .expect("Expected at least one crate with shuttle-runtime in the workspace");
+        let package_name = package.name.to_owned();
+        rust_build_args.package_name = Some(package_name);
+
+        // activate shuttle feature if present
+        let (no_default_features, features) = if package.features.contains_key("shuttle") {
+            (true, Some(vec!["shuttle".to_owned()]))
+        } else {
+            (false, None)
+        };
+        rust_build_args.no_default_features = no_default_features;
+        rust_build_args.features = features.map(|v| v.join(","));
+
+        rust_build_args.shuttle_runtime_version = package
+            .dependencies
+            .iter()
+            .find(|dependency| dependency.name == RUNTIME_NAME)
+            .expect("shuttle package to have runtime dependency")
+            .req
+            .comparators
+            .first()
+            // is "^0.X.0" when `shuttle-runtime = "0.X.0"` is in Cargo.toml
+            .and_then(|c| c.to_string().strip_prefix('^').map(ToOwned::to_owned));
+
+        // TODO: determine which (one) binary to build
+        // TODO: have all of the above be configurable in CLI and Shuttle.toml
+
+        Ok(rust_build_args)
+    }
+
+    async fn local_docker_build(&self) -> Result<()> {
+        let project_name = self.ctx.project_name().to_owned();
+        let working_directory = self.ctx.working_directory();
+        let manifest_path = working_directory.join("Cargo.toml");
+
+        let rust_build_args = Self::gather_rust_build_args(manifest_path.as_path()).await?;
+
+        eprintln!(
+            "    {} {} with docker",
+            "Building".bold().green(),
+            project_name,
+        );
+
+        let tempdir = tempfile::Builder::new()
+            .prefix("shuttle-build-")
+            .tempdir()?
+            .into_path();
+        tracing::debug!("Building in {}", tempdir.display());
+
+        let build_files = self.gather_build_files(
+            None, // Secrets file does not matter in a local build
+        )?;
+        if build_files.is_empty() {
+            error!("No files included in build. Aborting...");
+            bail!("No files included in build");
+        }
+
+        // make sure this file exists
+        tracing::debug!("Creating prebuild script file");
+        fs::write(tempdir.join("shuttle_prebuild.sh"), "")?;
+        for (path, name) in build_files {
+            let dest = tempdir.join(&name);
+            tracing::debug!("Copying {} to tempdir", name.display());
+            fs::create_dir_all(dest.parent().expect("destination to not be the root"))?;
+            fs::copy(path, dest)?;
+        }
+        tracing::debug!("Removing any .dockerignore file");
+        // remove .dockerignore to not interfere
+        let _ = fs::remove_file(tempdir.join(".dockerignore"));
+
+        // TODO?: Support custom shuttle.Dockerfile
+        let dockerfile = tempdir.join("__shuttle.Dockerfile");
+        tracing::debug!("Writing dockerfile to {}", dockerfile.display());
+        fs::write(&dockerfile, render_rust_dockerfile(&rust_build_args))?;
+
+        let docker = tokio::process::Command::new("docker")
+            .arg("buildx")
+            .arg("build")
+            .arg("--file")
+            .arg(dockerfile)
+            .arg("--tag")
+            .arg(format!("shuttle-build-{project_name}"))
+            .arg(tempdir)
+            .kill_on_drop(true)
+            .spawn();
+
+        let result = docker
+            .context("spawning docker build command")?
+            .wait()
+            .await
+            .context("waiting for docker build to exit")?;
+        if !result.success() {
+            bail!("Docker build error");
+        }
+
+        eprintln!("    {} building with docker", "Finished".bold().green());
+
+        Ok(())
+    }
+
     async fn deploy(&mut self, args: DeployArgs) -> Result<()> {
         let client = self.client.as_ref().unwrap();
         let working_directory = self.ctx.working_directory();
@@ -1502,42 +1614,9 @@ impl Shuttle {
             ..Default::default()
         };
         let mut build_meta = BuildMeta::default();
-        let mut rust_build_args = BuildArgsRust::default();
 
-        let metadata = async_cargo_metadata(manifest_path.as_path()).await?;
-        let packages = find_shuttle_packages(&metadata)?;
-        // TODO: support overriding this
-        let package = packages
-            .first()
-            .expect("Expected at least one crate with shuttle-runtime in the workspace");
-        let package_name = package.name.to_owned();
-        rust_build_args.package_name = Some(package_name);
-
-        // activate shuttle feature if present
-        let (no_default_features, features) = if package.features.contains_key("shuttle") {
-            (true, Some(vec!["shuttle".to_owned()]))
-        } else {
-            (false, None)
-        };
-        rust_build_args.no_default_features = no_default_features;
-        rust_build_args.features = features.map(|v| v.join(","));
-
-        rust_build_args.shuttle_runtime_version = package
-            .dependencies
-            .iter()
-            .find(|dependency| dependency.name == RUNTIME_NAME)
-            .expect("shuttle package to have runtime dependency")
-            .req
-            .comparators
-            .first()
-            // is "^0.X.0" when `shuttle-runtime = "0.X.0"` is in Cargo.toml
-            .and_then(|c| c.to_string().strip_prefix('^').map(ToOwned::to_owned));
-
-        // TODO: determine which (one) binary to build
-
+        let rust_build_args = Self::gather_rust_build_args(manifest_path.as_path()).await?;
         deployment_req.build_args = Some(BuildArgs::Rust(rust_build_args));
-
-        // TODO: have all of the above be configurable in CLI and Shuttle.toml
 
         if let Ok(repo) = Repository::discover(working_directory) {
             let repo_path = repo
@@ -1570,12 +1649,12 @@ impl Shuttle {
             }
         }
 
-        eprintln!("Packing files...");
+        eprintln!("     {} build files", "Packing".bold().green());
         let archive = self.make_archive(args.secret_args.secrets.clone())?;
 
         if let Some(path) = args.output_archive {
             eprintln!("Writing archive to {}", path.display());
-            std::fs::write(path, archive).context("writing archive")?;
+            fs::write(path, archive).context("writing archive")?;
 
             return Ok(());
         }
@@ -1584,12 +1663,12 @@ impl Shuttle {
 
         let pid = self.ctx.project_id();
 
-        eprintln!("Uploading code...");
+        eprintln!("   {} build archive", "Uploading".bold().green());
         let arch = client.upload_archive(pid, archive).await?;
         deployment_req.archive_version_id = arch.archive_version_id;
         deployment_req.build_meta = Some(build_meta);
 
-        eprintln!("Creating deployment...");
+        eprintln!("    {} deployment", "Creating".bold().green());
         let deployment = client
             .deploy(pid, DeploymentRequest::BuildArchive(deployment_req))
             .await?;
@@ -1761,9 +1840,12 @@ impl Shuttle {
         Ok(())
     }
 
-    fn make_archive(&self, secrets_file: Option<PathBuf>) -> Result<Vec<u8>> {
+    /// Find list of all files to include in a build, ready for placing in a zip archive
+    fn gather_build_files(
+        &self,
+        secrets_file: Option<PathBuf>,
+    ) -> Result<BTreeMap<PathBuf, PathBuf>> {
         let include_patterns = self.ctx.include();
-
         let working_directory = self.ctx.working_directory();
 
         //
@@ -1846,9 +1928,14 @@ impl Shuttle {
             archive_files.insert(path, name);
         }
 
+        Ok(archive_files)
+    }
+
+    fn make_archive(&self, secrets_file: Option<PathBuf>) -> Result<Vec<u8>> {
+        let archive_files = self.gather_build_files(secrets_file)?;
         if archive_files.is_empty() {
-            error!("No files included in upload. Aborting...");
-            bail!("No files included in upload.");
+            error!("No files included in build. Aborting...");
+            bail!("No files included in build");
         }
 
         let bytes = {
@@ -1862,7 +1949,7 @@ impl Shuttle {
                 zip.start_file(name, FileOptions::<()>::default())?;
 
                 let mut b = Vec::new();
-                File::open(path)?.read_to_end(&mut b)?;
+                fs::File::open(path)?.read_to_end(&mut b)?;
                 zip.write_all(&b)?;
             }
             let r = zip.finish().context("finish encoding zip archive")?;
@@ -1932,7 +2019,7 @@ mod tests {
 
     use crate::args::{DeployArgs, ProjectArgs, SecretsArgs};
     use crate::Shuttle;
-    use std::fs::{self, canonicalize};
+    use std::fs;
     use std::io::Cursor;
     use std::path::PathBuf;
 
@@ -1966,7 +2053,7 @@ mod tests {
 
     #[tokio::test]
     async fn make_archive_respect_rules() {
-        let working_directory = canonicalize(path_from_workspace_root(
+        let working_directory = fs::canonicalize(path_from_workspace_root(
             "cargo-shuttle/tests/resources/archiving",
         ))
         .unwrap();

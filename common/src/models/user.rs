@@ -1,11 +1,14 @@
+use std::collections::HashMap;
 #[cfg(feature = "display")]
 use std::fmt::Write;
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDate, Utc};
 #[cfg(feature = "display")]
 use crossterm::style::Stylize;
 use serde::{Deserialize, Serialize};
 use strum::{EnumString, IntoStaticStr};
+
+use super::project::ProjectUsageResponse;
 
 #[derive(Debug, Deserialize, Serialize)]
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
@@ -219,4 +222,22 @@ pub struct CreateAccountRequest {
 #[typeshare::typeshare]
 pub struct UpdateAccountTierRequest {
     pub account_tier: AccountTier,
+}
+
+/// Response for the /user/me/usage backend endpoint
+#[derive(Debug, Default, Deserialize, Serialize, Clone)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[typeshare::typeshare]
+pub struct UserUsageResponse {
+    /// Billing cycle start, or monthly from user creation
+    /// depending on the account tier
+    pub start: NaiveDate,
+
+    /// Billing cycle end, or end of month from user creation
+    /// depending on the account tier
+    pub end: NaiveDate,
+
+    /// HashMap of project related metrics for this cycle
+    /// keyed by project_id
+    pub projects: HashMap<String, ProjectUsageResponse>,
 }

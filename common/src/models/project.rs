@@ -115,3 +115,39 @@ pub enum ComputeTier {
     #[strum(default, to_string = "Unknown: {0}")]
     Unknown(String),
 }
+
+/// Sub-Response for the /user/me/usage backend endpoint
+#[derive(Debug, Default, Deserialize, Serialize, Clone)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[typeshare::typeshare]
+pub struct ProjectUsageResponse {
+    /// Show the build minutes clocked against this Project.
+    pub build_minutes: ProjectUsageBuild,
+
+    /// Show the VCPU used by this project on the container platform.
+    pub vcpu: ProjectUsageVCPU,
+}
+
+/// Build Minutes subquery for the [`ProjectUsageResponse`] struct
+#[derive(Debug, Default, Deserialize, Serialize, Clone)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[typeshare::typeshare]
+pub struct ProjectUsageBuild {
+    /// Number of build minutes used by this project.
+    pub used: u32,
+
+    /// Limit of build minutes for this project, before additional charges are liable.
+    pub limit: u32,
+}
+
+/// VCPU subquery for the [`ProjectUsageResponse`] struct
+#[derive(Debug, Default, Deserialize, Serialize, Clone)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[typeshare::typeshare]
+pub struct ProjectUsageVCPU {
+    /// The VCPU reserved for this project
+    pub reserved: f32,
+
+    /// Cost accrued from VCPU usage for this project
+    pub billable_hours: f32,
+}

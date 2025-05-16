@@ -32,18 +32,19 @@ rstest = "0.24.0"
 
 [features]
 # main features
-models = ["chrono/serde", "dep:tracing"]
+models = ["chrono/serde"]
 config = ["anyhow", "dirs", "toml"]
 
 # additional sub-features
-axum = ["dep:axum", "dep:tracing"]
+axum = ["dep:axum"]
 display = ["chrono/clock", "dep:crossterm"]
 tables = ["models", "display", "dep:comfy-table"]
+tracing-in-errors = ["dep:tracing"]
 unknown-variants = [] # add fallback to Unknown variant on enum model deser
 utoipa = ["dep:utoipa"] # derive OpenAPI definitions for models
 
 # internal / utility features
-integration-tests = []
+integration-tests = ["dep:tracing"]
 
 [package.metadata.docs.rs]
 features = [

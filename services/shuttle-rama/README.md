@@ -1,7 +1,9 @@
 ## Shuttle service integration for the Rama framework
 
-Rama is still in early development and for now the latest
-alpha release is used, `0.2.0-alpha.5`.
+Learn more about rama at <https://ramaproxy.org/> and see more [Rama v0.2] examples
+at <https://github.com/plabayo/rama/tree/rama-0.2.0/examples>.
+
+[Rama]: https://github.com/plabayo/rama
 
 ### Examples
 

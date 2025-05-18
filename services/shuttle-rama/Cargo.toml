@@ -1,7 +1,7 @@
 [package]
 name = "shuttle-rama"
-version = "0.50.0"
-edition = "2021"
+version = "0.54.0"
+edition = "2024"
 license = "Apache-2.0"
 description = "Service implementation to run a rama server on shuttle"
 repository = "https://github.com/shuttle-hq/shuttle"

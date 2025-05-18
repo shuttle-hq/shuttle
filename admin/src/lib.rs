@@ -1,125 +1,124 @@
 pub mod args;
 pub mod client;
-pub mod config;
 
-use shuttle_backends::project_name::ProjectName;
-use tracing::trace;
+use shuttle_common::{
+    config::{Config, ConfigManager, GlobalConfig, GlobalConfigManager},
+    constants::{other_env_api_url, SHUTTLE_API_URL},
+};
 
 use crate::{
-    args::{AcmeCommand, Args, Command, StatsCommand},
+    args::{Args, Command},
     client::Client,
-    config::get_api_key,
 };
 
 pub async fn run(args: Args) {
-    trace!(?args, "starting with args");
+    tracing::trace!(?args, "starting with args");
 
-    let api_key = get_api_key();
-    let client = Client::new(args.api_url.clone(), api_key, args.client_timeout);
+    let api_key = match std::env::var("SHUTTLE_API_KEY") {
+        Ok(s) => s,
+        Err(_) => {
+            let mut global = Config::<_, GlobalConfig>::new(
+                GlobalConfigManager::new(args.api_env.clone()).unwrap(),
+            );
+            let path = global.manager.path();
+            tracing::trace!(?path, "looking for config");
+            if !global.exists() {
+                global.create().unwrap();
+            }
+            global.open().expect("load global configuration");
+            global
+                .as_ref()
+                .unwrap()
+                .api_key
+                .clone()
+                .expect("api key in config")
+        }
+    };
+    let api_url = args
+        .api_url
+        // calculate env-specific url if no explicit url given but an env was given
+        .or_else(|| args.api_env.as_ref().map(|env| other_env_api_url(env)))
+        .unwrap_or_else(|| SHUTTLE_API_URL.to_string());
+    let api_url = format!("{api_url}/admin");
+    tracing::trace!(?api_url, "");
+
+    let client = Client::new(
+        // always in admin mode
+        api_url,
+        api_key,
+        args.client_timeout,
+    );
 
     match args.command {
-        Command::Revive => {
-            let s = client.revive().await.expect("revive to succeed");
-            println!("{s}");
-        }
-        Command::Destroy => {
-            let s = client.destroy().await.expect("destroy to succeed");
-            println!("{s}");
-        }
-        Command::Acme(AcmeCommand::CreateAccount { email, acme_server }) => {
-            let account = client
-                .acme_account_create(&email, acme_server)
-                .await
-                .expect("to create ACME account");
-
-            println!("Details of ACME account are as follow. Keep this safe as it will be needed to create certificates in the future");
-            println!("{}", serde_json::to_string_pretty(&account).unwrap());
-        }
-        Command::Acme(AcmeCommand::Request {
-            fqdn,
-            project,
-            credentials,
-        }) => {
-            let s = client
-                .acme_request_certificate(&fqdn, &project, &credentials)
-                .await
-                .expect("to get a certificate challenge response");
-            println!("{s}");
-        }
-        Command::Acme(AcmeCommand::RenewCustomDomain {
-            fqdn,
-            project,
-            credentials,
-        }) => {
-            let s = client
-                .acme_renew_custom_domain_certificate(&fqdn, &project, &credentials)
-                .await
-                .expect("to get a certificate challenge response");
-            println!("{s}");
-        }
-        Command::Acme(AcmeCommand::RenewGateway { credentials }) => {
-            let s = client
-                .acme_renew_gateway_certificate(&credentials)
-                .await
-                .expect("to get a certificate challenge response");
-            println!("{s}");
-        }
-        Command::ProjectNames => {
-            let projects = client
-                .get_projects()
-                .await
-                .expect("to get list of projects");
-            for p in projects {
-                if !ProjectName::is_valid(&p.project_name) {
-                    println!("{}", p.project_name);
-                }
-            }
-        }
-        Command::Stats(StatsCommand::Load { clear }) => {
-            let resp = if clear {
-                client.clear_load().await.expect("to delete load stats")
-            } else {
-                client.get_load().await.expect("to get load stats")
-            };
-
-            let has_capacity = if resp.has_capacity { "a" } else { "no" };
-
-            println!(
-                "Currently {} builds are running and there is {} capacity for new builds",
-                resp.builds_count, has_capacity
-            )
-        }
         Command::ChangeProjectOwner {
-            project_name,
+            project_id,
             new_user_id,
         } => {
-            client
-                .change_project_owner(&project_name, &new_user_id)
-                .await
-                .unwrap();
-            println!("Changed project owner: {project_name} -> {new_user_id}")
-        }
-        Command::SetBetaAccess { user_id } => {
-            client.set_beta_access(&user_id, true).await.unwrap();
-            println!("Set user {user_id} beta access");
-        }
-        Command::UnsetBetaAccess { user_id } => {
-            client.set_beta_access(&user_id, false).await.unwrap();
-            println!("Unset user {user_id} beta access");
-        }
-        Command::RenewCerts => {
-            let res = client.renew_old_certificates().await.unwrap();
-            println!("{res}");
-        }
-        Command::UpdateCompute {
-            project_id,
-            compute_tier,
-        } => {
             let res = client
-                .update_project_compute_tier(&project_id, compute_tier)
+                .update_project_owner(&project_id, new_user_id)
                 .await
                 .unwrap();
             println!("{res:?}");
+        }
+        Command::AddUserToTeam {
+            team_user_id,
+            user_id,
+        } => {
+            client
+                .add_team_member(&team_user_id, user_id)
+                .await
+                .unwrap();
+            println!("added");
+        }
+        Command::RenewCerts => {
+            let certs = client.get_old_certificates().await.unwrap();
+            eprintln!("Starting renewals of {} certs in 5 seconds...", certs.len());
+            tokio::time::sleep(tokio::time::Duration::from_millis(5000)).await;
+            for (cert_id, subject, acm) in certs {
+                println!(
+                    "--> {cert_id} {subject} {}",
+                    if acm.is_some() { "(ACM)" } else { "" }
+                );
+                println!("{:?}", client.renew_certificate(&cert_id).await);
+                // prevent api rate limiting
+                tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
+            }
+        }
+        Command::UpdateProjectConfig { project_id, json } => {
+            let res = client
+                .update_project_config(&project_id, serde_json::from_str(&json).unwrap())
+                .await
+                .unwrap();
+            println!("{res:?}");
+        }
+        Command::UpgradeProjectToLb { project_id } => {
+            let res = client.upgrade_project_to_lb(&project_id).await.unwrap();
+            println!("{res:#?}");
+        }
+        Command::UpdateProjectScale {
+            project_id,
+            compute_tier,
+            replicas,
+        } => {
+            let update_config =
+                serde_json::json!({"compute_tier": compute_tier, "replicas": replicas});
+            let res = client
+                .update_project_scale(&project_id, &update_config)
+                .await
+                .unwrap();
+            println!("{res:#?}");
+        }
+        Command::GetProjectConfig { project_id } => {
+            let res = client.get_project_config(&project_id).await.unwrap();
+            println!("{res:#?}");
+        }
+        Command::AddFeatureFlag { entity, flag } => {
+            client.feature_flag(&entity, &flag, true).await.unwrap();
+            println!("Added flag {flag} for {entity}");
+        }
+        Command::RemoveFeatureFlag { entity, flag } => {
+            client.feature_flag(&entity, &flag, false).await.unwrap();
+            println!("Removed flag {flag} for {entity}");
         }
         Command::Gc {
             days,
@@ -136,6 +135,34 @@ pub async fn run(args: Args) {
         } => {
             let project_ids = client.gc_shuttlings(minutes).await.unwrap();
             gc(client, project_ids, stop_deployments, limit).await;
+        }
+        Command::DeleteUser { user_id } => {
+            eprintln!("Deleting user {} in 3 seconds...", user_id);
+            tokio::time::sleep(tokio::time::Duration::from_millis(3000)).await;
+            let msg = client.delete_user(&user_id).await.unwrap();
+            println!("{msg}");
+        }
+        Command::SetAccountTier { user_id, tier } => {
+            client.set_user_tier(&user_id, tier.clone()).await.unwrap();
+            println!("Set {user_id} to {tier}");
+        }
+        Command::Everything { query } => {
+            let v = client.get_user_everything(&query).await.unwrap();
+            println!("{}", serde_json::to_string_pretty(&v).unwrap());
+        }
+        Command::DowngradeProTrials => {
+            let users = client.get_expired_protrials().await.unwrap();
+            eprintln!(
+                "Starting downgrade of {} users in 5 seconds...",
+                users.len()
+            );
+            tokio::time::sleep(tokio::time::Duration::from_millis(5000)).await;
+            for user_id in users {
+                println!("{user_id}");
+                println!("  {:?}", client.downgrade_protrial(&user_id).await);
+                // prevent api rate limiting
+                tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
+            }
         }
     };
 }
@@ -156,7 +183,7 @@ async fn gc(client: Client, mut project_ids: Vec<String>, stop_deployments: bool
     );
     tokio::time::sleep(tokio::time::Duration::from_millis(5000)).await;
     for pid in project_ids {
-        println!("{}", client.inner.stop_service_beta(&pid).await.unwrap());
+        println!("{}", client.inner.stop_service(&pid).await.unwrap());
         // prevent api rate limiting
         tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
     }

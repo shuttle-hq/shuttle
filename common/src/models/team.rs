@@ -1,36 +1,86 @@
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use strum::{Display, EnumString};
 
-use super::user::UserId;
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[typeshare::typeshare]
+pub struct TeamListResponse {
+    pub teams: Vec<TeamResponse>,
+}
 
-/// Minimal team information
-#[derive(Debug, Default, Serialize, Deserialize, PartialEq)]
-pub struct Response {
-    /// Team ID
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[typeshare::typeshare]
+pub struct TeamResponse {
     pub id: String,
-
-    /// Name used for display purposes
-    pub display_name: String,
-
-    /// Is this user an admin of the team
-    pub is_admin: bool,
+    /// Display name
+    pub name: String,
+    /// Membership info of the calling user
+    pub membership: TeamMembership,
 }
 
-/// Member of a team
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
-pub struct MemberResponse {
-    /// User ID
-    pub id: UserId,
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[typeshare::typeshare]
+pub struct TeamMembersResponse {
+    pub members: Vec<TeamMembership>,
+    pub invites: Vec<TeamInvite>,
+}
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[typeshare::typeshare]
+pub struct TeamMembership {
+    pub user_id: String,
     /// Role of the user in the team
-    pub role: MemberRole,
+    pub role: TeamRole,
+    /// Auth0 display name
+    pub nickname: Option<String>,
+    /// URL to profile picture
+    pub picture: Option<String>,
+    /// Auth0 primary email
+    pub email: Option<String>,
 }
 
-/// Role of a user in a team
-#[derive(Debug, Serialize, Deserialize, PartialEq, Display, EnumString)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[typeshare::typeshare]
+pub struct TeamInvite {
+    pub id: String,
+    pub email: String,
+    /// Role of the user in the team
+    pub role: TeamRole,
+    pub expires_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Display, EnumString)]
 #[serde(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
-pub enum MemberRole {
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[typeshare::typeshare]
+pub enum TeamRole {
+    Owner,
     Admin,
     Member,
+
+    /// Forward compatibility
+    #[cfg(feature = "unknown-variants")]
+    #[doc(hidden)]
+    #[typeshare(skip)]
+    #[serde(untagged, skip_serializing)]
+    #[strum(default, to_string = "Unknown: {0}")]
+    Unknown(String),
+}
+
+/// Provide user id to add user.
+/// Provide email address to invite user via email.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[typeshare::typeshare]
+pub struct AddTeamMemberRequest {
+    pub user_id: Option<String>,
+    pub email: Option<String>,
+    /// Role of the user in the team
+    pub role: Option<TeamRole>,
 }

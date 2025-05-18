@@ -13,9 +13,6 @@
   <a href="https://docs.rs/shuttle-runtime">
     <img alt="crate-docs" src="https://img.shields.io/badge/docs-docs.rs-orange">
   </a>
-  <a href="https://status.shuttle.rs/">
-    <img alt="status" src="https://img.shields.io/badge/status-blue">
-  </a>
   <a href="https://circleci.com/gh/shuttle-hq/shuttle/">
     <img alt="build status" src="https://circleci.com/gh/shuttle-hq/shuttle.svg?style=shield"/>
   </a>
@@ -55,7 +52,7 @@ Get resources and deploy your apps with a few lines of code.
     ·
   <a href="https://discord.gg/shuttle">Join Our Discord</a>
     ·
-    <a href="https://twitter.com/shuttle_dev">Follow us on Twitter</a>
+    <a href="https://x.com/shuttle_dev">Follow us on X</a>
   </p>
 
 <div align="center"><img src="https://i.imgur.com/1qdWipP.gif" width="100%" ></div>
@@ -65,16 +62,16 @@ Get resources and deploy your apps with a few lines of code.
 *<div align="center">⭐ If you find Shuttle interesting, consider starring this repo to help spread the word.</div>*
 <br>
 
-# Features
+## Features
 
-* __One-line Resource Provisioning:__ Get a database, or any other AWS resource by adding a line of code to your main file. To delete one, just remove that line of code. No config/yaml files required.
-* __Rapid Development:__ It takes 2 minutes from project initialization to a deployed project. It takes another 2 minutes to provision a resource, and get it deployed to production.
-* __First-class support for popular Rust frameworks:__ [Axum](https://docs.shuttle.dev/examples/axum), [Actix Web](https://docs.shuttle.dev/examples/actix), [Rocket](https://docs.shuttle.dev/examples/rocket), and [more](https://docs.shuttle.dev/examples/other)
-*  __Security:__ Let us worry about the security & permissions while you focus on writing good code.
+- **One-line Resource Provisioning:** Get a database or other resource by adding a single line of code to your main file. No config or yaml files required.
+- **Rapid Development:** It takes 2 minutes from project initialization to a deployed project. It takes seconds to provision a resource, and get it deployed to production.
+- **First-class support for popular Rust frameworks:** [Axum](https://docs.shuttle.dev/examples/axum), [Actix Web](https://docs.shuttle.dev/examples/actix), [Rocket](https://docs.shuttle.dev/examples/rocket), and [more](https://docs.shuttle.dev/examples/other)
+- **Security:** Let us worry about the security & permissions while you focus on writing good code.
 <br>
 <br>
 
-# Quick Start
+## Quick Start
 
 On Linux and macOS, you can use this install script, which will automatically install the correct target for your OS and distro:
 
@@ -123,7 +120,7 @@ For the full documentation, visit [our docs](https://docs.shuttle.dev).
 <br>
 <br>
 
-# Quick Look
+## Quick Look
 
 Below is a basic "Hello World" application written in Axum:
 ```rust
@@ -190,21 +187,21 @@ Now, if we run `shuttle deploy`, we'll have an up and running project with a dat
 <br>
 <br>
 
-# Repositories
+## Repositories
 
 | Name | Description |
 |-|-|
-| [shuttle](https://github.com/shuttle-hq/shuttle) 🚀 (This repo) | The core Shuttle product. Contains all crates that users interact with. |
-| [shuttle-examples](https://github.com/shuttle-hq/shuttle-examples) 👨‍🏫 | Officially maintained examples of projects that can be deployed on Shuttle. Also has a list of [community examples](https://github.com/shuttle-hq/shuttle-examples#community-examples). |
+| [shuttle](https://github.com/shuttle-hq/shuttle) 🚀 (This repo) | All library crates and the Shuttle CLI. |
+| [shuttle-examples](https://github.com/shuttle-hq/shuttle-examples) 👨‍🏫 | Officially maintained examples of projects that can be deployed on Shuttle. |
 | [shuttle-docs](https://github.com/shuttle-hq/shuttle-docs) 📃 | Documentation hosted on [docs.shuttle.dev](https://docs.shuttle.dev/). |
-| [www](https://github.com/shuttle-hq/www) 🌍 | Our website [shuttle.dev](https://www.shuttle.dev/), including the [blog](https://www.shuttle.dev/blog/tags/all) and [Launchpad newsletter](https://www.shuttle.dev/launchpad). |
+| [www](https://github.com/shuttle-hq/www) 🌍 | Our website [shuttle.dev](https://www.shuttle.dev/), including the [blog](https://www.shuttle.dev/blog/tags/all) and more. |
 | [deploy-action](https://github.com/shuttle-hq/deploy-action) ⚙ | GitHub Action for continuous deployments. |
 | [awesome-shuttle](https://github.com/shuttle-hq/awesome-shuttle) 🌟 | An awesome list of Shuttle-hosted projects and resources that users can add to. |
 | [shuttlings](https://github.com/shuttle-hq/shuttlings) ⚔️ | A collection of Rust code challenges. A great way to get started with using Rust and Shuttle. |
 <br>
 <br>
 
-# Contributing to Shuttle
+## Contributing to Shuttle
 
 Contributing to Shuttle is highly encouraged!
 Even if you are not planning to submit any code, joining our [Discord server](https://discord.gg/shuttle) and providing feedback helps us a lot!
@@ -217,20 +214,7 @@ For development of this repo, check the [development docs](./DEVELOPING.md).
 To offload work from the engineering team on low-priority issues, we will sometimes add a cash bounty to issues.
 Sign up to the [Algora Console](https://console.algora.io/org/shuttle/bounties?status=open) to find open issues with bounties.
 
-# Project Status
-
-We are currently in Public Beta.
-Watch "releases" of this repo to get notified of major updates!
-
-- [x] Alpha: We are testing Shuttle, API and deployments may be unstable
-- [x] Public Alpha: Anyone can sign up, but go easy on us,
-  there are a few kinks
-- [x] Public Beta: Stable enough for most non-enterprise use-cases
-- [ ] Public: Production-ready!
-<br>
-<br>
-
-# Contributors ✨
+## Contributors ✨
 
 Thanks goes to these wonderful people:
 

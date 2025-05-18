@@ -1,33 +1,163 @@
-#! /usr/bin/env bash
+#!/usr/bin/env bash
 
-set -euo pipefail
+# -e is not set so that we can check for errors ourselves
+set -uo pipefail
 
-cat <<EOF
-     _           _   _   _
- ___| |__  _   _| |_| |_| | ___
-/ __| '_ \\| | | | __| __| |/ _ \\
-\__ \\ | | | |_| | |_| |_| |  __/
-|___/_| |_|\\__,_|\\__|\\__|_|\\___|
+# Anonymous telemetry
+TELEMETRY="1"
+PLATFORM=""
+NEW_INSTALL="true"
+INSTALL_METHOD=""
+OUTCOME=""
+STEP_FAILED="N/A"
+STARTED_AT=""
+if command -v date &>/dev/null; then
+  STARTED_AT="$(date -u -Iseconds)"
+fi
+case "$OSTYPE" in
+linux*) PLATFORM="linux" ;;
+darwin*) PLATFORM="macos" ;;
+*) PLATFORM="unknown" ;;
+esac
 
-https://www.shuttle.dev
+# disable telemetry if any opt-out vars are set
+if [[ \
+    "${DO_NOT_TRACK:-}" == "1" || "${DO_NOT_TRACK:-}" == "true" || \
+    "${DISABLE_TELEMETRY:-}" == "1" || "${DISABLE_TELEMETRY:-}" == "true" || \
+    "${SHUTTLE_DISABLE_TELEMETRY:-}" == "1" || "${SHUTTLE_DISABLE_TELEMETRY:-}" == "true" || \
+    "${CI:-}" == "1" || "${CI:-}" == "true"
+  ]]; then
+  TELEMETRY=0
+fi
+
+# default terminal on mac gives xterm-256color but still doesn't show colors
+if [[ "${TERM:-}" = "xterm-256color" && "$PLATFORM" != "macos" ]]; then
+  SUPPORTS_COLOR="1"
+  echo -e "\
+\e[40;38;5;208m       ___                                  \e[0m
+\e[40;38;5;208m      /   \\ \e[37m   _           _   _   _        \e[0m
+\e[40;38;5;208m   __/    /\e[37m___| |__  _   _| |_| |_| | ___   \e[0m
+\e[40;38;5;208m  /_     /\e[37m/ __| '_ \\| | | | __| __| |/ _ \\  \e[0m
+\e[40;38;5;208m   _|_  | \e[37m\__ \\ | | | |_| | |_| |_| |  __/  \e[0m
+\e[40;38;5;208m  |_| |/  \e[37m|___/_| |_|\\__,_|\\__|\\__|_|\\___|  \e[0m
+\e[40m                                            \e[0m
+"
+else
+  SUPPORTS_COLOR="0"
+  echo "\
+       ___
+      /   \\    _           _   _   _
+   __/    /___| |__  _   _| |_| |_| | ___
+  /_     // __| '_ \\| | | | __| __| |/ _ \\
+   _|_  | \__ \\ | | | |_| | |_| |_| |  __/
+  |_| |/  |___/_| |_|\\__,_|\\__|\\__|_|\\___|
+"
+fi
+echo "\
+https://docs.shuttle.dev
+https://discord.gg/shuttle
 https://github.com/shuttle-hq/shuttle
 
-Please file an issue if you encounter any problems!
-===================================================
-EOF
+Please open an issue if you encounter any problems!"
+if [[ "$TELEMETRY" = "1" ]]; then
+  [[ "$SUPPORTS_COLOR" = "1" ]] && echo -en "\e[2m"
+  echo "Anonymous telemetry enabled. More info and opt-out:"
+  echo "https://docs.shuttle.dev/install-script"
+  [[ "$SUPPORTS_COLOR" = "1" ]] && echo -en "\e[0m"
+fi
+echo "==================================================="
+echo
+
+INSTALLED_RUST=""
+
+_send_telemetry() {
+  if [[ "$TELEMETRY" = "1" ]]; then
+    ENDED_AT=""
+    if command -v date &>/dev/null; then
+      ENDED_AT="$(date -u -Iseconds)"
+    fi
+    telemetry_data="{
+  \"api_key\":\"phc_cQMQqF5QmcEzXEaVlrhv3yBSNRyaabXYAyiCV7xKHUH\",
+  \"distinct_id\":\"install_script\",
+  \"event\":\"install_script_completion\",
+  \"properties\":{
+    \"platform\":\"$PLATFORM\",
+    \"new_install\":\"$NEW_INSTALL\",
+    \"install_method\":\"$INSTALL_METHOD\",
+    \"started_at\":\"$STARTED_AT\",
+    \"ended_at\":\"$ENDED_AT\",
+    \"outcome\":\"$OUTCOME\",
+    \"step_failed\":\"$STEP_FAILED\",
+    \"dont_track_ip\":true
+  }
+}"
+    [ -n "${SHUTTLE_DEBUG:-}" ] && echo -e "DEBUG: Sending telemetry data:\n$telemetry_data"
+    curl -sL -H 'Content-Type: application/json' -d "$telemetry_data" https://console.shuttle.dev/ingest/i/v0/e > /dev/null
+  fi
+}
+
+_exit_success() {
+  OUTCOME="success"
+  _send_telemetry
+  echo
+  [[ "$SUPPORTS_COLOR" = "1" ]] && echo -en "\e[32m" # green
+  echo "Thanks for installing Shuttle CLI! 🚀"
+  [[ "$SUPPORTS_COLOR" = "1" ]] && echo -en "\e[0m"
+  if [[ "$INSTALLED_RUST" = "yes" ]]; then
+    echo
+    [[ "$SUPPORTS_COLOR" = "1" ]] && echo -en "\e[33m" # yellow
+    echo "Remember to 'source \"$HOME/.cargo/env\"' or restart your shell to run cargo and shuttle commands!"
+    [[ "$SUPPORTS_COLOR" = "1" ]] && echo -en "\e[0m"
+  fi
+  exit 0
+}
+
+_exit_neutral() {
+  OUTCOME="neutral"
+  echo
+  echo "If you have any problems, please open an issue on GitHub or visit our Discord!"
+  _send_telemetry
+  exit 0
+}
+
+_exit_failure() {
+  STEP_FAILED="$1"
+  OUTCOME="failure"
+  echo
+  [[ "$SUPPORTS_COLOR" = "1" ]] && echo -en "\e[31m" # red
+  echo "Shuttle installation script failed with reason: $STEP_FAILED"
+  [[ "$SUPPORTS_COLOR" = "1" ]] && echo -en "\e[0m"
+  echo "If you have any problems, please open an issue on GitHub or visit our Discord!"
+  _send_telemetry
+  exit 1
+}
 
 if ! command -v curl &>/dev/null; then
-  echo "curl not installed. Please install curl."
-  exit
+  echo "curl not installed. Please install curl or use a different install method."
+  _exit_failure "curl-not-found"
 elif ! command -v sed &>/dev/null; then
-  echo "sed not installed. Please install sed."
-  exit
+  echo "sed not installed. Please install sed or use a different install method."
+  _exit_failure "sed-not-found"
 fi
 
 REPO_URL="https://github.com/shuttle-hq/shuttle"
-LATEST_RELEASE=$(curl -L -s -H 'Accept: application/json' "$REPO_URL/releases/latest")
+LATEST_RELEASE=$(curl -fsL -H 'Accept: application/json' "$REPO_URL/releases/latest")
+[ $? -ne 0 ] && _exit_failure "check-latest-release"
 # shellcheck disable=SC2001
 LATEST_VERSION=$(echo "$LATEST_RELEASE" | sed -e 's/.*"tag_name":"\([^"]*\)".*/\1/')
+[ $? -ne 0 ] && _exit_failure "parse-latest-version"
+
+if command -v cargo-shuttle &>/dev/null; then
+  NEW_INSTALL="false"
+  if [[ "$(cargo-shuttle -V)" = *"${LATEST_VERSION#v}" ]]; then
+    [[ "$SUPPORTS_COLOR" = "1" ]] && echo -en "\e[32m" # green
+    echo "Shuttle CLI is already at the latest version!"
+    [[ "$SUPPORTS_COLOR" = "1" ]] && echo -en "\e[0m"
+    exit 0 # skip telemetry and instantly exit
+  else
+    echo "Updating Shuttle CLI to $LATEST_VERSION"
+  fi
+fi
 
 _install_linux() {
   echo "Detected Linux!"
@@ -35,8 +165,8 @@ _install_linux() {
   if (uname -a | grep -qi "Microsoft"); then
     OS="ubuntuwsl"
   elif ! command -v lsb_release &>/dev/null; then
-    echo "lsb_release could not be found. Falling back to /etc/os-release"
-    OS="$(grep -Po '(?<=^ID=).*$' /etc/os-release | tr '[:upper:]' '[:lower:]')" 2>/dev/null
+    [ -n "${SHUTTLE_DEBUG:-}" ] && echo "DEBUG: lsb_release could not be found. Falling back to /etc/os-release"
+    OS="$(grep -Eo '^ID=.*$' /etc/os-release | cut -d '=' -f 2 | tr '[:upper:]' '[:lower:]')" 2>/dev/null
   else
     OS=$(lsb_release -i | awk '{ print $3 }' | tr '[:upper:]' '[:lower:]')
   fi
@@ -66,43 +196,53 @@ _install_arch_linux() {
       _install_default
     else
       echo "Installing with pacman"
-      sudo pacman -S --noconfirm cargo-shuttle
+      INSTALL_METHOD="pacman"
+      sudo pacman -S --noconfirm cargo-shuttle || _exit_failure "pacman-install"
     fi
   else
     echo "Pacman not found"
-    exit 1
+    _install_default
   fi
 }
 
 _install_alpine_linux() {
   echo "Alpine Linux detected!"
   if command -v apk &>/dev/null; then
-    if apk search -q cargo-shuttle; then
-      echo "cargo-shuttle is not available in the testing repository. Do you want to enable the testing repository? (y/n)"
-      read -r enable_testing
-      if [ "$enable_testing" = "y" ]; then
-        echo "@testing http://dl-cdn.alpinelinux.org/alpine/edge/testing" | tee -a /etc/apk/repositories
-        apk update
-      else
-        _install_default
-        return 0
-      fi
+    if [ -z "$(apk search -q cargo-shuttle)" ]; then
+      while true; do
+        read -r -p "cargo-shuttle apk package not found. Do you want to enable the testing repository? [Y/n] " yn </dev/tty
+        case $yn in
+        [Yy]*|"")
+          echo "@testing http://dl-cdn.alpinelinux.org/alpine/edge/testing" | tee -a /etc/apk/repositories
+          apk update || _exit_failure "apk-update"
+          break
+          ;;
+        [Nn]*)
+          _install_default
+          return 0
+          ;;
+        *) echo "Please answer yes or no." ;;
+        esac
+      done
     fi
-    if ! apk info cargo-shuttle; then
-      echo "Installing cargo-shuttle"
-      apk add cargo-shuttle@testing
+    if ! apk info -q --installed cargo-shuttle; then
+      echo "Installing with apk"
+      INSTALL_METHOD="apk"
+      apk add cargo-shuttle@testing || _exit_failure "apk-add"
     else
       apk_version=$(apk version cargo-shuttle | awk 'NR==2{print $3}')
       if [[ "${apk_version}" != "${LATEST_VERSION#v}"* ]]; then
         echo "cargo-shuttle is not updated in the testing repository, ping @orhun!!!"
         _install_default
       else
-        echo "cargo-shuttle is already up to date."
+        echo "Installing with apk"
+        INSTALL_METHOD="apk"
+        apk upgrade cargo-shuttle || _exit_failure "apk-upgrade"
       fi
     fi
   else
     echo "APK (Alpine Package Keeper) not found"
-    exit 1
+    _install_default
   fi
 }
 
@@ -112,37 +252,46 @@ _install_mac() {
 }
 
 _install_binary() {
+  INSTALL_METHOD="binary-download"
   case "$OSTYPE" in
   linux*) target="x86_64-unknown-linux-musl" ;;
   darwin*) target="x86_64-apple-darwin" ;;
   *)
     echo "Cannot determine the target to install"
-    exit 1
+    _exit_failure "cannot-determine-target"
     ;;
   esac
   temp_dir=$(mktemp -d)
-  pushd "$temp_dir" >/dev/null || exit 1
-  curl -LO "$REPO_URL/releases/download/$LATEST_VERSION/cargo-shuttle-$LATEST_VERSION-$target.tar.gz"
-  tar -xzf "cargo-shuttle-$LATEST_VERSION-$target.tar.gz"
+  [ $? -ne 0 ] && _exit_failure "mktemp"
+  pushd "$temp_dir" >/dev/null || _exit_failure "pushd"
+  curl -LO "$REPO_URL/releases/download/$LATEST_VERSION/cargo-shuttle-$LATEST_VERSION-$target.tar.gz" || _exit_failure "download-binary"
+  if ! command -v tar &>/dev/null; then
+    _exit_failure "tar-not-found"
+  fi
+  tar -xzf "cargo-shuttle-$LATEST_VERSION-$target.tar.gz" || _exit_failure "tar-extract-binary"
   echo "Installing to $HOME/.cargo/bin/cargo-shuttle"
-  mv "cargo-shuttle-$target-$LATEST_VERSION/cargo-shuttle" "$HOME/.cargo/bin/"
+  mv "cargo-shuttle-$target-$LATEST_VERSION/cargo-shuttle" "$HOME/.cargo/bin/" || _exit_failure "move-binary"
   echo "Installing to $HOME/.cargo/bin/shuttle"
-  mv "cargo-shuttle-$target-$LATEST_VERSION/shuttle" "$HOME/.cargo/bin/"
-  popd >/dev/null || exit 1
+  mv "cargo-shuttle-$target-$LATEST_VERSION/shuttle" "$HOME/.cargo/bin/" || _exit_failure "move-binary"
+  popd >/dev/null || _exit_failure "popd"
   if [[ ":$PATH:" != *":$HOME/.cargo/bin:"* ]]; then
-    echo "Add $HOME/.cargo/bin to PATH to run cargo-shuttle"
+    echo "Add $HOME/.cargo/bin to PATH to access the 'shuttle' command"
   fi
 }
 
 _install_rust_and_cargo() {
-  while ! command -v cargo &>/dev/null; do
-    read -r -p "Do you wish to attempt to install Rust and Cargo via rustup? [Y/N] " yn </dev/tty
+  echo "Rust installation not found!"
+  while true; do
+    read -r -p "Install Rust and Cargo via rustup? [Y/n] " yn </dev/tty
     case $yn in
-    [Yy]*)
-      curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s
-      source "$HOME/.cargo/env"
+    [Yy]*|"")
+      curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y || _exit_failure "install-rust"
+      source "$HOME/.cargo/env" # (this only affects this script's env, user has to source or restart shell to apply to their shell)
+      break
       ;;
-    [Nn]*) exit ;;
+    [Nn]*)
+      _exit_neutral
+      ;;
     *) echo "Please answer yes or no." ;;
     esac
   done
@@ -150,7 +299,8 @@ _install_rust_and_cargo() {
 
 _install_with_cargo() {
   echo "Installing with cargo..."
-  cargo install --locked cargo-shuttle
+  INSTALL_METHOD="cargo"
+  cargo install --locked cargo-shuttle || _exit_failure "cargo-install"
 }
 
 _install_default() {
@@ -158,49 +308,47 @@ _install_default() {
 
   if command -v cargo-binstall &>/dev/null; then
     echo "Installing with cargo-binstall"
-    cargo binstall -y --locked cargo-shuttle
+    INSTALL_METHOD="cargo-binstall"
+    cargo-binstall -y --force --locked cargo-shuttle || _exit_failure "cargo-binstall"
     return 0
   fi
 
-  if ! command -v cargo &>/dev/null; then
-    if ! command -v rustup &>/dev/null; then
-      _install_rust_and_cargo
-    else
-      echo "rustup was found, but cargo wasn't. Something is up with your install"
-      exit 1
-    fi
-  fi
-
   while true; do
-    read -r -p "Do you wish to attempt to install the pre-built binary? [Y/N] " yn </dev/tty
+    read -r -p "Install the pre-built binary? [Y/n] " yn </dev/tty
     case $yn in
-    [Yy]*)
-      echo "Installing pre-built binary..."
+    [Yy]*|"")
       _install_binary
       break
       ;;
     [Nn]*)
-      read -r -p "Do you wish to attempt an install with cargo? [Y/N] " yn </dev/tty
-      case $yn in
-      [Yy]*)
-        _install_with_cargo
-        break
-        ;;
-      [Nn]*) exit ;;
-      *) echo "Please answer yes or no." ;;
-      esac
+      while true; do
+        read -r -p "Install from source with cargo? [Y/n] " yn </dev/tty
+        case $yn in
+        [Yy]*|"")
+          _install_with_cargo
+          break
+          ;;
+        [Nn]*)
+          _exit_neutral
+          ;;
+        *) echo "Please answer yes or no." ;;
+        esac
+      done
       ;;
     *) echo "Please answer yes or no." ;;
     esac
   done
 }
 
-if command -v cargo-shuttle &>/dev/null; then
-  if [[ "$(cargo-shuttle -V)" = *"${LATEST_VERSION#v}" ]]; then
-    echo "cargo-shuttle is already at the latest version!"
-    exit
+# Check Rust installation since it is a required dependency
+if ! command -v cargo &>/dev/null; then
+  if ! command -v rustup &>/dev/null; then
+    _install_rust_and_cargo
+    INSTALLED_RUST="yes"
+    echo
   else
-    echo "Updating cargo-shuttle to $LATEST_VERSION"
+    echo "rustup was found, but cargo wasn't. Something is up with your Rust installation."
+    _exit_failure "rustup-found-cargo-not-found"
   fi
 fi
 
@@ -210,10 +358,6 @@ darwin*) _install_mac ;;
 *) _install_default ;;
 esac
 
-cat <<EOF
-Thanks for installing cargo-shuttle! 🚀
-
-If you have any issues, please open an issue on GitHub or visit our Discord (https://discord.gg/shuttle)!
-EOF
+_exit_success
 
 # vim: ts=2 sw=2 et:

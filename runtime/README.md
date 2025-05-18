@@ -1,4 +1,4 @@
-# Shuttle - Deploy Rust apps with a single Cargo subcommand
+# Shuttle - Deploy Rust apps with a single command
 
 <div style="display: flex; margin-top: 30px; margin-bottom: 30px;">
 <img src="https://raw.githubusercontent.com/shuttle-hq/shuttle/main/assets/logo-rectangle-transparent.png" width="400px" style="margin-left: auto; margin-right: auto;"/>
@@ -12,7 +12,7 @@
 
 ## Usage
 
-Start by installing the [`cargo shuttle`](https://docs.rs/crate/cargo-shuttle/latest) subcommand by running the following in a terminal:
+Start by installing the Shuttle CLI by running the following in a terminal:
 
 ```bash
 cargo install cargo-shuttle
@@ -28,9 +28,9 @@ By looking at the `Cargo.toml` file of the generated `my-axum-app` project you w
 be a binary crate with a few dependencies including `shuttle-runtime` and `shuttle-axum`.
 
 ```toml
-axum = "0.7.3"
-shuttle-axum = "0.50.0"
-shuttle-runtime = "0.50.0"
+axum = "0.8.1"
+shuttle-axum = "0.54.0"
+shuttle-runtime = "0.54.0"
 tokio = "1.28.2"
 ```
 

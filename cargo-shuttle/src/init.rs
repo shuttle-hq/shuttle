@@ -14,7 +14,7 @@ use gix::{open, progress};
 use regex::Regex;
 use shuttle_common::constants::EXAMPLES_README;
 use tempfile::{Builder, TempDir};
-use toml_edit::{value, Document};
+use toml_edit::{value, DocumentMut};
 use url::Url;
 
 use crate::args::TemplateLocation;
@@ -25,7 +25,7 @@ pub fn generate_project(
     temp_loc: &TemplateLocation,
     no_git: bool,
 ) -> Result<()> {
-    println!(r#"Creating project "{name}" in "{}""#, dest.display());
+    eprintln!(r#"Creating project "{name}" in "{}""#, dest.display());
 
     let temp_dir: TempDir = setup_template(&temp_loc.auto_path)
         .context("Failed to setup template generation directory")?;
@@ -101,7 +101,7 @@ fn setup_template(auto_path: &str) -> Result<TempDir> {
         // `owner` and `name` are required for the regex to
         // match. Thus, we don't need to check if they exist.
         let url = format!("{vendor}{}/{}.git", &caps["owner"], &caps["name"]);
-        println!(r#"Cloning from "{}"..."#, url);
+        eprintln!(r#"Cloning from "{}"..."#, url);
         gix_clone(&url, temp_dir.path()).context("Failed to clone git repository")?;
     } else if Path::new(auto_path).is_absolute() || auto_path.starts_with('.') {
         if Path::new(auto_path).exists() {
@@ -116,11 +116,11 @@ fn setup_template(auto_path: &str) -> Result<TempDir> {
             gix_clone(auto_path, temp_dir.path())
                 .with_context(|| format!("Failed to clone Git repository at {url}"))?;
         } else {
-            println!(
-                "URL scheme is not supported. Please use HTTP of HTTPS for URLs, \
+            eprintln!(
+                "URL scheme is not supported. Please use HTTP or HTTPS for URLs, \
                 or use another method of specifying the template location."
             );
-            println!(
+            eprintln!(
                 "HINT: You can find examples of how to select a template here: {EXAMPLES_README}"
             );
             anyhow::bail!("invalid URL scheme")
@@ -195,7 +195,7 @@ fn copy_dirs(src: &Path, dest: &Path, git_policy: GitDir) -> Result<()> {
             copy_dirs(&entry.path(), &entry_dest, git_policy)?;
         } else if entry_type.is_file() {
             if entry_dest.exists() {
-                println!(
+                eprintln!(
                     "Warning: file '{}' already exists. Cannot overwrite",
                     entry_dest.display()
                 );
@@ -204,7 +204,7 @@ fn copy_dirs(src: &Path, dest: &Path, git_policy: GitDir) -> Result<()> {
                 fs::copy(entry.path(), &entry_dest)?;
             }
         } else if entry_type.is_symlink() {
-            println!("Warning: symlink '{entry_name}' is ignored");
+            eprintln!("Warning: symlink '{entry_name}' is ignored");
         }
     }
 
@@ -221,7 +221,7 @@ enum GitDir {
 fn set_crate_name(path: &Path, name: &str) -> Result<bool> {
     let path = path.join("Cargo.toml");
     let toml_str = read_to_string(&path)?;
-    let mut doc = toml_str.parse::<Document>()?;
+    let mut doc = toml_str.parse::<DocumentMut>()?;
 
     // if the crate is a workspace, don't set the package name
     if doc.get("workspace").is_some() {
@@ -247,7 +247,7 @@ fn edit_shuttle_toml(path: &Path, set_name: Option<&str>) -> Result<()> {
     }
 
     let toml_str = read_to_string(&path).unwrap_or_default();
-    let mut doc = toml_str.parse::<Document>()?;
+    let mut doc = toml_str.parse::<DocumentMut>()?;
 
     if let Some(name) = set_name {
         // The name was not set elsewhere, so set it here
@@ -259,7 +259,7 @@ fn edit_shuttle_toml(path: &Path, set_name: Option<&str>) -> Result<()> {
 
         doc.remove("name");
 
-        if doc.len() == 0 {
+        if doc.is_empty() {
             // if "name" was the only property in the doc, delete the file
             let _ = std::fs::remove_file(&path);
 
@@ -279,6 +279,10 @@ pub fn create_or_update_ignore_file(path: &Path) -> Result<()> {
 
     for rule in ["/target", ".shuttle*", "Secrets*.toml"] {
         if !contents.lines().any(|l| l == rule) {
+            // ensure new ignore rules are placed on a new line
+            if !contents.ends_with('\n') {
+                writeln!(&mut contents)?;
+            }
             writeln!(&mut contents, "{rule}")?;
         }
     }

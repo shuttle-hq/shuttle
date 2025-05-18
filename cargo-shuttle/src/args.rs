@@ -12,8 +12,7 @@ use clap::{
     Args, Parser, Subcommand, ValueEnum,
 };
 use clap_complete::Shell;
-use shuttle_common::constants::{DEFAULT_IDLE_MINUTES, EXAMPLES_REPO, SHUTTLE_CONSOLE_URL};
-use shuttle_common::resource;
+use shuttle_common::{constants::EXAMPLES_REPO, models::resource::ResourceType};
 
 #[derive(Parser)]
 #[command(
@@ -27,18 +26,22 @@ use shuttle_common::resource;
         .hide(true))
 )]
 pub struct ShuttleArgs {
-    /// URL for the Shuttle API to target (mainly for development)
+    /// Target a different Shuttle API env (use a separate global config) (default: None (= prod = production))
+    // ("SHUTTLE_ENV" is used for user-facing environments (agnostic of Shuttle API env))
+    #[arg(global = true, long, env = "SHUTTLE_API_ENV", hide = true)]
+    pub api_env: Option<String>,
+    /// URL for the Shuttle API to target (overrides inferred URL from api_env)
     #[arg(global = true, long, env = "SHUTTLE_API", hide = true)]
     pub api_url: Option<String>,
+    /// Modify Shuttle API URL to use admin endpoints
+    #[arg(global = true, long, env = "SHUTTLE_ADMIN", hide = true)]
+    pub admin: bool,
     /// Disable network requests that are not strictly necessary. Limits some features.
     #[arg(global = true, long, env = "SHUTTLE_OFFLINE")]
     pub offline: bool,
     /// Turn on tracing output for Shuttle libraries. (WARNING: can print sensitive data)
     #[arg(global = true, long, env = "SHUTTLE_DEBUG")]
     pub debug: bool,
-    /// Target Shuttle's development environment
-    #[arg(global = true, long, env = "SHUTTLE_BETA", hide = true)]
-    pub beta: bool,
     #[command(flatten)]
     pub project_args: ProjectArgs,
 
@@ -54,17 +57,16 @@ pub struct ProjectArgs {
     pub working_directory: PathBuf,
     /// Specify the name or id of the project
     #[arg(global = true, long = "name", visible_alias = "id")]
-    // in alpha mode, this is always a name
     pub name_or_id: Option<String>,
 }
 
 impl ProjectArgs {
     pub fn workspace_path(&self) -> anyhow::Result<PathBuf> {
-        // NOTE: If crates cache is missing this blocks for several seconds during download
+        // NOTE: If crates cache is missing, this blocks for several seconds during download
         let path = MetadataCommand::new()
             .current_dir(&self.working_directory)
             .exec()
-            .context("failed to get cargo metadata")?
+            .context("Failed to find a Rust project in this directory. Try again in a cargo workspace, or provide a --name or --id argument.")?
             .workspace_root
             .into();
 
@@ -74,11 +76,13 @@ impl ProjectArgs {
     pub fn project_name(&self) -> anyhow::Result<String> {
         let workspace_path = self.workspace_path()?;
 
-        // NOTE: If crates cache is missing this blocks for several seconds during download
+        // This second call to cargo metadata in the workspace root seems superfluous,
+        // but it does give a different output if the previous one was run in a workspace member.
+        // NOTE: If crates cache is missing, this blocks for several seconds during download
         let meta = MetadataCommand::new()
             .current_dir(&workspace_path)
             .exec()
-            .context("failed to get cargo metadata")?;
+            .expect("metadata command to succeed in cargo workspace root");
         let package_name = if let Some(root_package) = meta.root_package() {
             root_package.name.clone()
         } else {
@@ -94,6 +98,7 @@ impl ProjectArgs {
     }
 }
 
+#[allow(rustdoc::bare_urls)]
 /// CLI for the Shuttle platform (https://www.shuttle.dev/)
 ///
 /// See the CLI docs for more information: https://docs.shuttle.dev/guides/cli
@@ -108,10 +113,6 @@ pub enum Command {
     /// Manage deployments
     #[command(subcommand, visible_alias = "depl")]
     Deployment(DeploymentCommand),
-    /// View the status of a Shuttle service
-    Status,
-    /// Stop a Shuttle service
-    Stop,
     /// View build and deployment logs
     Logs(LogsArgs),
     /// Manage Shuttle projects
@@ -123,8 +124,6 @@ pub enum Command {
     /// Manage SSL certificates for custom domains
     #[command(subcommand, visible_alias = "cert")]
     Certificate(CertificateCommand),
-    /// Remove cargo build artifacts in the Shuttle environment
-    Clean,
     /// Show info about your Shuttle account
     #[command(visible_alias = "acc")]
     Account,
@@ -137,7 +136,7 @@ pub enum Command {
     Generate(GenerateCommand),
     /// Open an issue on GitHub and provide feedback
     Feedback,
-    /// Upgrade the cargo-shuttle binary
+    /// Upgrade the Shuttle CLI binary
     Upgrade {
         /// Install an unreleased version from the repository's main branch
         #[arg(long)]
@@ -190,13 +189,18 @@ pub enum DeploymentCommand {
         id: Option<String>,
     },
     /// Redeploy a previous deployment (if possible)
-    #[command(visible_alias = "re", hide = true)]
     Redeploy {
         /// ID of deployment to redeploy
-        id: String,
+        id: Option<String>,
+
+        #[command(flatten)]
+        tracking_args: DeploymentTrackingArgs,
     },
     /// Stop running deployment(s)
-    Stop,
+    Stop {
+        #[command(flatten)]
+        tracking_args: DeploymentTrackingArgs,
+    },
 }
 
 #[derive(Subcommand)]
@@ -217,16 +221,17 @@ pub enum ResourceCommand {
         /// Type of the resource to delete.
         /// Use the string in the 'Type' column as displayed in the `resource list` command.
         /// For example, 'database::shared::postgres'.
-        resource_type: resource::Type,
+        resource_type: ResourceType,
         #[command(flatten)]
         confirmation: ConfirmationArgs,
     },
     /// Dump a resource
+    #[command(hide = true)] // not yet supported on shuttle.dev
     Dump {
         /// Type of the resource to dump.
         /// Use the string in the 'Type' column as displayed in the `resource list` command.
         /// For example, 'database::shared::postgres'.
-        resource_type: resource::Type,
+        resource_type: ResourceType,
     },
 }
 
@@ -256,32 +261,17 @@ pub enum CertificateCommand {
 #[derive(Subcommand)]
 pub enum ProjectCommand {
     /// Create a project on Shuttle
-    #[command(visible_alias = "create")]
-    Start(ProjectStartArgs),
+    #[command(visible_alias = "start")]
+    Create,
     /// Update project config
     #[command(subcommand, visible_alias = "upd")]
     Update(ProjectUpdateCommand),
     /// Get the status of this project on Shuttle
     #[command(visible_alias = "stat")]
-    Status {
-        /// Follow status of project
-        // unused in beta (project has no state to follow)
-        #[arg(short, long)]
-        follow: bool,
-    },
-    /// Destroy this project's environment (container) on Shuttle
-    Stop,
-    /// Destroy and create an environment for this project on Shuttle
-    Restart(ProjectStartArgs),
+    Status,
     /// List all projects you have access to
     #[command(visible_alias = "ls")]
     List {
-        // deprecated args, kept around to not break
-        #[arg(long, hide = true)]
-        page: Option<u32>,
-        #[arg(long, hide = true)]
-        limit: Option<u32>,
-
         #[command(flatten)]
         table: TableArgs,
     },
@@ -305,14 +295,6 @@ pub struct ConfirmationArgs {
     pub yes: bool,
 }
 
-#[derive(Args, Debug)]
-pub struct ProjectStartArgs {
-    #[arg(long, default_value_t = DEFAULT_IDLE_MINUTES)]
-    /// How long to wait before putting the project in an idle state due to inactivity.
-    /// 0 means the project will never idle
-    pub idle_minutes: u64,
-}
-
 #[derive(Args, Clone, Debug, Default)]
 #[command(next_help_heading = "Login options")]
 pub struct LoginArgs {
@@ -323,8 +305,8 @@ pub struct LoginArgs {
     #[arg(long)]
     pub api_key: Option<String>,
     /// URL to the Shuttle Console for automatic login
-    #[arg(long, env = "SHUTTLE_CONSOLE", default_value = SHUTTLE_CONSOLE_URL, hide_default_value = true)]
-    pub console_url: String,
+    #[arg(long, env = "SHUTTLE_CONSOLE", hide = true)]
+    pub console_url: Option<String>,
 }
 
 #[derive(Args, Clone, Debug)]
@@ -338,26 +320,29 @@ pub struct LogoutArgs {
 pub struct DeployArgs {
     /// WIP: Deploy this Docker image instead of building one
     #[arg(long, short = 'i', hide = true)]
-    pub image: Option<String>, // TODO?: Make this a subcommand instead? `shuttle deploy image ...`
-    /// Don't follow the deployment status, exit after the deployment begins
-    #[arg(long, visible_alias = "nf")]
-    pub no_follow: bool,
+    pub image: Option<String>,
 
     /// Allow deployment with uncommitted files
     #[arg(long, visible_alias = "ad")]
     pub allow_dirty: bool,
-    /// Don't run pre-deploy tests
-    #[arg(long, visible_alias = "nt")]
-    pub no_test: bool,
-    /// Don't display timestamps and log origin tags
-    #[arg(long)]
-    pub raw: bool,
     /// Output the deployment archive to a file instead of sending a deployment request
     #[arg(long)]
     pub output_archive: Option<PathBuf>,
 
     #[command(flatten)]
+    pub tracking_args: DeploymentTrackingArgs,
+
+    #[command(flatten)]
     pub secret_args: SecretsArgs,
+}
+#[derive(Args, Default)]
+pub struct DeploymentTrackingArgs {
+    /// Don't follow the deployment status, exit after the operation begins
+    #[arg(long, visible_alias = "nf")]
+    pub no_follow: bool,
+    /// Don't display timestamps and log origin tags
+    #[arg(long)]
+    pub raw: bool,
 }
 
 #[derive(Args, Debug)]
@@ -374,6 +359,9 @@ pub struct RunArgs {
     /// Don't display timestamps and log origin tags
     #[arg(long)]
     pub raw: bool,
+    /// Uses bacon crate to run the project in watch mode
+    #[arg(long)]
+    pub bacon: bool,
 
     #[command(flatten)]
     pub secret_args: SecretsArgs,
@@ -501,24 +489,21 @@ pub struct LogsArgs {
     #[arg(short, long)]
     /// View logs from the most recent deployment (which is not always the latest running one)
     pub latest: bool,
-    #[arg(short, long)]
+    #[arg(short, long, hide = true)]
     /// Follow log output
     pub follow: bool,
     /// Don't display timestamps and log origin tags
     #[arg(long)]
     pub raw: bool,
     /// View the first N log lines
-    #[arg(long, group = "output_mode")]
+    #[arg(long, group = "output_mode", hide = true)]
     pub head: Option<u32>,
     /// View the last N log lines
-    #[arg(long, group = "output_mode")]
+    #[arg(long, group = "output_mode", hide = true)]
     pub tail: Option<u32>,
     /// View all log lines
-    #[arg(long, group = "output_mode")]
+    #[arg(long, group = "output_mode", hide = true)]
     pub all: bool,
-    /// Get logs from all deployments instead of one deployment
-    #[arg(long)]
-    pub all_deployments: bool,
 }
 
 /// Helper function to parse and return the absolute path

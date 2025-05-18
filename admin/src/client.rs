@@ -1,9 +1,10 @@
 use anyhow::Result;
+use serde_json::{json, Value};
 use shuttle_api_client::ShuttleApiClient;
 use shuttle_common::models::{
-    admin::ProjectResponse,
-    project::{ComputeTier, ProjectResponseBeta, ProjectUpdateRequestBeta},
-    stats,
+    project::{ProjectResponse, ProjectUpdateRequest},
+    team::AddTeamMemberRequest,
+    user::{AccountTier, UpdateAccountTierRequest, UserResponse},
 };
 
 pub struct Client {
@@ -17,94 +18,108 @@ impl Client {
         }
     }
 
-    pub async fn revive(&self) -> Result<String> {
+    pub async fn get_old_certificates(&self) -> Result<Vec<(String, String, Option<String>)>> {
+        self.inner.get_json("/admin/certificates").await
+    }
+
+    pub async fn renew_certificate(&self, cert_id: &str) -> Result<String> {
         self.inner
-            .post_json("/admin/revive", Option::<()>::None)
-            .await
-    }
-
-    pub async fn destroy(&self) -> Result<String> {
-        self.inner
-            .post_json("/admin/destroy", Option::<()>::None)
-            .await
-    }
-
-    pub async fn idle_cch(&self) -> Result<()> {
-        self.inner
-            .post("/admin/idle-cch", Option::<()>::None)
-            .await?;
-
-        Ok(())
-    }
-
-    pub async fn acme_account_create(
-        &self,
-        email: &str,
-        acme_server: Option<String>,
-    ) -> Result<serde_json::Value> {
-        let path = format!("/admin/acme/{email}");
-        self.inner.post_json(&path, Some(acme_server)).await
-    }
-
-    pub async fn acme_request_certificate(
-        &self,
-        fqdn: &str,
-        project_name: &str,
-        credentials: &serde_json::Value,
-    ) -> Result<String> {
-        let path = format!("/admin/acme/request/{project_name}/{fqdn}");
-        self.inner.post_json(&path, Some(credentials)).await
-    }
-
-    pub async fn acme_renew_custom_domain_certificate(
-        &self,
-        fqdn: &str,
-        project_name: &str,
-        credentials: &serde_json::Value,
-    ) -> Result<String> {
-        let path = format!("/admin/acme/renew/{project_name}/{fqdn}");
-        self.inner.post_json(&path, Some(credentials)).await
-    }
-
-    pub async fn acme_renew_gateway_certificate(
-        &self,
-        credentials: &serde_json::Value,
-    ) -> Result<String> {
-        let path = "/admin/acme/gateway/renew".to_string();
-        self.inner.post_json(&path, Some(credentials)).await
-    }
-
-    pub async fn get_projects(&self) -> Result<Vec<ProjectResponse>> {
-        self.inner.get_json("/admin/projects").await
-    }
-
-    pub async fn change_project_owner(&self, project_name: &str, new_user_id: &str) -> Result<()> {
-        self.inner
-            .get(
-                format!("/admin/projects/change-owner/{project_name}/{new_user_id}"),
+            .put_json(
+                format!("/admin/certificates/renew/{cert_id}"),
                 Option::<()>::None,
+            )
+            .await
+    }
+
+    pub async fn update_project_config(
+        &self,
+        project_id: &str,
+        config: serde_json::Value,
+    ) -> Result<ProjectResponse> {
+        self.inner
+            .put_json(
+                format!("/projects/{project_id}"),
+                Some(ProjectUpdateRequest {
+                    config: Some(config),
+                    ..Default::default()
+                }),
+            )
+            .await
+    }
+
+    pub async fn get_project_config(&self, project_id: &str) -> Result<Value> {
+        self.inner
+            .get_json(format!("/admin/projects/{project_id}/config"))
+            .await
+    }
+
+    pub async fn upgrade_project_to_lb(&self, project_id: &str) -> Result<Value> {
+        self.inner
+            .put_json(
+                format!("/admin/projects/{project_id}/config"),
+                Option::<()>::None,
+            )
+            .await
+    }
+
+    pub async fn update_project_scale(
+        &self,
+        project_id: &str,
+        update_config: &Value,
+    ) -> Result<Value> {
+        self.inner
+            .put_json(
+                format!("/admin/projects/{project_id}/scale"),
+                Some(update_config),
+            )
+            .await
+    }
+
+    pub async fn update_project_owner(
+        &self,
+        project_id: &str,
+        user_id: String,
+    ) -> Result<ProjectResponse> {
+        self.inner
+            .put_json(
+                format!("/projects/{project_id}"),
+                Some(ProjectUpdateRequest {
+                    user_id: Some(user_id),
+                    ..Default::default()
+                }),
+            )
+            .await
+    }
+
+    pub async fn add_team_member(&self, team_user_id: &str, user_id: String) -> Result<()> {
+        self.inner
+            .post(
+                format!("/teams/{team_user_id}/members"),
+                Some(AddTeamMemberRequest {
+                    user_id: Some(user_id),
+                    email: None,
+                    role: None,
+                }),
             )
             .await?;
 
         Ok(())
     }
 
-    pub async fn get_load(&self) -> Result<stats::LoadResponse> {
-        self.inner.get_json("/admin/stats/load").await
-    }
-
-    pub async fn clear_load(&self) -> Result<stats::LoadResponse> {
-        self.inner.delete_json("/admin/stats/load").await
-    }
-
-    pub async fn set_beta_access(&self, user_id: &str, access: bool) -> Result<()> {
-        let resp = if access {
+    pub async fn feature_flag(&self, entity: &str, flag: &str, set: bool) -> Result<()> {
+        let resp = if set {
             self.inner
-                .put(format!("/admin/users/{user_id}/beta"), Option::<()>::None)
+                .put(
+                    format!("/admin/feature-flag/{entity}/{flag}"),
+                    Option::<()>::None,
+                )
                 .await?
         } else {
             self.inner
-                .delete(format!("/admin/users/{user_id}/beta"), Option::<()>::None)
+                .delete(
+                    format!("/admin/feature-flag/{entity}/{flag}"),
+                    Option::<()>::None,
+                )
                 .await?
         };
 
@@ -116,28 +131,6 @@ impl Client {
         Ok(())
     }
 
-    pub async fn renew_old_certificates(&self) -> Result<serde_json::Value> {
-        self.inner
-            .put_json("/admin/certificates/renew", Option::<()>::None)
-            .await
-    }
-
-    pub async fn update_project_compute_tier(
-        &self,
-        project_id: &str,
-        compute_tier: ComputeTier,
-    ) -> Result<ProjectResponseBeta> {
-        self.inner
-            .put_json(
-                format!("/projects/{project_id}"),
-                Some(ProjectUpdateRequestBeta {
-                    compute_tier: Some(compute_tier),
-                    ..Default::default()
-                }),
-            )
-            .await
-    }
-
     pub async fn gc_free_tier(&self, days: u32) -> Result<Vec<String>> {
         let path = format!("/admin/gc/free/{days}");
         self.inner.get_json(&path).await
@@ -146,5 +139,45 @@ impl Client {
     pub async fn gc_shuttlings(&self, minutes: u32) -> Result<Vec<String>> {
         let path = format!("/admin/gc/shuttlings/{minutes}");
         self.inner.get_json(&path).await
+    }
+
+    pub async fn get_user(&self, user_id: &str) -> Result<UserResponse> {
+        self.inner.get_json(format!("/admin/users/{user_id}")).await
+    }
+
+    pub async fn get_user_everything(&self, query: &str) -> Result<Value> {
+        self.inner
+            .get_json_with_body("/admin/users/everything", json!(query))
+            .await
+    }
+
+    pub async fn delete_user(&self, user_id: &str) -> Result<String> {
+        self.inner
+            .delete_json(format!("/admin/users/{user_id}"))
+            .await
+    }
+
+    pub async fn set_user_tier(&self, user_id: &str, account_tier: AccountTier) -> Result<()> {
+        self.inner
+            .put(
+                format!("/admin/users/{user_id}/account_tier"),
+                Some(UpdateAccountTierRequest { account_tier }),
+            )
+            .await?;
+
+        Ok(())
+    }
+
+    pub async fn get_expired_protrials(&self) -> Result<Vec<String>> {
+        self.inner.get_json("/admin/users/protrial-downgrade").await
+    }
+
+    pub async fn downgrade_protrial(&self, user_id: &str) -> Result<String> {
+        self.inner
+            .put_json(
+                format!("/admin/users/protrial-downgrade/{user_id}"),
+                Option::<()>::None,
+            )
+            .await
     }
 }

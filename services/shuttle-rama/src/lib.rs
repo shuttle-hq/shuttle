@@ -1,13 +1,13 @@
 #![doc = include_str!("../README.md")]
 
 use rama::{
+    Service,
     error::OpaqueError,
-    http::{server::HttpServer, service::web::response::IntoResponse, Request},
+    http::{Request, server::HttpServer, service::web::response::IntoResponse},
     rt::Executor,
     tcp::server::TcpListener,
-    Service,
 };
-use shuttle_runtime::{tokio, CustomError, Error};
+use shuttle_runtime::{CustomError, Error, tokio};
 use std::{convert::Infallible, fmt, net::SocketAddr};
 
 /// A wrapper type for [`Service`] so we can implement [`shuttle_runtime::Service`] for it.

@@ -4,7 +4,6 @@ use rama::{
     Service,
     error::OpaqueError,
     http::{Request, server::HttpServer, service::web::response::IntoResponse},
-    rt::Executor,
     tcp::server::TcpListener,
 };
 use shuttle_runtime::{CustomError, Error, tokio};
@@ -124,7 +123,9 @@ where
     /// Takes the service that is returned by the user in their [shuttle_runtime::main] function
     /// and binds to an address passed in by shuttle.
     async fn bind(self, addr: SocketAddr) -> Result<(), Error> {
-        HttpServer::auto(Executor::new())
+        // shuttle only supports h1 between load balancer <=> web service,
+        // h2 is terminated by shuttle's load balancer
+        HttpServer::http1()
             .listen_with_state(self.state, addr, self.svc.0)
             .await
             .map_err(|err| CustomError::new(OpaqueError::from_boxed(err)))?;

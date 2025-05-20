@@ -555,7 +555,7 @@ impl Shuttle {
         eprintln!();
 
         // 6. Confirm that the user wants to create the project environment on Shuttle
-        let should_create_environment = if !interactive {
+        let should_create_project = if !interactive {
             args.create_env
         } else if args.create_env {
             true
@@ -575,7 +575,7 @@ impl Shuttle {
             should_create
         };
 
-        if should_create_environment {
+        if should_create_project {
             // Set the project working directory path to the init path,
             // so `load_project` is ran with the correct project path
             project_args.working_directory.clone_from(&path);
@@ -586,10 +586,7 @@ impl Shuttle {
         if std::env::current_dir().is_ok_and(|d| d != path) {
             eprintln!("You can `cd` to the directory, then:");
         }
-        eprintln!("Run `shuttle run` to run the app locally.");
-        if !should_create_environment {
-            eprintln!("Run `shuttle deploy` to deploy it to Shuttle.");
-        }
+        eprintln!("Run `shuttle deploy` to deploy it to Shuttle.");
 
         Ok(())
     }

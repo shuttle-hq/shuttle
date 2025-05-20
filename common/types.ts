@@ -396,12 +396,12 @@ export interface UserUsageResponse {
 	 * Billing cycle start, or monthly from user creation
 	 * depending on the account tier
 	 */
-	start: NaiveDate;
+	start: string;
 	/**
 	 * Billing cycle end, or end of month from user creation
 	 * depending on the account tier
 	 */
-	end: NaiveDate;
+	end: string;
 	/**
 	 * HashMap of project related metrics for this cycle
 	 * keyed by project_id

@@ -15,15 +15,13 @@ use super::project::ProjectUsageResponse;
 #[typeshare::typeshare]
 pub struct UserResponse {
     pub id: String,
-    /// Auth0 id (deprecated)
-    pub name: Option<String>,
     /// Auth0 id
     pub auth0_id: Option<String>,
-    pub created_at: Option<DateTime<Utc>>,
+    pub created_at: DateTime<Utc>,
     // deprecated
     pub key: Option<String>,
     pub account_tier: AccountTier,
-    pub subscriptions: Vec<Subscription>,
+    pub subscriptions: Option<Vec<Subscription>>,
     pub flags: Option<Vec<String>>,
 }
 
@@ -39,15 +37,17 @@ impl UserResponse {
             self.account_tier.to_string_fancy()
         )
         .unwrap();
-        if !self.subscriptions.is_empty() {
-            writeln!(&mut s, "  Subscriptions:").unwrap();
-            for sub in &self.subscriptions {
-                writeln!(
-                    &mut s,
-                    "    - {}: Type: {}, Quantity: {}, Created: {}, Updated: {}",
-                    sub.id, sub.r#type, sub.quantity, sub.created_at, sub.updated_at,
-                )
-                .unwrap();
+        if let Some(subs) = self.subscriptions.as_ref() {
+            if !subs.is_empty() {
+                writeln!(&mut s, "  Subscriptions:").unwrap();
+                for sub in subs {
+                    writeln!(
+                        &mut s,
+                        "    - {}: Type: {}, Quantity: {}, Created: {}, Updated: {}",
+                        sub.id, sub.r#type, sub.quantity, sub.created_at, sub.updated_at,
+                    )
+                    .unwrap();
+                }
             }
         }
         if let Some(flags) = self.flags.as_ref() {

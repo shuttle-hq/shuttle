@@ -381,14 +381,12 @@ export interface UploadArchiveResponse {
 
 export interface UserResponse {
 	id: string;
-	/** Auth0 id (deprecated) */
-	name?: string;
 	/** Auth0 id */
 	auth0_id?: string;
-	created_at?: string;
+	created_at: string;
 	key?: string;
 	account_tier: AccountTier;
-	subscriptions: Subscription[];
+	subscriptions?: Subscription[];
 	flags?: string[];
 }
 

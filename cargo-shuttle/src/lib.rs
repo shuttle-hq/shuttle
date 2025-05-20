@@ -937,28 +937,30 @@ impl Shuttle {
         }
         let client = self.client.as_ref().unwrap();
         let pid = self.ctx.project_id();
-
-        let id = if args.latest {
-            // Find latest deployment (not always an active one)
-            let deployments = client.get_deployments(pid, 1, 1).await?.deployments;
-            let Some(most_recent) = deployments.into_iter().next() else {
-                println!("No deployments found");
-                return Ok(());
-            };
-            eprintln!("Getting logs from: {}", most_recent.id);
-            most_recent.id
-        } else if let Some(id) = args.id {
-            id
+        let logs = if args.all_deployments {
+            client.get_project_logs(pid).await?.logs
         } else {
-            let Some(current) = client.get_current_deployment(pid).await? else {
-                println!("No deployments found");
-                return Ok(());
+            let id = if args.latest {
+                // Find latest deployment (not always an active one)
+                let deployments = client.get_deployments(pid, 1, 1).await?.deployments;
+                let Some(most_recent) = deployments.into_iter().next() else {
+                    println!("No deployments found");
+                    return Ok(());
+                };
+                eprintln!("Getting logs from: {}", most_recent.id);
+                most_recent.id
+            } else if let Some(id) = args.id {
+                id
+            } else {
+                let Some(current) = client.get_current_deployment(pid).await? else {
+                    println!("No deployments found");
+                    return Ok(());
+                };
+                eprintln!("Getting logs from: {}", current.id);
+                current.id
             };
-            eprintln!("Getting logs from: {}", current.id);
-            current.id
+            client.get_deployment_logs(pid, &id).await?.logs
         };
-        let logs = client.get_deployment_logs(pid, &id).await?.logs;
-
         for log in logs {
             if args.raw {
                 println!("{}", log.line);

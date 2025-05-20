@@ -262,6 +262,11 @@ impl ShuttleApiClient {
 
         self.get_json(path).await
     }
+    pub async fn get_project_logs(&self, project: &str) -> Result<LogsResponse> {
+        let path = format!("/projects/{project}/logs");
+
+        self.get_json(path).await
+    }
 
     pub async fn get_deployments(
         &self,

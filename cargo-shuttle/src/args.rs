@@ -487,7 +487,7 @@ pub struct LogsArgs {
     /// Deployment ID to get logs for. Defaults to the current deployment
     pub id: Option<String>,
     #[arg(short, long)]
-    /// View logs from the most recent deployment (which is not always the latest running one)
+    /// View logs from the most recent deployment (which is not always the running one)
     pub latest: bool,
     #[arg(short, long, hide = true)]
     /// Follow log output
@@ -504,6 +504,9 @@ pub struct LogsArgs {
     /// View all log lines
     #[arg(long, group = "output_mode", hide = true)]
     pub all: bool,
+    /// Get logs from all deployments instead of one deployment
+    #[arg(long, hide = true)]
+    pub all_deployments: bool,
 }
 
 /// Helper function to parse and return the absolute path

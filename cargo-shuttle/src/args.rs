@@ -420,6 +420,8 @@ pub enum InitTemplateArg {
     Poem,
     /// Poise - Discord Bot framework with good slash command support
     Poise,
+    /// Rama - Modular service framework to build proxies, servers and clients
+    Rama,
     /// Serenity - Discord Bot framework
     Serenity,
     /// Tower - Modular service library
@@ -467,6 +469,7 @@ impl InitTemplateArg {
             Poise => "poise/hello-world",
             Rocket => "rocket/hello-world",
             Salvo => "salvo/hello-world",
+            Rama => "rama/hello-world",
             Serenity => "serenity/hello-world",
             Thruster => "thruster/hello-world",
             Tide => "tide/hello-world",

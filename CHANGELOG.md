@@ -7,7 +7,37 @@ See [conventional commits](https://www.conventionalcommits.org/) for commit guid
 
 **For proper release notes with more details such as upgrading guidelines, check out the [releases page](https://github.com/shuttle-hq/shuttle/releases).**
 
-## [0.54.0](https://github.com/shuttle-hq/shuttle/compare/v0.53.0..0.54.0) - 2025-05-07
+## [0.55.0](https://github.com/shuttle-hq/shuttle/compare/v0.54.0..0.55.0) - 2025-05-21
+
+### Features
+
+- *(admin)* Downgrade protrial ([#2042](https://github.com/shuttle-hq/shuttle/issues/2042)) - ([2c3e0d3](https://github.com/shuttle-hq/shuttle/commit/2c3e0d398f095767ce215f8fb6b80480780be15e))
+- *(common)* Update user model fields ([#2041](https://github.com/shuttle-hq/shuttle/issues/2041)) - ([454dc1e](https://github.com/shuttle-hq/shuttle/commit/454dc1e3ed451194fc0b90626ce28b4b1e878406))
+- *(common)* User created_at ([#2038](https://github.com/shuttle-hq/shuttle/issues/2038)) - ([51e13f5](https://github.com/shuttle-hq/shuttle/commit/51e13f595d81ab1261a4a032f1d281499876cca7))
+- *(services)* Shuttle-rama service integration ([#1943](https://github.com/shuttle-hq/shuttle/issues/1943)) - ([8e055e1](https://github.com/shuttle-hq/shuttle/commit/8e055e1281f7fdb4101073623e623d3d77a04a5a))
+- Add Project Usage types for User Visualisation ([#2031](https://github.com/shuttle-hq/shuttle/issues/2031)) - ([8fa79e6](https://github.com/shuttle-hq/shuttle/commit/8fa79e652b99882df6b3082cc42ad3b2214e5b2e))
+
+### Bug Fixes
+
+- *(admin)* Use same env logic for prod var ([#2043](https://github.com/shuttle-hq/shuttle/issues/2043)) - ([4cd8fac](https://github.com/shuttle-hq/shuttle/commit/4cd8facdafafb0e687a8854ef6e7b55a5997dc13))
+- String type for dates ([#2048](https://github.com/shuttle-hq/shuttle/issues/2048)) - ([28d99fc](https://github.com/shuttle-hq/shuttle/commit/28d99fcb67801ce950191ac43fe9b8844ae37059))
+
+### Miscellaneous Tasks
+
+- *(cargo-shuttle)* Update command hint ([#2046](https://github.com/shuttle-hq/shuttle/issues/2046)) - ([a813539](https://github.com/shuttle-hq/shuttle/commit/a81353930c4f5a5051d61ca9b7c86d020322b2bb))
+- *(common)* Better ApiError constructors & getters, feature gate tracing ([#2045](https://github.com/shuttle-hq/shuttle/issues/2045)) - ([14fc644](https://github.com/shuttle-hq/shuttle/commit/14fc6443789146d3137965c4eec9c6292d2e80c7))
+- V0.55.0 - ([b7ff238](https://github.com/shuttle-hq/shuttle/commit/b7ff2388ad447aa8b1505e68792197251221dfd7))
+- Remove logs --all-deployments ([#2040](https://github.com/shuttle-hq/shuttle/issues/2040)) - ([b2492e8](https://github.com/shuttle-hq/shuttle/commit/b2492e8201a2f223ee6a39053df06281af2ed3eb))
+
+### Miscellaneous
+
+- Zip 3 - ([ca84e39](https://github.com/shuttle-hq/shuttle/commit/ca84e3960a3eaba34ecbffe8cc91bef2d9c7f101))
+- Cargo update - ([9b33acf](https://github.com/shuttle-hq/shuttle/commit/9b33acf34fb429d2dd9ec9a4cf1d73175442860e))
+- Bump examples - ([a7de44e](https://github.com/shuttle-hq/shuttle/commit/a7de44e95cc94b6c67b8e536721b24a820a0671e))
+- Revert "chore: remove logs --all-deployments ([#2040](https://github.com/shuttle-hq/shuttle/issues/2040))" + hide it instead ([#2047](https://github.com/shuttle-hq/shuttle/issues/2047)) - ([01dbd3a](https://github.com/shuttle-hq/shuttle/commit/01dbd3a4bc2883644ee87c2f29ec11dfd269f641))
+- Move env config logic to common, add to admin ([#2039](https://github.com/shuttle-hq/shuttle/issues/2039)) - ([752ea29](https://github.com/shuttle-hq/shuttle/commit/752ea2903ec5cee64aa72e9da19107f5742ed084))
+
+## [0.54.0](https://github.com/shuttle-hq/shuttle/compare/v0.53.0..v0.54.0) - 2025-05-07
 
 ### Features
 
@@ -38,12 +68,8 @@ See [conventional commits](https://www.conventionalcommits.org/) for commit guid
 
 ### Miscellaneous Tasks
 
-- V0.54.0 - ([eae3a20](https://github.com/shuttle-hq/shuttle/commit/eae3a2088da427e64c947c8de208660dff246705))
+- V0.54.0 ([#2037](https://github.com/shuttle-hq/shuttle/issues/2037)) - ([760d18b](https://github.com/shuttle-hq/shuttle/commit/760d18b75afc5d824a6f99d123ae8f3e2585138b))
 - Dev2 script ([#2029](https://github.com/shuttle-hq/shuttle/issues/2029)) - ([18aac86](https://github.com/shuttle-hq/shuttle/commit/18aac86d43d2d9373598340cd951ab8a32cfb31b))
-
-### Miscellaneous
-
-- Bump examples - ([06ec430](https://github.com/shuttle-hq/shuttle/commit/06ec430fb8ae41b8541accd021c00d2858ea1d33))
 
 ## [0.53.0](https://github.com/shuttle-hq/shuttle/compare/v0.52.0..v0.53.0) - 2025-03-12
 

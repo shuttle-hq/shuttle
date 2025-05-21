@@ -12,16 +12,16 @@ members = [
 exclude = ["examples", "resources", "services"]
 
 [workspace.package]
-version = "0.54.0"
+version = "0.55.0"
 edition = "2021"
 license = "Apache-2.0"
 repository = "https://github.com/shuttle-hq/shuttle"
 
 [workspace.dependencies]
-shuttle-api-client = { path = "api-client", version = "0.54.0", default-features = false }
-shuttle-codegen = { path = "codegen", version = "0.54.0" }
-shuttle-common = { path = "common", version = "0.54.0" }
-shuttle-service = { path = "service", version = "0.54.0" }
+shuttle-api-client = { path = "api-client", version = "0.55.0", default-features = false }
+shuttle-codegen = { path = "codegen", version = "0.55.0" }
+shuttle-common = { path = "common", version = "0.55.0" }
+shuttle-service = { path = "service", version = "0.55.0" }
 
 anyhow = "1.0.66"
 assert_cmd = "2.0.6"

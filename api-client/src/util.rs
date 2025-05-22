@@ -18,7 +18,7 @@ fn into_api_error(body: &str, status_code: StatusCode) -> ApiError {
     #[cfg(feature = "tracing")]
     tracing::trace!("Parsing response as API error");
 
-    let res: ApiError = match serde_json::from_str(&body) {
+    let res: ApiError = match serde_json::from_str(body) {
         Ok(res) => res,
         _ => ApiError::new(
             format!("Failed to parse error response from the server:\n{}", body),

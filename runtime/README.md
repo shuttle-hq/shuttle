@@ -12,10 +12,14 @@
 
 ## Usage
 
-Start by installing the Shuttle CLI by running the following in a terminal:
+Start by installing the [Shuttle CLI](https://crates.io/crates/cargo-shuttle) by running the following in a terminal ([more installation options](https://docs.shuttle.dev/getting-started/installation)):
 
 ```bash
-cargo install cargo-shuttle
+# Linux / macOS
+curl -sSfL https://www.shuttle.dev/install | bash
+
+# Windows (Powershell)
+iwr https://www.shuttle.dev/install-win | iex
 ```
 
 Now that Shuttle is installed, you can initialize a project with Axum boilerplate:

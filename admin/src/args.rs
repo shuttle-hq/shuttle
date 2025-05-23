@@ -119,4 +119,5 @@ pub enum Command {
     },
 
     DowngradeProTrials,
+    CleanupCloudmapServices,
 }

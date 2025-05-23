@@ -164,6 +164,20 @@ pub async fn run(args: Args) {
                 tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
             }
         }
+        Command::CleanupCloudmapServices => {
+            let services = client.get_leaked_cm_services().await.unwrap();
+            eprintln!(
+                "Starting cleanup of {} CM services in 5 seconds...",
+                services.len()
+            );
+            tokio::time::sleep(tokio::time::Duration::from_millis(5000)).await;
+            for t in services {
+                println!("{t:?}");
+                println!("  {:?}", client.delete_cm_service(t).await);
+                // prevent api rate limiting
+                tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
+            }
+        }
     };
 }
 

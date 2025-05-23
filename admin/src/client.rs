@@ -175,4 +175,19 @@ impl Client {
             )
             .await
     }
+
+    pub async fn get_leaked_cm_services(
+        &self,
+    ) -> Result<Vec<(Option<String>, Option<String>, String)>> {
+        self.inner.get_json("/admin/cloudmap").await
+    }
+
+    pub async fn delete_cm_service(
+        &self,
+        body: (Option<String>, Option<String>, String),
+    ) -> Result<String> {
+        self.inner
+            .delete_json_with_body("/admin/cloudmap", Some(body))
+            .await
+    }
 }

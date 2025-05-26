@@ -1,12 +1,12 @@
 [package]
 name = "shuttle-admin"
-version = "0.53.0"
+version = "0.55.0"
 edition = "2021"
 publish = false
 
 [dependencies]
 shuttle-api-client = { workspace = true, default-features = true }
-shuttle-common = { workspace = true, features = ["models"] }
+shuttle-common = { workspace = true, features = ["models", "config"] }
 
 anyhow = { workspace = true }
 clap = { workspace = true, features = ["env"] }

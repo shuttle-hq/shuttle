@@ -30,7 +30,7 @@ async fn non_interactive_basic_init() {
         "none",
         temp_dir_path.to_str().unwrap(),
     ]);
-    Shuttle::new(cargo_shuttle::Binary::Shuttle)
+    Shuttle::new(cargo_shuttle::Binary::Shuttle, None)
         .unwrap()
         .run(args, true)
         .await
@@ -63,7 +63,7 @@ async fn non_interactive_rocket_init() {
         "rocket",
         temp_dir_path.to_str().unwrap(),
     ]);
-    Shuttle::new(cargo_shuttle::Binary::Shuttle)
+    Shuttle::new(cargo_shuttle::Binary::Shuttle, None)
         .unwrap()
         .run(args, true)
         .await
@@ -96,7 +96,7 @@ async fn non_interactive_init_with_from_url() {
         "tower/hello-world",
         temp_dir_path.to_str().unwrap(),
     ]);
-    Shuttle::new(cargo_shuttle::Binary::Shuttle)
+    Shuttle::new(cargo_shuttle::Binary::Shuttle, None)
         .unwrap()
         .run(args, true)
         .await
@@ -131,7 +131,7 @@ async fn non_interactive_init_with_from_gh() {
         "tower/hello-world",
         temp_dir_path.to_str().unwrap(),
     ]);
-    Shuttle::new(cargo_shuttle::Binary::Shuttle)
+    Shuttle::new(cargo_shuttle::Binary::Shuttle, None)
         .unwrap()
         .run(args, true)
         .await
@@ -166,7 +166,7 @@ async fn non_interactive_init_with_from_repo_name() {
         "tower/hello-world",
         temp_dir_path.to_str().unwrap(),
     ]);
-    Shuttle::new(cargo_shuttle::Binary::Shuttle)
+    Shuttle::new(cargo_shuttle::Binary::Shuttle, None)
         .unwrap()
         .run(args, true)
         .await
@@ -201,7 +201,7 @@ async fn non_interactive_init_with_from_local_path() {
         "tower/hello-world",
         temp_dir_path.to_str().unwrap(),
     ]);
-    Shuttle::new(cargo_shuttle::Binary::Shuttle)
+    Shuttle::new(cargo_shuttle::Binary::Shuttle, None)
         .unwrap()
         .run(args, true)
         .await
@@ -236,7 +236,7 @@ async fn non_interactive_init_from_local_path_with_workspace() {
         "rocket/workspace",
         temp_dir_path.to_str().unwrap(),
     ]);
-    Shuttle::new(cargo_shuttle::Binary::Shuttle)
+    Shuttle::new(cargo_shuttle::Binary::Shuttle, None)
         .unwrap()
         .run(args, true)
         .await

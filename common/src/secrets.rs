@@ -88,7 +88,7 @@ impl IntoIterator for SecretStore {
 
 #[cfg(test)]
 #[allow(dead_code)]
-mod secrets_tests {
+mod tests {
     use super::*;
 
     #[test]

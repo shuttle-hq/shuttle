@@ -1,19 +1,50 @@
 pub mod args;
 pub mod client;
-pub mod config;
+
+use shuttle_common::{
+    config::{Config, ConfigManager, GlobalConfig, GlobalConfigManager},
+    constants::{other_env_api_url, SHUTTLE_API_URL},
+};
 
 use crate::{
     args::{Args, Command},
     client::Client,
-    config::get_api_key,
 };
 
 pub async fn run(args: Args) {
     tracing::trace!(?args, "starting with args");
 
-    let api_key = get_api_key();
+    let api_key = match std::env::var("SHUTTLE_API_KEY") {
+        Ok(s) => s,
+        Err(_) => {
+            let mut global = Config::<_, GlobalConfig>::new(
+                GlobalConfigManager::new(args.api_env.clone()).unwrap(),
+            );
+            let path = global.manager.path();
+            tracing::trace!(?path, "looking for config");
+            if !global.exists() {
+                global.create().unwrap();
+            }
+            global.open().expect("load global configuration");
+            global
+                .as_ref()
+                .unwrap()
+                .api_key
+                .clone()
+                .expect("api key in config")
+        }
+    };
+    let api_url = args
+        .api_url
+        // calculate env-specific url if no explicit url given but an env was given
+        .or_else(|| args.api_env.as_ref().map(|env| other_env_api_url(env)))
+        .unwrap_or_else(|| SHUTTLE_API_URL.to_string());
+    let api_url = format!("{api_url}/admin");
+    tracing::trace!(?api_url, "");
+
     let client = Client::new(
-        format!("{}/admin", args.api_url),
+        // always in admin mode
+        api_url,
         api_key,
         args.client_timeout,
     );
@@ -28,6 +59,16 @@ pub async fn run(args: Args) {
                 .await
                 .unwrap();
             println!("{res:?}");
+        }
+        Command::AddUserToTeam {
+            team_user_id,
+            user_id,
+        } => {
+            client
+                .add_team_member(&team_user_id, user_id)
+                .await
+                .unwrap();
+            println!("added");
         }
         Command::RenewCerts => {
             let certs = client.get_old_certificates().await.unwrap();
@@ -102,15 +143,26 @@ pub async fn run(args: Args) {
             println!("{msg}");
         }
         Command::SetAccountTier { user_id, tier } => {
-            client
-                .set_user_tier(&user_id, &tier.to_string())
-                .await
-                .unwrap();
+            client.set_user_tier(&user_id, tier.clone()).await.unwrap();
             println!("Set {user_id} to {tier}");
         }
         Command::Everything { query } => {
             let v = client.get_user_everything(&query).await.unwrap();
             println!("{}", serde_json::to_string_pretty(&v).unwrap());
+        }
+        Command::DowngradeProTrials => {
+            let users = client.get_expired_protrials().await.unwrap();
+            eprintln!(
+                "Starting downgrade of {} users in 5 seconds...",
+                users.len()
+            );
+            tokio::time::sleep(tokio::time::Duration::from_millis(5000)).await;
+            for user_id in users {
+                println!("{user_id}");
+                println!("  {:?}", client.downgrade_protrial(&user_id).await);
+                // prevent api rate limiting
+                tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
+            }
         }
     };
 }

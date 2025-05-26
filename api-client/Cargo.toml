@@ -1,6 +1,6 @@
 [package]
 name = "shuttle-api-client"
-version = "0.53.0"
+version = "0.55.0"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -8,7 +8,7 @@ description = "A library for interacting with the Shuttle platform API (https://
 homepage = "https://www.shuttle.dev"
 
 [dependencies]
-shuttle-common = { workspace = true, features = ["models"] }
+shuttle-common = { workspace = true, features = ["models", "unknown-variants"] }
 
 anyhow = { workspace = true }
 async-trait = { workspace = true }

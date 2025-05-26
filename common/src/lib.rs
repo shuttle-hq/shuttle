@@ -1,3 +1,5 @@
+#[cfg(feature = "config")]
+pub mod config;
 pub mod constants;
 #[cfg(feature = "models")]
 pub mod models;

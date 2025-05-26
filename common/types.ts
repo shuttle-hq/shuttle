@@ -73,6 +73,27 @@ export interface CertificateListResponse {
 	certificates: CertificateResponse[];
 }
 
+export enum AccountTier {
+	Basic = "basic",
+	/** Partial access to Pro features and higher limits than Basic */
+	ProTrial = "protrial",
+	/** A Basic user that is pending a payment to go back to Pro */
+	PendingPaymentPro = "pendingpaymentpro",
+	/** Pro user with an expiring subscription */
+	CancelledPro = "cancelledpro",
+	Pro = "pro",
+	Growth = "growth",
+	/** Growth tier but even higher limits */
+	Employee = "employee",
+	/** No limits, full API access, admin endpoint access */
+	Admin = "admin",
+}
+
+export interface CreateAccountRequest {
+	auth0_id: string;
+	account_tier: AccountTier;
+}
+
 /** Holds the data for building a database connection string. */
 export interface DatabaseInfo {
 	engine: string;
@@ -104,8 +125,6 @@ export enum DeploymentState {
 	Stopped = "stopped",
 	Stopping = "stopping",
 	Failed = "failed",
-	/** Fallback */
-	Unknown = "unknown",
 }
 
 export interface DeploymentResponse {
@@ -124,8 +143,7 @@ export interface DeploymentListResponse {
 }
 
 export type BuildArgs = 
-	| { type: "Rust", content: BuildArgsRust }
-	| { type: "Unknown", content?: undefined };
+	| { type: "Rust", content: BuildArgsRust };
 
 export interface DeploymentRequestBuildArchive {
 	/** The S3 object version ID of the archive to use */
@@ -156,6 +174,11 @@ export interface LogItem {
 	/** Which container / log stream this line came from */
 	source: string;
 	line: string;
+}
+
+export interface LogfireConfig {
+	endpoint: string;
+	write_token: string;
 }
 
 export interface LogsResponse {
@@ -207,6 +230,30 @@ export interface ProjectUpdateRequest {
 	remove_from_team?: boolean;
 	/** Project runtime configuration */
 	config?: any;
+}
+
+/** Build Minutes subquery for the [`ProjectUsageResponse`] struct */
+export interface ProjectUsageBuild {
+	/** Number of build minutes used by this project. */
+	used: number;
+	/** Limit of build minutes for this project, before additional charges are liable. */
+	limit: number;
+}
+
+/** VCPU subquery for the [`ProjectUsageResponse`] struct */
+export interface ProjectUsageVCPU {
+	/** The VCPU reserved for this project */
+	reserved: number;
+	/** Cost accrued from VCPU usage for this project */
+	billable_hours: number;
+}
+
+/** Sub-Response for the /user/me/usage backend endpoint */
+export interface ProjectUsageResponse {
+	/** Show the build minutes clocked against this Project. */
+	build_minutes: ProjectUsageBuild;
+	/** Show the VCPU used by this project on the container platform. */
+	vcpu: ProjectUsageVCPU;
 }
 
 export enum ResourceType {
@@ -320,6 +367,11 @@ export interface TelemetryConfigResponse {
 	betterstack?: TelemetrySinkStatus;
 	datadog?: TelemetrySinkStatus;
 	grafana_cloud?: TelemetrySinkStatus;
+	logfire?: TelemetrySinkStatus;
+}
+
+export interface UpdateAccountTierRequest {
+	account_tier: AccountTier;
 }
 
 export interface UploadArchiveResponse {
@@ -327,29 +379,34 @@ export interface UploadArchiveResponse {
 	archive_version_id: string;
 }
 
-export enum AccountTier {
-	Basic = "basic",
-	/** A basic user that is pending a payment on the backend */
-	PendingPaymentPro = "pendingpaymentpro",
-	CancelledPro = "cancelledpro",
-	Pro = "pro",
-	Growth = "growth",
-	/** Higher limits and partial admin endpoint access */
-	Employee = "employee",
-	/** Unlimited resources, full API access, admin endpoint access */
-	Admin = "admin",
-}
-
 export interface UserResponse {
 	id: string;
-	/** Auth0 id (deprecated) */
-	name?: string;
 	/** Auth0 id */
 	auth0_id?: string;
+	created_at: string;
 	key?: string;
 	account_tier: AccountTier;
-	subscriptions: Subscription[];
+	subscriptions?: Subscription[];
 	flags?: string[];
+}
+
+/** Response for the /user/me/usage backend endpoint */
+export interface UserUsageResponse {
+	/**
+	 * Billing cycle start, or monthly from user creation
+	 * depending on the account tier
+	 */
+	start: string;
+	/**
+	 * Billing cycle end, or end of month from user creation
+	 * depending on the account tier
+	 */
+	end: string;
+	/**
+	 * HashMap of project related metrics for this cycle
+	 * keyed by project_id
+	 */
+	projects: Record<string, ProjectUsageResponse>;
 }
 
 export type DeploymentRequest = 
@@ -365,5 +422,7 @@ export type TelemetrySinkConfig =
 	/** [Datadog](https://docs.datadoghq.com/opentelemetry/collector_exporter/otel_collector_datadog_exporter) */
 	| { type: "datadog", content: DatadogConfig }
 	/** [Grafana Cloud](https://grafana.com/docs/grafana-cloud/send-data/otlp/) */
-	| { type: "grafana_cloud", content: GrafanaCloudConfig };
+	| { type: "grafana_cloud", content: GrafanaCloudConfig }
+	/** [Logfire](https://logfire.pydantic.dev/docs/how-to-guides/alternative-clients/) */
+	| { type: "logfire", content: LogfireConfig };
 

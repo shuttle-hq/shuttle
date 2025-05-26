@@ -3,7 +3,8 @@ use serde_json::{json, Value};
 use shuttle_api_client::ShuttleApiClient;
 use shuttle_common::models::{
     project::{ProjectResponse, ProjectUpdateRequest},
-    user::UserResponse,
+    team::AddTeamMemberRequest,
+    user::{AccountTier, UpdateAccountTierRequest, UserResponse},
 };
 
 pub struct Client {
@@ -90,6 +91,21 @@ impl Client {
             .await
     }
 
+    pub async fn add_team_member(&self, team_user_id: &str, user_id: String) -> Result<()> {
+        self.inner
+            .post(
+                format!("/teams/{team_user_id}/members"),
+                Some(AddTeamMemberRequest {
+                    user_id: Some(user_id),
+                    email: None,
+                    role: None,
+                }),
+            )
+            .await?;
+
+        Ok(())
+    }
+
     pub async fn feature_flag(&self, entity: &str, flag: &str, set: bool) -> Result<()> {
         let resp = if set {
             self.inner
@@ -141,14 +157,27 @@ impl Client {
             .await
     }
 
-    pub async fn set_user_tier(&self, user_id: &str, tier: &str) -> Result<()> {
+    pub async fn set_user_tier(&self, user_id: &str, account_tier: AccountTier) -> Result<()> {
         self.inner
             .put(
-                format!("/admin/users/{user_id}/tier/{tier}"),
-                Option::<()>::None,
+                format!("/admin/users/{user_id}/account_tier"),
+                Some(UpdateAccountTierRequest { account_tier }),
             )
             .await?;
 
         Ok(())
+    }
+
+    pub async fn get_expired_protrials(&self) -> Result<Vec<String>> {
+        self.inner.get_json("/admin/users/protrial-downgrade").await
+    }
+
+    pub async fn downgrade_protrial(&self, user_id: &str) -> Result<String> {
+        self.inner
+            .put_json(
+                format!("/admin/users/protrial-downgrade/{user_id}"),
+                Option::<()>::None,
+            )
+            .await
     }
 }

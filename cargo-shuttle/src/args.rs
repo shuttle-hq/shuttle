@@ -26,7 +26,11 @@ use shuttle_common::{constants::EXAMPLES_REPO, models::resource::ResourceType};
         .hide(true))
 )]
 pub struct ShuttleArgs {
-    /// URL for the Shuttle API to target (mainly for development)
+    /// Target a different Shuttle API env (use a separate global config) (default: None (= prod = production))
+    // ("SHUTTLE_ENV" is used for user-facing environments (agnostic of Shuttle API env))
+    #[arg(global = true, long, env = "SHUTTLE_API_ENV", hide = true)]
+    pub api_env: Option<String>,
+    /// URL for the Shuttle API to target (overrides inferred URL from api_env)
     #[arg(global = true, long, env = "SHUTTLE_API", hide = true)]
     pub api_url: Option<String>,
     /// Modify Shuttle API URL to use admin endpoints
@@ -94,6 +98,7 @@ impl ProjectArgs {
     }
 }
 
+#[allow(rustdoc::bare_urls)]
 /// CLI for the Shuttle platform (https://www.shuttle.dev/)
 ///
 /// See the CLI docs for more information: https://docs.shuttle.dev/guides/cli
@@ -415,6 +420,8 @@ pub enum InitTemplateArg {
     Poem,
     /// Poise - Discord Bot framework with good slash command support
     Poise,
+    /// Rama - Modular service framework to build proxies, servers and clients
+    Rama,
     /// Serenity - Discord Bot framework
     Serenity,
     /// Tower - Modular service library
@@ -462,6 +469,7 @@ impl InitTemplateArg {
             Poise => "poise/hello-world",
             Rocket => "rocket/hello-world",
             Salvo => "salvo/hello-world",
+            Rama => "rama/hello-world",
             Serenity => "serenity/hello-world",
             Thruster => "thruster/hello-world",
             Tide => "tide/hello-world",
@@ -482,7 +490,7 @@ pub struct LogsArgs {
     /// Deployment ID to get logs for. Defaults to the current deployment
     pub id: Option<String>,
     #[arg(short, long)]
-    /// View logs from the most recent deployment (which is not always the latest running one)
+    /// View logs from the most recent deployment (which is not always the running one)
     pub latest: bool,
     #[arg(short, long, hide = true)]
     /// Follow log output
@@ -500,7 +508,7 @@ pub struct LogsArgs {
     #[arg(long, group = "output_mode", hide = true)]
     pub all: bool,
     /// Get logs from all deployments instead of one deployment
-    #[arg(long)]
+    #[arg(long, hide = true)]
     pub all_deployments: bool,
 }
 

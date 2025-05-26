@@ -13,7 +13,7 @@ use super::deployment::DeploymentState;
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub struct ProjectCreateRequest {
-    #[cfg_attr(feature = "utoipa", schema(pattern = "^[a-z0-9-]{1,32}"))]
+    #[cfg_attr(feature = "utoipa", schema(pattern = "^[a-z0-9-]{1,32}$"))]
     pub name: String,
 }
 
@@ -79,10 +79,13 @@ pub struct ProjectListResponse {
 #[typeshare::typeshare]
 pub struct ProjectUpdateRequest {
     /// Change display name
+    #[cfg_attr(feature = "utoipa", schema(pattern = "^[a-z0-9-]{1,32}$"))]
     pub name: Option<String>,
     /// Transfer to other user
+    #[cfg_attr(feature = "utoipa", schema(pattern = "^user_[A-Z0-9]{26}$"))]
     pub user_id: Option<String>,
     /// Transfer to a team
+    #[cfg_attr(feature = "utoipa", schema(pattern = "^team_[A-Z0-9]{26}$"))]
     pub team_id: Option<String>,
     /// Transfer away from current team
     pub remove_from_team: Option<bool>,
@@ -90,9 +93,7 @@ pub struct ProjectUpdateRequest {
     pub config: Option<serde_json::Value>,
 }
 
-#[derive(
-    Debug, Default, Clone, Copy, PartialEq, Eq, Display, Serialize, Deserialize, EnumString,
-)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, Display, Serialize, Deserialize, EnumString)]
 #[serde(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
@@ -105,4 +106,48 @@ pub enum ComputeTier {
     L,
     XL,
     XXL,
+
+    /// Forward compatibility
+    #[cfg(feature = "unknown-variants")]
+    #[doc(hidden)]
+    #[typeshare(skip)]
+    #[serde(untagged, skip_serializing)]
+    #[strum(default, to_string = "Unknown: {0}")]
+    Unknown(String),
+}
+
+/// Sub-Response for the /user/me/usage backend endpoint
+#[derive(Debug, Default, Deserialize, Serialize, Clone)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[typeshare::typeshare]
+pub struct ProjectUsageResponse {
+    /// Show the build minutes clocked against this Project.
+    pub build_minutes: ProjectUsageBuild,
+
+    /// Show the VCPU used by this project on the container platform.
+    pub vcpu: ProjectUsageVCPU,
+}
+
+/// Build Minutes subquery for the [`ProjectUsageResponse`] struct
+#[derive(Debug, Default, Deserialize, Serialize, Clone)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[typeshare::typeshare]
+pub struct ProjectUsageBuild {
+    /// Number of build minutes used by this project.
+    pub used: u32,
+
+    /// Limit of build minutes for this project, before additional charges are liable.
+    pub limit: u32,
+}
+
+/// VCPU subquery for the [`ProjectUsageResponse`] struct
+#[derive(Debug, Default, Deserialize, Serialize, Clone)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[typeshare::typeshare]
+pub struct ProjectUsageVCPU {
+    /// The VCPU reserved for this project
+    pub reserved: f32,
+
+    /// Cost accrued from VCPU usage for this project
+    pub billable_hours: f32,
 }

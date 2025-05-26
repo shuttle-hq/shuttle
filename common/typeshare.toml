@@ -1,3 +1,4 @@
 [typescript.type_mappings]
 "DateTime" = "string"
+"NaiveDate" = "string"
 "Value" = "any"

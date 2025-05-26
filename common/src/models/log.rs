@@ -66,7 +66,7 @@ mod tests {
     #[rstest::rstest]
     #[case::utc("utc")]
     #[case::cest("cest")]
-    fn test_timezone_formatting(#[case] tz: &str) {
+    fn timezone_formatting(#[case] tz: &str) {
         let item = LogItem::new(
             Utc::now(),
             "test".to_string(),

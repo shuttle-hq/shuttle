@@ -1,6 +1,6 @@
 use anyhow::Result;
 use serde_json::{json, Value};
-use shuttle_api_client::ShuttleApiClient;
+use shuttle_api_client::{util::ToBodyContent, ShuttleApiClient};
 use shuttle_common::models::{
     project::{ProjectResponse, ProjectUpdateRequest},
     team::AddTeamMemberRequest,
@@ -91,9 +91,9 @@ impl Client {
             .await
     }
 
-    pub async fn add_team_member(&self, team_user_id: &str, user_id: String) -> Result<()> {
+    pub async fn add_team_member(&self, team_user_id: &str, user_id: String) -> Result<String> {
         self.inner
-            .post(
+            .post_json(
                 format!("/teams/{team_user_id}/members"),
                 Some(AddTeamMemberRequest {
                     user_id: Some(user_id),
@@ -101,19 +101,19 @@ impl Client {
                     role: None,
                 }),
             )
-            .await?;
-
-        Ok(())
+            .await
     }
 
     pub async fn feature_flag(&self, entity: &str, flag: &str, set: bool) -> Result<()> {
-        let resp = if set {
+        if set {
             self.inner
                 .put(
                     format!("/admin/feature-flag/{entity}/{flag}"),
                     Option::<()>::None,
                 )
                 .await?
+                .to_empty()
+                .await
         } else {
             self.inner
                 .delete(
@@ -121,14 +121,9 @@ impl Client {
                     Option::<()>::None,
                 )
                 .await?
-        };
-
-        if !resp.status().is_success() {
-            dbg!(resp);
-            panic!("request failed");
+                .to_empty()
+                .await
         }
-
-        Ok(())
     }
 
     pub async fn gc_free_tier(&self, days: u32) -> Result<Vec<String>> {
@@ -163,9 +158,9 @@ impl Client {
                 format!("/admin/users/{user_id}/account_tier"),
                 Some(UpdateAccountTierRequest { account_tier }),
             )
-            .await?;
-
-        Ok(())
+            .await?
+            .to_empty()
+            .await
     }
 
     pub async fn get_expired_protrials(&self) -> Result<Vec<String>> {

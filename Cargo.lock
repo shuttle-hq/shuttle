@@ -3789,6 +3789,7 @@ version = "0.55.0"
 dependencies = [
  "anyhow",
  "async-trait",
+ "bytes",
  "headers",
  "http",
  "percent-encoding",

@@ -12,6 +12,7 @@ shuttle-common = { workspace = true, features = ["models", "unknown-variants"] }
 
 anyhow = { workspace = true }
 async-trait = { workspace = true }
+bytes = { workspace = true }
 headers = { workspace = true }
 http = { workspace = true }
 percent-encoding = { workspace = true }

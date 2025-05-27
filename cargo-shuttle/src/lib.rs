@@ -862,7 +862,8 @@ impl Shuttle {
 
     async fn logout(&mut self, logout_args: LogoutArgs) -> Result<()> {
         if logout_args.reset_api_key {
-            self.reset_api_key().await?;
+            let client = self.client.as_ref().unwrap();
+            client.reset_api_key().await.context("Resetting API key")?;
             eprintln!("Successfully reset the API key.");
         }
         self.ctx.clear_api_key()?;
@@ -870,17 +871,6 @@ impl Shuttle {
         eprintln!(" -> Use `shuttle login` to log in again.");
 
         Ok(())
-    }
-
-    async fn reset_api_key(&self) -> Result<()> {
-        let client = self.client.as_ref().unwrap();
-        client.reset_api_key().await.and_then(|res| {
-            if res.status().is_success() {
-                Ok(())
-            } else {
-                Err(anyhow!("Resetting API key failed."))
-            }
-        })
     }
 
     async fn stop(&self, tracking_args: DeploymentTrackingArgs) -> Result<()> {

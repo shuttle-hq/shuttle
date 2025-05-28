@@ -166,11 +166,22 @@ impl Client {
     pub async fn get_expired_protrials(&self) -> Result<Vec<String>> {
         self.inner.get_json("/admin/users/protrial-downgrade").await
     }
-
     pub async fn downgrade_protrial(&self, user_id: &str) -> Result<String> {
         self.inner
             .put_json(
                 format!("/admin/users/protrial-downgrade/{user_id}"),
+                Option::<()>::None,
+            )
+            .await
+    }
+
+    pub async fn get_projects_for_retention_policy(&self) -> Result<Vec<String>> {
+        self.inner.get_json("/admin/log-retention").await
+    }
+    pub async fn fix_retention_policy(&self, project_id: &str) -> Result<String> {
+        self.inner
+            .put_json(
+                format!("/admin/log-retention/{project_id}"),
                 Option::<()>::None,
             )
             .await

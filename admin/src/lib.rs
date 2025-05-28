@@ -164,6 +164,16 @@ pub async fn run(args: Args) {
                 tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
             }
         }
+        Command::FixRetentionPolicies => {
+            let projects = client.get_projects_for_retention_policy().await.unwrap();
+            eprintln!("Starting fix of {} log retention policies", projects.len());
+            for pid in projects {
+                println!("{pid}");
+                println!("  {:?}", client.fix_retention_policy(&pid).await);
+                // prevent api rate limiting
+                tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
+            }
+        }
     };
 }
 

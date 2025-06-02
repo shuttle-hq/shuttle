@@ -364,6 +364,9 @@ pub struct RunArgs {
     /// Uses bacon crate to run the project in watch mode
     #[arg(long)]
     pub bacon: bool,
+    /// Run with docker
+    #[arg(long)]
+    pub docker: bool,
 
     #[command(flatten)]
     pub secret_args: SecretsArgs,

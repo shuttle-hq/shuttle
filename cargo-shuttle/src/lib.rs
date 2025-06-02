@@ -11,6 +11,7 @@ use std::fs;
 use std::io::{Read, Write};
 use std::net::{Ipv4Addr, SocketAddr};
 use std::path::{Path, PathBuf};
+use std::process::Stdio;
 use std::sync::Arc;
 
 use anyhow::{anyhow, bail, Context, Result};
@@ -1261,22 +1262,28 @@ impl Shuttle {
             return bacon::run_bacon(working_directory).await;
         }
 
-        let services = self.pre_local_run(&run_args).await?;
-        let service = services
-            .first()
-            .expect("at least one shuttle service")
-            .to_owned();
-
-        trace!(path = ?service.executable_path, "runtime executable");
-
         let secrets = Shuttle::get_secrets(&run_args.secret_args, working_directory, true)?
             .unwrap_or_default();
         Shuttle::find_available_port(&mut run_args);
-        if let Some(warning) = check_and_warn_runtime_version(&service.executable_path).await? {
-            eprint!("{}", warning);
-        }
 
-        let runtime_executable = service.executable_path.clone();
+        let s_re = if !run_args.docker {
+            let services = self.pre_local_run(&run_args).await?;
+            let service = services
+                .first()
+                .expect("at least one shuttle service")
+                .to_owned();
+            trace!(path = ?service.executable_path, "runtime executable");
+            if let Some(warning) = check_and_warn_runtime_version(&service.executable_path).await? {
+                eprint!("{}", warning);
+            }
+            let runtime_executable = service.executable_path.clone();
+
+            Some((service, runtime_executable))
+        } else {
+            self.local_docker_build().await?;
+            None
+        };
+
         let api_port = portpicker::pick_unused_port()
             .expect("failed to find available port for local provisioner server");
         let api_addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), api_port);
@@ -1294,18 +1301,10 @@ impl Shuttle {
         });
         tokio::spawn(async move { ProvisionerServer::run(state, &api_addr).await });
 
-        println!(
-            "\n    {} {} on http://{}:{}\n",
-            "Starting".bold().green(),
-            service.package_name,
-            ip,
-            run_args.port,
-        );
-
         let mut envs = vec![
             ("SHUTTLE_BETA", "true".to_owned()),
             ("SHUTTLE_PROJECT_ID", "proj_LOCAL".to_owned()),
-            ("SHUTTLE_PROJECT_NAME", project_name),
+            ("SHUTTLE_PROJECT_NAME", project_name.clone()),
             ("SHUTTLE_ENV", Environment::Local.to_string()),
             ("SHUTTLE_RUNTIME_IP", ip.to_string()),
             ("SHUTTLE_RUNTIME_PORT", run_args.port.to_string()),
@@ -1315,27 +1314,74 @@ impl Shuttle {
         // Use a nice debugging tracing level if user does not provide their own
         if debug && std::env::var("RUST_LOG").is_err() {
             envs.push(("RUST_LOG", "info,shuttle=trace,reqwest=debug".to_owned()));
+        } else if let Ok(v) = std::env::var("RUST_LOG") {
+            // forward the RUST_LOG var into the container if using docker
+            envs.push(("RUST_LOG", v));
         }
 
-        info!(
-            path = %runtime_executable.display(),
-            "Spawning runtime process",
-        );
-        let mut runtime = tokio::process::Command::new(
-            dunce::canonicalize(runtime_executable).context("canonicalize path of executable")?,
-        )
-        .current_dir(&service.workspace_path)
-        .envs(envs)
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .kill_on_drop(true)
-        .spawn()
-        .context("spawning runtime process")?;
+        let name = format!("shuttle-run-{project_name}");
+        let mut child = if run_args.docker {
+            let image = format!("shuttle-build-{project_name}");
+            println!(
+                "\n    {} {} on http://{}:{}\n",
+                "Starting".bold().green(),
+                image,
+                ip,
+                run_args.port,
+            );
+            info!(image, "Spawning 'docker run' process");
+            let mut docker = tokio::process::Command::new("docker");
+            docker
+                .arg("run")
+                // the kill on docker run does not work as well as manual docker stop after quitting,
+                // but this is good to have regardless
+                .arg("--rm")
+                .arg("--network")
+                .arg("host")
+                .arg("--name")
+                .arg(&name);
+            for (k, v) in envs {
+                docker.arg("--env").arg(format!("{k}={v}"));
+            }
+            let docker = docker
+                .arg(&image)
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped())
+                .kill_on_drop(true)
+                .spawn()
+                .context("spawning 'docker run' process")?;
 
-        // Start background tasks for reading runtime's stdout and stderr
+            docker
+        } else {
+            let (service, runtime_executable) = s_re.expect("skill issue");
+            println!(
+                "\n    {} {} on http://{}:{}\n",
+                "Starting".bold().green(),
+                service.package_name,
+                ip,
+                run_args.port,
+            );
+            info!(
+                path = %runtime_executable.display(),
+                "Spawning runtime process",
+            );
+            tokio::process::Command::new(
+                dunce::canonicalize(runtime_executable)
+                    .context("canonicalize path of executable")?,
+            )
+            .current_dir(&service.workspace_path)
+            .envs(envs)
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .kill_on_drop(true)
+            .spawn()
+            .context("spawning runtime process")?
+        };
+
+        // Start background tasks for reading child's stdout and stderr
         let raw = run_args.raw;
         let mut stdout_reader = BufReader::new(
-            runtime
+            child
                 .stdout
                 .take()
                 .context("child process did not have a handle to stdout")?,
@@ -1352,7 +1398,7 @@ impl Shuttle {
             }
         });
         let mut stderr_reader = BufReader::new(
-            runtime
+            child
                 .stderr
                 .take()
                 .context("child process did not have a handle to stderr")?,
@@ -1391,15 +1437,15 @@ impl Shuttle {
                 tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())
                     .expect("Can not get the SIGINT signal receptor");
             tokio::select! {
-                exit_result = runtime.wait() => {
+                exit_result = child.wait() => {
                     Some(exit_result)
                 }
                 _ = sigterm_notif.recv() => {
-                    eprintln!("Received SIGTERM. Killing the runtime...");
+                    eprintln!("Received SIGTERM.");
                     None
                 },
                 _ = sigint_notif.recv() => {
-                    eprintln!("Received SIGINT. Killing the runtime...");
+                    eprintln!("Received SIGINT.");
                     None
                 }
             }
@@ -1453,7 +1499,24 @@ impl Shuttle {
                 bail!("Failed to wait for runtime process to exit: {e}");
             }
             None => {
-                runtime.kill().await?;
+                eprintln!("Stopping runtime.");
+                child.kill().await?;
+                if run_args.docker {
+                    let status = tokio::process::Command::new("docker")
+                        .arg("stop")
+                        .arg(name)
+                        .kill_on_drop(true)
+                        .stdout(Stdio::null())
+                        .spawn()
+                        .context("spawning 'docker stop'")?
+                        .wait()
+                        .await
+                        .context("waiting for 'docker stop'")?;
+
+                    if !status.success() {
+                        eprintln!("WARN: 'docker stop' failed");
+                    }
+                }
             }
         }
 

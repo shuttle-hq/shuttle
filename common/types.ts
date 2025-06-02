@@ -379,6 +379,20 @@ export interface UploadArchiveResponse {
 	archive_version_id: string;
 }
 
+/** Sub-Response for the /user/me/usage backend endpoint */
+export interface UserBillingCycle {
+	/**
+	 * Billing cycle start, or monthly from user creation
+	 * depending on the account tier
+	 */
+	start: string;
+	/**
+	 * Billing cycle end, or end of month from user creation
+	 * depending on the account tier
+	 */
+	end: string;
+}
+
 export interface UserResponse {
 	id: string;
 	/** Auth0 id */
@@ -392,19 +406,11 @@ export interface UserResponse {
 
 /** Response for the /user/me/usage backend endpoint */
 export interface UserUsageResponse {
+	/** Billing cycle for user, will be None if no usage data exists for user. */
+	billing_cycle?: UserBillingCycle;
 	/**
-	 * Billing cycle start, or monthly from user creation
-	 * depending on the account tier
-	 */
-	start: string;
-	/**
-	 * Billing cycle end, or end of month from user creation
-	 * depending on the account tier
-	 */
-	end: string;
-	/**
-	 * HashMap of project related metrics for this cycle
-	 * keyed by project_id
+	 * HashMap of project related metrics for this cycle keyed by project_id. Will be empty
+	 * if no project usage data exists for user.
 	 */
 	projects: Record<string, ProjectUsageResponse>;
 }

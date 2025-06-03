@@ -242,9 +242,9 @@ export interface ProjectUsageBuild {
 
 /** VCPU subquery for the [`ProjectUsageResponse`] struct */
 export interface ProjectUsageVCPU {
-	/** The VCPU reserved for this project */
-	reserved: number;
-	/** Cost accrued from VCPU usage for this project */
+	/** Used reserved VCPU hours for a project. */
+	reserved_hours: number;
+	/** Used VCPU hours beyond the included reserved VCPU hours for a project. */
 	billable_hours: number;
 }
 

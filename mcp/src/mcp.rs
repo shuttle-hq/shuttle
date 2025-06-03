@@ -14,6 +14,9 @@ impl ShuttleMcpServer {
     async fn deploy(
         &self,
         #[tool(param)]
+        #[schemars(description = "The current working directory")]
+        cwd: String,
+        #[tool(param)]
         #[schemars(description = "Allow deployment with uncommitted files")]
         allow_dirty: bool,
         #[tool(param)]
@@ -65,7 +68,7 @@ impl ShuttleMcpServer {
             args.push(secrets);
         }
 
-        execute_command("shuttle", args)
+        execute_command("shuttle", args, &cwd).await
     }
 }
 

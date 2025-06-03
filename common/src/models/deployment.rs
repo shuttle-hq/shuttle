@@ -180,6 +180,8 @@ pub struct BuildArgsRust {
     pub no_default_features: bool,
     /// Use the mold linker
     pub mold: bool,
+    /// provision manifest file
+    pub provision_manifest: Option<String>,
 }
 
 impl Default for BuildArgsRust {
@@ -193,6 +195,7 @@ impl Default for BuildArgsRust {
             features: Default::default(),
             no_default_features: Default::default(),
             mold: Default::default(),
+            provision_manifest: Default::default(),
         }
     }
 }

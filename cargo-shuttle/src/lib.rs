@@ -1511,6 +1511,12 @@ impl Shuttle {
         rust_build_args.no_default_features = no_default_features;
         rust_build_args.features = features.map(|v| v.join(","));
 
+        let default_manifest = Path::new(".shuttle").join("build_manifest.json");
+        if std::fs::exists(&default_manifest).is_ok() {
+            rust_build_args.provision_manifest =
+                default_manifest.into_os_string().into_string().ok();
+        }
+
         rust_build_args.shuttle_runtime_version = package
             .dependencies
             .iter()

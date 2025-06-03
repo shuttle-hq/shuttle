@@ -53,6 +53,8 @@ export interface BuildArgsRust {
 	no_default_features: boolean;
 	/** Use the mold linker */
 	mold: boolean;
+	/** provision manifest file */
+	provision_manifest?: string;
 }
 
 export interface BuildMeta {

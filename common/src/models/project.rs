@@ -145,9 +145,9 @@ pub struct ProjectUsageBuild {
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub struct ProjectUsageVCPU {
-    /// The VCPU reserved for this project
-    pub reserved: f32,
+    /// Used reserved VCPU hours for a project.
+    pub reserved_hours: f32,
 
-    /// Cost accrued from VCPU usage for this project
+    /// Used VCPU hours beyond the included reserved VCPU hours for a project.
     pub billable_hours: f32,
 }

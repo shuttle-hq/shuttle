@@ -36,32 +36,32 @@ Every command will have a required `cwd` argument, which will be passed to the `
 
 ### Resource Management
 
-- [ ] `shuttle resource list` - List project resources
-- [ ] `shuttle resource delete` - Delete resource
+- [x] `shuttle resource list` - List project resources
+- [x] `shuttle resource delete` - Delete resource
 
 ### SSL Certificate Management
 
-- [ ] `shuttle certificate add` - Add SSL certificate for custom domain
-- [ ] `shuttle certificate list` - List project certificates
-- [ ] `shuttle certificate delete` - Delete SSL certificate
+- [x] `shuttle certificate add` - Add SSL certificate for custom domain
+- [x] `shuttle certificate list` - List project certificates
+- [x] `shuttle certificate delete` - Delete SSL certificate
 
 ### Authentication
 
-- [ ] `shuttle login` - Log in to Shuttle platform
+- [x] `shuttle login` - Log in to Shuttle platform
   - Options: `--prompt`, `--api-key`
-- [ ] `shuttle logout` - Log out of Shuttle platform
+- [x] `shuttle logout` - Log out of Shuttle platform
   - Options: `--reset-api-key`
 
 ### Account Management
 
-- [ ] `shuttle account` - Show account info
+- [x] `shuttle account` - Show account info
 
 ### Utilities
 
-- [ ] `shuttle generate shell` - Generate shell completions
-- [ ] `shuttle generate manpage` - Generate man page
-- [ ] `shuttle feedback` - Open GitHub issue for feedback
-- [ ] `shuttle upgrade` - Upgrade CLI binary
+- [x] `shuttle generate shell` - Generate shell completions
+- [x] `shuttle generate manpage` - Generate man page
+- [x] `shuttle feedback` - Open GitHub issue for feedback
+- [x] `shuttle upgrade` - Upgrade CLI binary
   - Options: `--preview`
 
 ## Global Options (apply to all commands)

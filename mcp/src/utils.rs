@@ -1,4 +1,4 @@
-pub fn execute_command(command: &str, args: &[&str]) -> Result<String, String> {
+pub fn execute_command(command: &str, args: Vec<String>) -> Result<String, String> {
     let output = std::process::Command::new(command)
         .args(args)
         .output()

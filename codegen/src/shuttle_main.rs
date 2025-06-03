@@ -2,15 +2,79 @@ use proc_macro::TokenStream;
 use proc_macro2::Span;
 use proc_macro_error2::emit_error;
 use quote::{quote, ToTokens};
+use serde::{ser::SerializeStruct, Serialize};
 use syn::{
-    parse::Parse, parse_macro_input, parse_quote, punctuated::Punctuated, spanned::Spanned,
-    Attribute, Expr, ExprLit, FnArg, Ident, ItemFn, Lit, Pat, PatIdent, Path, ReturnType,
+    parse::{Parse, ParseStream},
+    parse_macro_input, parse_quote,
+    punctuated::Punctuated,
+    spanned::Spanned,
+    Attribute, Expr, ExprLit, FnArg, Ident, ItemFn, Lit, LitStr, Pat, PatIdent, Path, ReturnType,
     Signature, Stmt, Token, Type, TypePath,
 };
 
-pub(crate) fn tokens(_attr: TokenStream, item: TokenStream) -> TokenStream {
+#[derive(Clone, Debug, Default)]
+struct RuntimeMacroArgs {
+    instance_size: Option<LitStr>,
+}
+
+impl Serialize for RuntimeMacroArgs {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let len = 0 + self.instance_size.is_some() as usize;
+        let mut state = serializer.serialize_struct("RuntimeMacroArgs", len)?;
+        if let Some(instance_size) = &self.instance_size {
+            state.serialize_field("instance_size", &instance_size.value())?;
+        }
+
+        state.end()
+    }
+}
+
+impl Parse for RuntimeMacroArgs {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        let mut instance_size = None;
+
+        while !input.is_empty() {
+            let key: Ident = input.parse()?;
+            input.parse::<Token![=]>()?;
+
+            match key.to_string().as_str() {
+                "instance_size" => {
+                    instance_size = Some(input.parse::<LitStr>()?);
+                }
+                unknown_key => {
+                    return Err(syn::Error::new(
+                        key.span(),
+                        format!(
+                            "Invalid `shuttle_runtime` macro attribute key: '{}'",
+                            unknown_key
+                        ),
+                    ))
+                }
+            }
+
+            if !input.is_empty() {
+                input.parse::<Token![,]>()?;
+            }
+        }
+
+        Ok(RuntimeMacroArgs { instance_size })
+    }
+}
+
+const BUILD_MANIFEST_FILE: &str = ".shuttle/build_manifest.json";
+
+pub(crate) fn tokens(attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut user_main_fn = parse_macro_input!(item as ItemFn);
     let loader_runner = LoaderAndRunner::from_item_fn(&mut user_main_fn);
+
+    let attr_ast = parse_macro_input!(attr as RuntimeMacroArgs);
+
+    let json_str = serde_json::to_string(&attr_ast).unwrap();
+
+    std::fs::write(BUILD_MANIFEST_FILE, json_str).unwrap();
 
     Into::into(quote! {
         fn main() {

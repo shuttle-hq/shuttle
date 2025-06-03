@@ -21,18 +21,18 @@ Every command will have a required `cwd` argument, which will be passed to the `
 
 ### Logging
 
-- [ ] `shuttle logs` - View build and deployment logs
+- [x] `shuttle logs` - View build and deployment logs
   - Args: `[ID]` (optional deployment ID)
   - Options: `--latest`, `--raw`
 
 ### Project Management
 
-- [ ] `shuttle project create` - Create project on Shuttle
-- [ ] `shuttle project update` - Update project config
-- [ ] `shuttle project status` - Get project status
-- [ ] `shuttle project list` - List all accessible projects
-- [ ] `shuttle project delete` - Delete project and data
-- [ ] `shuttle project link` - Link workspace to Shuttle project
+- [x] `shuttle project create` - Create project on Shuttle
+- [x] `shuttle project update` - Update project config
+- [x] `shuttle project status` - Get project status
+- [x] `shuttle project list` - List all accessible projects
+- [x] `shuttle project delete` - Delete project and data
+- [x] `shuttle project link` - Link workspace to Shuttle project
 
 ### Resource Management
 

@@ -329,6 +329,345 @@ impl ShuttleMcpServer {
 
         execute_command("shuttle", args, &cwd).await
     }
+
+    #[tool(description = "View build and deployment logs")]
+    async fn logs(
+        &self,
+        #[tool(param)]
+        #[schemars(description = "The current working directory")]
+        cwd: String,
+        #[tool(param)]
+        #[schemars(
+            description = "Deployment ID to get logs for. Defaults to the current deployment"
+        )]
+        id: Option<String>,
+        #[tool(param)]
+        #[schemars(description = "View logs from the most recent deployment")]
+        latest: Option<bool>,
+        #[tool(param)]
+        #[schemars(description = "Don't display timestamps and log origin tags")]
+        raw: Option<bool>,
+        #[tool(param)]
+        #[schemars(description = "Specify the name or id of the project")]
+        name: Option<String>,
+        #[tool(param)]
+        #[schemars(description = "Disable network requests that are not strictly necessary")]
+        offline: Option<bool>,
+        #[tool(param)]
+        #[schemars(description = "Turn on tracing output for Shuttle libraries")]
+        debug: Option<bool>,
+        #[tool(param)]
+        #[schemars(description = "Specify the working directory")]
+        working_directory: Option<String>,
+    ) -> Result<String, String> {
+        let mut args = vec!["logs".to_string()];
+
+        if let Some(id) = id {
+            args.push(id);
+        }
+
+        if latest.unwrap_or(false) {
+            args.push("--latest".to_string());
+        }
+
+        if raw.unwrap_or(false) {
+            args.push("--raw".to_string());
+        }
+
+        if offline.unwrap_or(false) {
+            args.push("--offline".to_string());
+        }
+
+        if debug.unwrap_or(false) {
+            args.push("--debug".to_string());
+        }
+
+        if let Some(working_directory) = working_directory {
+            args.push("--working-directory".to_string());
+            args.push(working_directory);
+        }
+
+        if let Some(name) = name {
+            args.push("--name".to_string());
+            args.push(name);
+        }
+
+        execute_command("shuttle", args, &cwd).await
+    }
+
+    #[tool(description = "Create a project on Shuttle")]
+    async fn project_create(
+        &self,
+        #[tool(param)]
+        #[schemars(description = "The current working directory")]
+        cwd: String,
+        #[tool(param)]
+        #[schemars(description = "Specify the name or id of the project")]
+        name: Option<String>,
+        #[tool(param)]
+        #[schemars(description = "Disable network requests that are not strictly necessary")]
+        offline: Option<bool>,
+        #[tool(param)]
+        #[schemars(description = "Turn on tracing output for Shuttle libraries")]
+        debug: Option<bool>,
+        #[tool(param)]
+        #[schemars(description = "Specify the working directory")]
+        working_directory: Option<String>,
+    ) -> Result<String, String> {
+        let mut args = vec!["project".to_string(), "create".to_string()];
+
+        if offline.unwrap_or(false) {
+            args.push("--offline".to_string());
+        }
+
+        if debug.unwrap_or(false) {
+            args.push("--debug".to_string());
+        }
+
+        if let Some(working_directory) = working_directory {
+            args.push("--working-directory".to_string());
+            args.push(working_directory);
+        }
+
+        if let Some(name) = name {
+            args.push("--name".to_string());
+            args.push(name);
+        }
+
+        execute_command("shuttle", args, &cwd).await
+    }
+
+    #[tool(description = "Update project config - rename the project")]
+    async fn project_update_name(
+        &self,
+        #[tool(param)]
+        #[schemars(description = "The current working directory")]
+        cwd: String,
+        #[tool(param)]
+        #[schemars(description = "New name for the project")]
+        new_name: String,
+        #[tool(param)]
+        #[schemars(description = "Specify the name or id of the project")]
+        name: Option<String>,
+        #[tool(param)]
+        #[schemars(description = "Disable network requests that are not strictly necessary")]
+        offline: Option<bool>,
+        #[tool(param)]
+        #[schemars(description = "Turn on tracing output for Shuttle libraries")]
+        debug: Option<bool>,
+        #[tool(param)]
+        #[schemars(description = "Specify the working directory")]
+        working_directory: Option<String>,
+    ) -> Result<String, String> {
+        let mut args = vec![
+            "project".to_string(),
+            "update".to_string(),
+            "name".to_string(),
+            new_name,
+        ];
+
+        if offline.unwrap_or(false) {
+            args.push("--offline".to_string());
+        }
+
+        if debug.unwrap_or(false) {
+            args.push("--debug".to_string());
+        }
+
+        if let Some(working_directory) = working_directory {
+            args.push("--working-directory".to_string());
+            args.push(working_directory);
+        }
+
+        if let Some(name) = name {
+            args.push("--name".to_string());
+            args.push(name);
+        }
+
+        execute_command("shuttle", args, &cwd).await
+    }
+
+    #[tool(description = "Get the status of this project on Shuttle")]
+    async fn project_status(
+        &self,
+        #[tool(param)]
+        #[schemars(description = "The current working directory")]
+        cwd: String,
+        #[tool(param)]
+        #[schemars(description = "Specify the name or id of the project")]
+        name: Option<String>,
+        #[tool(param)]
+        #[schemars(description = "Disable network requests that are not strictly necessary")]
+        offline: Option<bool>,
+        #[tool(param)]
+        #[schemars(description = "Turn on tracing output for Shuttle libraries")]
+        debug: Option<bool>,
+        #[tool(param)]
+        #[schemars(description = "Specify the working directory")]
+        working_directory: Option<String>,
+    ) -> Result<String, String> {
+        let mut args = vec!["project".to_string(), "status".to_string()];
+
+        if offline.unwrap_or(false) {
+            args.push("--offline".to_string());
+        }
+
+        if debug.unwrap_or(false) {
+            args.push("--debug".to_string());
+        }
+
+        if let Some(working_directory) = working_directory {
+            args.push("--working-directory".to_string());
+            args.push(working_directory);
+        }
+
+        if let Some(name) = name {
+            args.push("--name".to_string());
+            args.push(name);
+        }
+
+        execute_command("shuttle", args, &cwd).await
+    }
+
+    #[tool(description = "List all projects you have access to")]
+    async fn project_list(
+        &self,
+        #[tool(param)]
+        #[schemars(description = "The current working directory")]
+        cwd: String,
+        #[tool(param)]
+        #[schemars(description = "Output tables without borders")]
+        raw: Option<bool>,
+        #[tool(param)]
+        #[schemars(description = "Specify the name or id of the project")]
+        name: Option<String>,
+        #[tool(param)]
+        #[schemars(description = "Disable network requests that are not strictly necessary")]
+        offline: Option<bool>,
+        #[tool(param)]
+        #[schemars(description = "Turn on tracing output for Shuttle libraries")]
+        debug: Option<bool>,
+        #[tool(param)]
+        #[schemars(description = "Specify the working directory")]
+        working_directory: Option<String>,
+    ) -> Result<String, String> {
+        let mut args = vec!["project".to_string(), "list".to_string()];
+
+        if raw.unwrap_or(false) {
+            args.push("--raw".to_string());
+        }
+
+        if offline.unwrap_or(false) {
+            args.push("--offline".to_string());
+        }
+
+        if debug.unwrap_or(false) {
+            args.push("--debug".to_string());
+        }
+
+        if let Some(working_directory) = working_directory {
+            args.push("--working-directory".to_string());
+            args.push(working_directory);
+        }
+
+        if let Some(name) = name {
+            args.push("--name".to_string());
+            args.push(name);
+        }
+
+        execute_command("shuttle", args, &cwd).await
+    }
+
+    #[tool(description = "Delete a project and all linked data")]
+    async fn project_delete(
+        &self,
+        #[tool(param)]
+        #[schemars(description = "The current working directory")]
+        cwd: String,
+        #[tool(param)]
+        #[schemars(description = "Skip confirmations and proceed")]
+        yes: Option<bool>,
+        #[tool(param)]
+        #[schemars(description = "Specify the name or id of the project")]
+        name: Option<String>,
+        #[tool(param)]
+        #[schemars(description = "Disable network requests that are not strictly necessary")]
+        offline: Option<bool>,
+        #[tool(param)]
+        #[schemars(description = "Turn on tracing output for Shuttle libraries")]
+        debug: Option<bool>,
+        #[tool(param)]
+        #[schemars(description = "Specify the working directory")]
+        working_directory: Option<String>,
+    ) -> Result<String, String> {
+        let mut args = vec!["project".to_string(), "delete".to_string()];
+
+        if yes.unwrap_or(false) {
+            args.push("--yes".to_string());
+        }
+
+        if offline.unwrap_or(false) {
+            args.push("--offline".to_string());
+        }
+
+        if debug.unwrap_or(false) {
+            args.push("--debug".to_string());
+        }
+
+        if let Some(working_directory) = working_directory {
+            args.push("--working-directory".to_string());
+            args.push(working_directory);
+        }
+
+        if let Some(name) = name {
+            args.push("--name".to_string());
+            args.push(name);
+        }
+
+        execute_command("shuttle", args, &cwd).await
+    }
+
+    #[tool(description = "Link this workspace to a Shuttle project")]
+    async fn project_link(
+        &self,
+        #[tool(param)]
+        #[schemars(description = "The current working directory")]
+        cwd: String,
+        #[tool(param)]
+        #[schemars(description = "Specify the name or id of the project")]
+        name: Option<String>,
+        #[tool(param)]
+        #[schemars(description = "Disable network requests that are not strictly necessary")]
+        offline: Option<bool>,
+        #[tool(param)]
+        #[schemars(description = "Turn on tracing output for Shuttle libraries")]
+        debug: Option<bool>,
+        #[tool(param)]
+        #[schemars(description = "Specify the working directory")]
+        working_directory: Option<String>,
+    ) -> Result<String, String> {
+        let mut args = vec!["project".to_string(), "link".to_string()];
+
+        if offline.unwrap_or(false) {
+            args.push("--offline".to_string());
+        }
+
+        if debug.unwrap_or(false) {
+            args.push("--debug".to_string());
+        }
+
+        if let Some(working_directory) = working_directory {
+            args.push("--working-directory".to_string());
+            args.push(working_directory);
+        }
+
+        if let Some(name) = name {
+            args.push("--name".to_string());
+            args.push(name);
+        }
+
+        execute_command("shuttle", args, &cwd).await
+    }
 }
 
 #[tool(tool_box)]

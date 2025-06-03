@@ -2678,22 +2678,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "mcp"
-version = "0.55.0"
-dependencies = [
- "anyhow",
- "dirs",
- "rmcp",
- "schemars",
- "serde",
- "serde_json",
- "shuttle-api-client",
- "shuttle-common",
- "tokio",
- "toml",
-]
-
-[[package]]
 name = "memchr"
 version = "2.7.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3935,6 +3919,22 @@ dependencies = [
  "typeshare",
  "utoipa",
  "zeroize",
+]
+
+[[package]]
+name = "shuttle-mcp"
+version = "0.55.0"
+dependencies = [
+ "anyhow",
+ "dirs",
+ "rmcp",
+ "schemars",
+ "serde",
+ "serde_json",
+ "shuttle-api-client",
+ "shuttle-common",
+ "tokio",
+ "toml",
 ]
 
 [[package]]

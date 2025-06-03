@@ -3925,16 +3925,9 @@ dependencies = [
 name = "shuttle-mcp"
 version = "0.55.0"
 dependencies = [
- "anyhow",
- "dirs",
  "rmcp",
- "schemars",
  "serde",
- "serde_json",
- "shuttle-api-client",
- "shuttle-common",
  "tokio",
- "toml",
 ]
 
 [[package]]

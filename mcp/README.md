@@ -16,7 +16,6 @@ This MCP server transforms all Shuttle CLI commands into MCP tools, enabling AI 
 - **Project Management**: Create, update, status, list, delete, and link projects
 - **Resource Management**: List and delete project resources
 - **SSL Certificate Management**: Add, list, and delete SSL certificates
-- **Authentication**: Login and logout from Shuttle platform
 - **Account Management**: Show account information
 - **Utilities**: Generate shell completions, man pages, feedback, and upgrade CLI
 
@@ -27,18 +26,17 @@ This MCP server transforms all Shuttle CLI commands into MCP tools, enabling AI 
 - Rust and Cargo installed
 - Shuttle CLI installed and configured
 
-### Install from Git
+### Set up nightly release channel
+
+```bash
+rustup toolchain install nightly
+rustup default nightly
+```
+
+### Install MCP server the binary
 
 ```bash
 cargo install --git https://github.com/dcodesdev/shuttle shuttle-mcp
-```
-
-### Build from Source
-
-```bash
-git clone https://github.com/dcodesdev/shuttle.git
-cd shuttle/mcp
-cargo build --release
 ```
 
 ## Configuration

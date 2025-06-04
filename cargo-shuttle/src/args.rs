@@ -107,9 +107,15 @@ pub enum Command {
     /// Generate a Shuttle project from a template
     Init(InitArgs),
     /// Run a project locally
+    #[command(visible_alias = "r")]
     Run(RunArgs),
     /// Build a project
-    Build,
+    #[command(visible_alias = "b")]
+    Build {
+        /// Additional tag for the docker image
+        #[arg(long)]
+        tag: Option<String>,
+    },
     /// Deploy a project
     Deploy(DeployArgs),
     /// Manage deployments

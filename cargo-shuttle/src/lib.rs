@@ -258,9 +258,9 @@ impl Shuttle {
                 self.ctx.load_local(&args.project_args)?;
                 self.local_run(run_args, args.debug).await
             }
-            Command::Build => {
+            Command::Build { tag } => {
                 self.ctx.load_local(&args.project_args)?;
-                self.local_docker_build().await
+                self.local_docker_build(tag).await
             }
             Command::Deploy(deploy_args) => self.deploy(deploy_args).await,
             Command::Logs(logs_args) => self.logs(logs_args).await,
@@ -1280,7 +1280,7 @@ impl Shuttle {
 
             Some((service, runtime_executable))
         } else {
-            self.local_docker_build().await?;
+            self.local_docker_build(None).await?;
             None
         };
 
@@ -1560,7 +1560,7 @@ impl Shuttle {
         Ok(rust_build_args)
     }
 
-    async fn local_docker_build(&self) -> Result<()> {
+    async fn local_docker_build(&self, tag: Option<String>) -> Result<()> {
         let project_name = self.ctx.project_name().to_owned();
         let working_directory = self.ctx.working_directory();
         let manifest_path = working_directory.join("Cargo.toml");
@@ -1605,16 +1605,19 @@ impl Shuttle {
         tracing::debug!("Writing dockerfile to {}", dockerfile.display());
         fs::write(&dockerfile, render_rust_dockerfile(&rust_build_args))?;
 
-        let docker = tokio::process::Command::new("docker")
+        let mut docker_cmd = tokio::process::Command::new("docker");
+        docker_cmd
             .arg("buildx")
             .arg("build")
             .arg("--file")
             .arg(dockerfile)
             .arg("--tag")
-            .arg(format!("shuttle-build-{project_name}"))
-            .arg(tempdir)
-            .kill_on_drop(true)
-            .spawn();
+            .arg(format!("shuttle-build-{project_name}"));
+        if let Some(ref tag) = tag {
+            docker_cmd.arg("--tag").arg(tag);
+        }
+
+        let docker = docker_cmd.arg(tempdir).kill_on_drop(true).spawn();
 
         let result = docker
             .context("spawning docker build command")?

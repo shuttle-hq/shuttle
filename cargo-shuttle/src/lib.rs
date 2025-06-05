@@ -1343,15 +1343,14 @@ impl Shuttle {
             for (k, v) in envs {
                 docker.arg("--env").arg(format!("{k}={v}"));
             }
-            let docker = docker
+
+            docker
                 .arg(&image)
                 .stdout(std::process::Stdio::piped())
                 .stderr(std::process::Stdio::piped())
                 .kill_on_drop(true)
                 .spawn()
-                .context("spawning 'docker run' process")?;
-
-            docker
+                .context("spawning 'docker run' process")?
         } else {
             let (service, runtime_executable) = s_re.expect("skill issue");
             eprintln!();

@@ -38,9 +38,9 @@ use shuttle_common::{
     models::{
         auth::{KeyMessage, TokenMessage},
         deployment::{
-            BuildArgs, BuildArgsRust, BuildMeta, DeploymentRequest, DeploymentRequestBuildArchive,
-            DeploymentRequestImage, DeploymentResponse, DeploymentState, Environment,
-            GIT_STRINGS_MAX_LENGTH,
+            BuildArgs as CommonBuildArgs, BuildArgsRust, BuildMeta, DeploymentRequest,
+            DeploymentRequestBuildArchive, DeploymentRequestImage, DeploymentResponse,
+            DeploymentState, Environment, GIT_STRINGS_MAX_LENGTH,
         },
         error::ApiError,
         log::LogItem,
@@ -55,14 +55,15 @@ use tokio::time::{sleep, Duration};
 use tokio_tungstenite::tungstenite::Message;
 use tracing::{debug, error, info, trace};
 use tracing_subscriber::{fmt, prelude::*, registry, EnvFilter};
+use util::cargo_green_eprintln;
 use zip::write::FileOptions;
 
+pub use crate::args::{BuildArgs, Command, ProjectArgs, RunArgs, ShuttleArgs};
 use crate::args::{
     CertificateCommand, ConfirmationArgs, DeployArgs, DeploymentCommand, GenerateCommand, InitArgs,
     LoginArgs, LogoutArgs, LogsArgs, ProjectCommand, ProjectUpdateCommand, ResourceCommand,
     SecretsArgs, TableArgs, TemplateLocation,
 };
-pub use crate::args::{Command, ProjectArgs, RunArgs, ShuttleArgs};
 use crate::builder::{async_cargo_metadata, build_workspace, find_shuttle_packages, BuiltService};
 use crate::config::RequestContext;
 use crate::provisioner_server::{ProvApiState, ProvisionerServer};
@@ -258,9 +259,13 @@ impl Shuttle {
                 self.ctx.load_local(&args.project_args)?;
                 self.local_run(run_args, args.debug).await
             }
-            Command::Build { tag } => {
+            Command::Build(build_args) => {
                 self.ctx.load_local(&args.project_args)?;
-                self.local_docker_build(tag).await
+                if build_args.docker {
+                    self.local_docker_build(&build_args).await
+                } else {
+                    self.local_build(&build_args).await.map(|_| ())
+                }
             }
             Command::Deploy(deploy_args) => self.deploy(deploy_args).await,
             Command::Logs(logs_args) => self.logs(logs_args).await,
@@ -1209,9 +1214,7 @@ impl Shuttle {
         })
     }
 
-    async fn pre_local_run(&self, run_args: &RunArgs) -> Result<Vec<BuiltService>> {
-        trace!("starting a local run with args: {run_args:?}");
-
+    async fn local_build(&self, build_args: &BuildArgs) -> Result<Vec<BuiltService>> {
         let (tx, mut rx) = tokio::sync::mpsc::channel::<String>(256);
         tokio::task::spawn(async move {
             while let Some(line) = rx.recv().await {
@@ -1221,13 +1224,9 @@ impl Shuttle {
 
         let working_directory = self.ctx.working_directory();
 
-        println!(
-            "{} {}",
-            "    Building".bold().green(),
-            working_directory.display()
-        );
+        cargo_green_eprintln("Building", working_directory.display());
 
-        build_workspace(working_directory, run_args.release, tx, false).await
+        build_workspace(working_directory, build_args.release, tx, false).await
     }
 
     fn find_available_port(run_args: &mut RunArgs) {
@@ -1252,13 +1251,15 @@ impl Shuttle {
         let project_name = self.ctx.project_name().to_owned();
         let working_directory = self.ctx.working_directory();
 
+        trace!("starting a local run with args: {run_args:?}");
+
         // Handle bacon mode
-        if run_args.bacon {
-            println!(
-                "\n    {} {} in watch mode using bacon\n",
-                "Starting".bold().green(),
-                project_name
+        if run_args.build_args.bacon {
+            cargo_green_eprintln(
+                "Starting",
+                format!("{} in watch mode using bacon", project_name),
             );
+            eprintln!();
             return bacon::run_bacon(working_directory).await;
         }
 
@@ -1266,8 +1267,8 @@ impl Shuttle {
             .unwrap_or_default();
         Shuttle::find_available_port(&mut run_args);
 
-        let s_re = if !run_args.docker {
-            let services = self.pre_local_run(&run_args).await?;
+        let s_re = if !run_args.build_args.docker {
+            let services = self.local_build(&run_args.build_args).await?;
             let service = services
                 .first()
                 .expect("at least one shuttle service")
@@ -1280,7 +1281,7 @@ impl Shuttle {
 
             Some((service, runtime_executable))
         } else {
-            self.local_docker_build(None).await?;
+            self.local_docker_build(&run_args.build_args).await?;
             None
         };
 
@@ -1320,15 +1321,14 @@ impl Shuttle {
         }
 
         let name = format!("shuttle-run-{project_name}");
-        let mut child = if run_args.docker {
+        let mut child = if run_args.build_args.docker {
             let image = format!("shuttle-build-{project_name}");
-            println!(
-                "\n    {} {} on http://{}:{}\n",
-                "Starting".bold().green(),
-                image,
-                ip,
-                run_args.port,
+            eprintln!();
+            cargo_green_eprintln(
+                "Starting",
+                format!("{} on http://{}:{}", image, ip, run_args.port),
             );
+            eprintln!();
             info!(image, "Spawning 'docker run' process");
             let mut docker = tokio::process::Command::new("docker");
             docker
@@ -1354,13 +1354,15 @@ impl Shuttle {
             docker
         } else {
             let (service, runtime_executable) = s_re.expect("skill issue");
-            println!(
-                "\n    {} {} on http://{}:{}\n",
-                "Starting".bold().green(),
-                service.package_name,
-                ip,
-                run_args.port,
+            eprintln!();
+            cargo_green_eprintln(
+                "Starting",
+                format!(
+                    "{} on http://{}:{}",
+                    service.package_name, ip, run_args.port
+                ),
             );
+            eprintln!();
             info!(
                 path = %runtime_executable.display(),
                 "Spawning runtime process",
@@ -1501,7 +1503,7 @@ impl Shuttle {
             None => {
                 eprintln!("Stopping runtime.");
                 child.kill().await?;
-                if run_args.docker {
+                if run_args.build_args.docker {
                     let status = tokio::process::Command::new("docker")
                         .arg("stop")
                         .arg(name)
@@ -1523,6 +1525,7 @@ impl Shuttle {
         Ok(())
     }
 
+    // TODO: use this in native local runs as well
     async fn gather_rust_build_args(manifest_path: &Path) -> Result<BuildArgsRust> {
         let mut rust_build_args = BuildArgsRust::default();
         let metadata = async_cargo_metadata(manifest_path).await?;
@@ -1560,18 +1563,14 @@ impl Shuttle {
         Ok(rust_build_args)
     }
 
-    async fn local_docker_build(&self, tag: Option<String>) -> Result<()> {
+    async fn local_docker_build(&self, build_args: &BuildArgs) -> Result<()> {
         let project_name = self.ctx.project_name().to_owned();
         let working_directory = self.ctx.working_directory();
         let manifest_path = working_directory.join("Cargo.toml");
 
         let rust_build_args = Self::gather_rust_build_args(manifest_path.as_path()).await?;
 
-        eprintln!(
-            "    {} {} with docker",
-            "Building".bold().green(),
-            project_name,
-        );
+        cargo_green_eprintln("Building", format!("{} with docker", project_name));
 
         let tempdir = tempfile::Builder::new()
             .prefix("shuttle-build-")
@@ -1613,7 +1612,7 @@ impl Shuttle {
             .arg(dockerfile)
             .arg("--tag")
             .arg(format!("shuttle-build-{project_name}"));
-        if let Some(ref tag) = tag {
+        if let Some(ref tag) = build_args.tag {
             docker_cmd.arg("--tag").arg(tag);
         }
 
@@ -1628,7 +1627,7 @@ impl Shuttle {
             bail!("Docker build error");
         }
 
-        eprintln!("    {} building with docker", "Finished".bold().green());
+        cargo_green_eprintln("Finished", "building with docker");
 
         Ok(())
     }
@@ -1671,7 +1670,7 @@ impl Shuttle {
         let mut build_meta = BuildMeta::default();
 
         let rust_build_args = Self::gather_rust_build_args(manifest_path.as_path()).await?;
-        deployment_req.build_args = Some(BuildArgs::Rust(rust_build_args));
+        deployment_req.build_args = Some(CommonBuildArgs::Rust(rust_build_args));
 
         if let Ok(repo) = Repository::discover(working_directory) {
             let repo_path = repo
@@ -1704,7 +1703,7 @@ impl Shuttle {
             }
         }
 
-        eprintln!("     {} build files", "Packing".bold().green());
+        cargo_green_eprintln("Packing", "build files");
         let archive = self.make_archive(args.secret_args.secrets.clone())?;
 
         if let Some(path) = args.output_archive {
@@ -1718,12 +1717,12 @@ impl Shuttle {
 
         let pid = self.ctx.project_id();
 
-        eprintln!("   {} build archive", "Uploading".bold().green());
+        cargo_green_eprintln("Uploading", "build archive");
         let arch = client.upload_archive(pid, archive).await?;
         deployment_req.archive_version_id = arch.archive_version_id;
         deployment_req.build_meta = Some(build_meta);
 
-        eprintln!("    {} deployment", "Creating".bold().green());
+        cargo_green_eprintln("Creating", "deployment");
         let deployment = client
             .deploy(pid, DeploymentRequest::BuildArchive(deployment_req))
             .await?;

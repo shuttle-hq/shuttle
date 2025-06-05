@@ -1,6 +1,6 @@
 use std::{fs::canonicalize, process::exit, time::Duration};
 
-use cargo_shuttle::{Command, ProjectArgs, RunArgs, Shuttle, ShuttleArgs};
+use cargo_shuttle::{BuildArgs, Command, ProjectArgs, RunArgs, Shuttle, ShuttleArgs};
 use portpicker::pick_unused_port;
 use tokio::time::sleep;
 
@@ -43,11 +43,14 @@ async fn shuttle_run(working_directory: &str, external: bool) -> String {
                 cmd: Command::Run(RunArgs {
                     port,
                     external,
-                    release: false,
                     raw: false,
-                    bacon: false,
-                    docker: false,
                     secret_args: Default::default(),
+                    build_args: BuildArgs {
+                        release: false,
+                        bacon: false,
+                        docker: false,
+                        tag: None,
+                    },
                 }),
             },
             false,

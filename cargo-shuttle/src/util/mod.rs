@@ -1,7 +1,7 @@
 pub mod bacon;
 
 use std::{
-    fmt::Write,
+    fmt::{Display, Write},
     fs::File,
     io::stdout,
     path::{Path, PathBuf},
@@ -13,6 +13,7 @@ use anyhow::{bail, Context, Result};
 use clap::CommandFactory;
 use clap_complete::{generate, Shell};
 use clap_mangen::Man;
+use crossterm::style::Stylize;
 use futures::StreamExt;
 use git2::{Repository, StatusOptions};
 use indoc::writedoc;
@@ -287,4 +288,9 @@ where
     }
 
     Ok(None)
+}
+
+/// Print a verb + line similar to how cargo does
+pub fn cargo_green_eprintln(verb: impl Display, line: impl Display) {
+    eprintln!("{} {}", format!("{verb:>12}").bold().green(), line);
 }

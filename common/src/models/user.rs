@@ -238,6 +238,39 @@ pub struct UserBillingCycle {
     pub end: NaiveDate,
 }
 
+#[derive(Debug, Default, Serialize, Deserialize, Clone, PartialEq)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[typeshare::typeshare]
+pub struct UserUsageCustomDomains {
+    pub used: u32,
+    pub limit: u32,
+}
+
+#[derive(Debug, Default, Serialize, Deserialize, Clone, PartialEq)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[typeshare::typeshare]
+pub struct UserUsageProjects {
+    pub used: u32,
+    pub limit: u32,
+}
+
+#[derive(Debug, Default, Serialize, Deserialize, Clone, PartialEq)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[typeshare::typeshare]
+pub struct UserUsageTeamMembers {
+    pub used: u32,
+    pub limit: u32,
+}
+
+#[derive(Debug, Default, Serialize, Deserialize, Clone, PartialEq)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[typeshare::typeshare]
+pub struct UserOverviewResponse {
+    pub custom_domains: UserUsageCustomDomains,
+    pub projects: UserUsageProjects,
+    pub team_members: Option<UserUsageTeamMembers>,
+}
+
 /// Response for the /user/me/usage backend endpoint
 #[derive(Debug, Default, Deserialize, Serialize, Clone)]
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
@@ -246,6 +279,8 @@ pub struct UserUsageResponse {
     /// Billing cycle for user, will be None if no usage data exists for user.
     pub billing_cycle: Option<UserBillingCycle>,
 
+    /// User overview information including project and domain counts
+    pub user: Option<UserOverviewResponse>,
     /// HashMap of project related metrics for this cycle keyed by project_id. Will be empty
     /// if no project usage data exists for user.
     pub projects: HashMap<String, ProjectUsageResponse>,

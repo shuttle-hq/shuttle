@@ -240,6 +240,20 @@ export interface ProjectUsageBuild {
 	limit: number;
 }
 
+export interface ProjectUsageDaily {
+	avg_cpu_utilised: number;
+	avg_mem_utilised: number;
+	billable_vcpu_hours: number;
+	build_minutes: number;
+	isodate: string;
+	max_cpu_reserved: number;
+	max_mem_reserved: number;
+	min_cpu_reserved: number;
+	min_mem_reserved: number;
+	reserved_vcpu_hours: number;
+	runtime_minutes: number;
+}
+
 /** VCPU subquery for the [`ProjectUsageResponse`] struct */
 export interface ProjectUsageVCPU {
 	/** Used reserved VCPU hours for a project. */
@@ -254,6 +268,8 @@ export interface ProjectUsageResponse {
 	build_minutes: ProjectUsageBuild;
 	/** Show the VCPU used by this project on the container platform. */
 	vcpu: ProjectUsageVCPU;
+	/** Daily usage breakdown for this project */
+	daily: ProjectUsageDaily[];
 }
 
 export enum ResourceType {
@@ -393,6 +409,27 @@ export interface UserBillingCycle {
 	end: string;
 }
 
+export interface UserUsageCustomDomains {
+	used: number;
+	limit: number;
+}
+
+export interface UserUsageProjects {
+	used: number;
+	limit: number;
+}
+
+export interface UserUsageTeamMembers {
+	used: number;
+	limit: number;
+}
+
+export interface UserOverviewResponse {
+	custom_domains: UserUsageCustomDomains;
+	projects: UserUsageProjects;
+	team_members?: UserUsageTeamMembers;
+}
+
 export interface UserResponse {
 	id: string;
 	/** Auth0 id */
@@ -408,6 +445,8 @@ export interface UserResponse {
 export interface UserUsageResponse {
 	/** Billing cycle for user, will be None if no usage data exists for user. */
 	billing_cycle?: UserBillingCycle;
+	/** User overview information including project and domain counts */
+	user?: UserOverviewResponse;
 	/**
 	 * HashMap of project related metrics for this cycle keyed by project_id. Will be empty
 	 * if no project usage data exists for user.

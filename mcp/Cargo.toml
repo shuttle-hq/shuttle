@@ -9,3 +9,5 @@ repository.workspace = true
 rmcp = { version = "0.1", features = ["server", "transport-io"] }
 tokio = { workspace = true, features = ["full"] }
 serde = { workspace = true }
+reqwest = { version = "0.12", features = ["json"] }
+urlencoding = "2.1"

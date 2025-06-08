@@ -14,9 +14,6 @@ impl ShuttleMcpServer {
     async fn deploy(
         &self,
         #[tool(param)]
-        #[schemars(description = "The current working directory")]
-        cwd: String,
-        #[tool(param)]
         #[schemars(description = "Allow deployment with uncommitted files")]
         allow_dirty: Option<bool>,
         #[tool(param)]
@@ -90,15 +87,12 @@ impl ShuttleMcpServer {
             args.push(name);
         }
 
-        execute_command("shuttle", args, &cwd).await
+        execute_command("shuttle", args).await
     }
 
     #[tool(description = "List the deployments for a service")]
     async fn deployment_list(
         &self,
-        #[tool(param)]
-        #[schemars(description = "The current working directory")]
-        cwd: String,
         #[tool(param)]
         #[schemars(description = "Which page to display")]
         page: Option<u32>,
@@ -155,15 +149,12 @@ impl ShuttleMcpServer {
             args.push(name);
         }
 
-        execute_command("shuttle", args, &cwd).await
+        execute_command("shuttle", args).await
     }
 
     #[tool(description = "View status of a deployment")]
     async fn deployment_status(
         &self,
-        #[tool(param)]
-        #[schemars(description = "The current working directory")]
-        cwd: String,
         #[tool(param)]
         #[schemars(description = "ID of deployment to get status for")]
         id: Option<String>,
@@ -204,15 +195,12 @@ impl ShuttleMcpServer {
             args.push(name);
         }
 
-        execute_command("shuttle", args, &cwd).await
+        execute_command("shuttle", args).await
     }
 
     #[tool(description = "Redeploy a previous deployment")]
     async fn deployment_redeploy(
         &self,
-        #[tool(param)]
-        #[schemars(description = "The current working directory")]
-        cwd: String,
         #[tool(param)]
         #[schemars(description = "ID of deployment to redeploy")]
         id: Option<String>,
@@ -269,15 +257,12 @@ impl ShuttleMcpServer {
             args.push(name);
         }
 
-        execute_command("shuttle", args, &cwd).await
+        execute_command("shuttle", args).await
     }
 
     #[tool(description = "Stop running deployment(s)")]
     async fn deployment_stop(
         &self,
-        #[tool(param)]
-        #[schemars(description = "The current working directory")]
-        cwd: String,
         #[tool(param)]
         #[schemars(
             description = "Don't follow the deployment status, exit after the operation begins"
@@ -327,15 +312,12 @@ impl ShuttleMcpServer {
             args.push(name);
         }
 
-        execute_command("shuttle", args, &cwd).await
+        execute_command("shuttle", args).await
     }
 
     #[tool(description = "View build and deployment logs")]
     async fn logs(
         &self,
-        #[tool(param)]
-        #[schemars(description = "The current working directory")]
-        cwd: String,
         #[tool(param)]
         #[schemars(
             description = "Deployment ID to get logs for. Defaults to the current deployment"
@@ -392,15 +374,12 @@ impl ShuttleMcpServer {
             args.push(name);
         }
 
-        execute_command("shuttle", args, &cwd).await
+        execute_command("shuttle", args).await
     }
 
     #[tool(description = "Create a project on Shuttle")]
     async fn project_create(
         &self,
-        #[tool(param)]
-        #[schemars(description = "The current working directory")]
-        cwd: String,
         #[tool(param)]
         #[schemars(description = "Specify the name or id of the project")]
         name: Option<String>,
@@ -434,15 +413,12 @@ impl ShuttleMcpServer {
             args.push(name);
         }
 
-        execute_command("shuttle", args, &cwd).await
+        execute_command("shuttle", args).await
     }
 
     #[tool(description = "Update project config - rename the project")]
     async fn project_update_name(
         &self,
-        #[tool(param)]
-        #[schemars(description = "The current working directory")]
-        cwd: String,
         #[tool(param)]
         #[schemars(description = "New name for the project")]
         new_name: String,
@@ -484,15 +460,12 @@ impl ShuttleMcpServer {
             args.push(name);
         }
 
-        execute_command("shuttle", args, &cwd).await
+        execute_command("shuttle", args).await
     }
 
     #[tool(description = "Get the status of this project on Shuttle")]
     async fn project_status(
         &self,
-        #[tool(param)]
-        #[schemars(description = "The current working directory")]
-        cwd: String,
         #[tool(param)]
         #[schemars(description = "Specify the name or id of the project")]
         name: Option<String>,
@@ -526,15 +499,12 @@ impl ShuttleMcpServer {
             args.push(name);
         }
 
-        execute_command("shuttle", args, &cwd).await
+        execute_command("shuttle", args).await
     }
 
     #[tool(description = "List all projects you have access to")]
     async fn project_list(
         &self,
-        #[tool(param)]
-        #[schemars(description = "The current working directory")]
-        cwd: String,
         #[tool(param)]
         #[schemars(description = "Output tables without borders")]
         raw: Option<bool>,
@@ -575,15 +545,12 @@ impl ShuttleMcpServer {
             args.push(name);
         }
 
-        execute_command("shuttle", args, &cwd).await
+        execute_command("shuttle", args).await
     }
 
     #[tool(description = "Delete a project and all linked data")]
     async fn project_delete(
         &self,
-        #[tool(param)]
-        #[schemars(description = "The current working directory")]
-        cwd: String,
         #[tool(param)]
         #[schemars(description = "Skip confirmations and proceed")]
         yes: Option<bool>,
@@ -624,15 +591,12 @@ impl ShuttleMcpServer {
             args.push(name);
         }
 
-        execute_command("shuttle", args, &cwd).await
+        execute_command("shuttle", args).await
     }
 
     #[tool(description = "Link this workspace to a Shuttle project")]
     async fn project_link(
         &self,
-        #[tool(param)]
-        #[schemars(description = "The current working directory")]
-        cwd: String,
         #[tool(param)]
         #[schemars(description = "Specify the name or id of the project")]
         name: Option<String>,
@@ -666,16 +630,13 @@ impl ShuttleMcpServer {
             args.push(name);
         }
 
-        execute_command("shuttle", args, &cwd).await
+        execute_command("shuttle", args).await
     }
 
     // Resource Management Commands
     #[tool(description = "List project resources")]
     async fn resource_list(
         &self,
-        #[tool(param)]
-        #[schemars(description = "The current working directory")]
-        cwd: String,
         #[tool(param)]
         #[schemars(description = "Show secrets from resources")]
         show_secrets: Option<bool>,
@@ -723,15 +684,12 @@ impl ShuttleMcpServer {
             args.push(name);
         }
 
-        execute_command("shuttle", args, &cwd).await
+        execute_command("shuttle", args).await
     }
 
     #[tool(description = "Delete a resource")]
     async fn resource_delete(
         &self,
-        #[tool(param)]
-        #[schemars(description = "The current working directory")]
-        cwd: String,
         #[tool(param)]
         #[schemars(description = "Type of the resource to delete")]
         resource_type: String,
@@ -777,16 +735,13 @@ impl ShuttleMcpServer {
             args.push(name);
         }
 
-        execute_command("shuttle", args, &cwd).await
+        execute_command("shuttle", args).await
     }
 
     // SSL Certificate Management Commands
     #[tool(description = "Add SSL certificate for custom domain")]
     async fn certificate_add(
         &self,
-        #[tool(param)]
-        #[schemars(description = "The current working directory")]
-        cwd: String,
         #[tool(param)]
         #[schemars(description = "Domain name")]
         domain: String,
@@ -825,15 +780,12 @@ impl ShuttleMcpServer {
             args.push(name);
         }
 
-        execute_command("shuttle", args, &cwd).await
+        execute_command("shuttle", args).await
     }
 
     #[tool(description = "List project certificates")]
     async fn certificate_list(
         &self,
-        #[tool(param)]
-        #[schemars(description = "The current working directory")]
-        cwd: String,
         #[tool(param)]
         #[schemars(description = "Output tables without borders")]
         raw: Option<bool>,
@@ -874,15 +826,12 @@ impl ShuttleMcpServer {
             args.push(name);
         }
 
-        execute_command("shuttle", args, &cwd).await
+        execute_command("shuttle", args).await
     }
 
     #[tool(description = "Delete SSL certificate")]
     async fn certificate_delete(
         &self,
-        #[tool(param)]
-        #[schemars(description = "The current working directory")]
-        cwd: String,
         #[tool(param)]
         #[schemars(description = "Domain name")]
         domain: String,
@@ -928,16 +877,13 @@ impl ShuttleMcpServer {
             args.push(name);
         }
 
-        execute_command("shuttle", args, &cwd).await
+        execute_command("shuttle", args).await
     }
 
     // Account Management Commands
     #[tool(description = "Show account info")]
     async fn account(
         &self,
-        #[tool(param)]
-        #[schemars(description = "The current working directory")]
-        cwd: String,
         #[tool(param)]
         #[schemars(description = "Specify the name or id of the project")]
         name: Option<String>,
@@ -971,16 +917,13 @@ impl ShuttleMcpServer {
             args.push(name);
         }
 
-        execute_command("shuttle", args, &cwd).await
+        execute_command("shuttle", args).await
     }
 
     // Utility Commands
     #[tool(description = "Generate shell completions")]
     async fn generate_shell(
         &self,
-        #[tool(param)]
-        #[schemars(description = "The current working directory")]
-        cwd: String,
         #[tool(param)]
         #[schemars(description = "The shell to generate completion for")]
         shell: String,
@@ -1027,15 +970,12 @@ impl ShuttleMcpServer {
             args.push(name);
         }
 
-        execute_command("shuttle", args, &cwd).await
+        execute_command("shuttle", args).await
     }
 
     #[tool(description = "Generate man page")]
     async fn generate_manpage(
         &self,
-        #[tool(param)]
-        #[schemars(description = "The current working directory")]
-        cwd: String,
         #[tool(param)]
         #[schemars(description = "Specify the name or id of the project")]
         name: Option<String>,
@@ -1069,15 +1009,12 @@ impl ShuttleMcpServer {
             args.push(name);
         }
 
-        execute_command("shuttle", args, &cwd).await
+        execute_command("shuttle", args).await
     }
 
     #[tool(description = "Open GitHub issue for feedback")]
     async fn feedback(
         &self,
-        #[tool(param)]
-        #[schemars(description = "The current working directory")]
-        cwd: String,
         #[tool(param)]
         #[schemars(description = "Specify the name or id of the project")]
         name: Option<String>,
@@ -1111,15 +1048,12 @@ impl ShuttleMcpServer {
             args.push(name);
         }
 
-        execute_command("shuttle", args, &cwd).await
+        execute_command("shuttle", args).await
     }
 
     #[tool(description = "Upgrade CLI binary")]
     async fn upgrade(
         &self,
-        #[tool(param)]
-        #[schemars(description = "The current working directory")]
-        cwd: String,
         #[tool(param)]
         #[schemars(description = "Install unreleased version from main branch")]
         preview: Option<bool>,
@@ -1160,7 +1094,35 @@ impl ShuttleMcpServer {
             args.push(name);
         }
 
-        execute_command("shuttle", args, &cwd).await
+        execute_command("shuttle", args).await
+    }
+    #[tool(description = "Search Shuttle documentation")]
+    async fn search_docs(
+        &self,
+        #[tool(param)]
+        #[schemars(description = "Search query for documentation")]
+        query: String,
+    ) -> Result<String, String> {
+        let url = format!(
+            "https://shuttle-docs.dcodes.dev/search?q={}",
+            urlencoding::encode(&query)
+        );
+
+        let client = reqwest::Client::new();
+        let response = client
+            .get(&url)
+            .send()
+            .await
+            .map_err(|e| format!("Request failed: {}", e))?;
+
+        if response.status().is_success() {
+            response
+                .text()
+                .await
+                .map_err(|e| format!("Failed to read response: {}", e))
+        } else {
+            Err(format!("Request failed with status: {}", response.status()))
+        }
     }
 }
 

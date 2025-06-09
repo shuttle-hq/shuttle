@@ -605,7 +605,11 @@ impl Shuttle {
     /// Return value: true -> success or unknown. false -> try again.
     async fn check_project_name(&self, project_args: &mut ProjectArgs, name: String) -> bool {
         let client = self.client.as_ref().unwrap();
-        match client.check_project_name(&name).await {
+        match client
+            .check_project_name(&name)
+            .await
+            .map(|r| r.into_inner())
+        {
             Ok(true) => {
                 project_args.name_or_id = Some(name);
 
@@ -670,6 +674,7 @@ impl Shuttle {
                 if let Some(proj) = client
                     .get_projects_list()
                     .await?
+                    .into_inner()
                     .projects
                     .into_iter()
                     .find(|p| p.name == *name)
@@ -680,7 +685,7 @@ impl Shuttle {
                     trace!("did not find project by name");
                     if create_missing_project {
                         trace!("creating project since it was not found");
-                        let proj = client.create_project(name).await?;
+                        let proj = client.create_project(name).await?.into_inner();
                         eprintln!("Created project '{}' with id {}", proj.name, proj.id);
                         self.ctx.set_project_id(proj.id);
                     }
@@ -703,7 +708,7 @@ impl Shuttle {
 
     async fn project_link(&mut self, id_or_name: Option<String>) -> Result<()> {
         let client = self.client.as_ref().unwrap();
-        let projs = client.get_projects_list().await?.projects;
+        let projs = client.get_projects_list().await?.into_inner().projects;
 
         let theme = ColorfulTheme::default();
 
@@ -751,7 +756,7 @@ impl Shuttle {
                         .with_prompt("Project name")
                         .interact()?;
 
-                    let proj = client.create_project(&name).await?;
+                    let proj = client.create_project(&name).await?.into_inner();
                     eprintln!("Created project '{}' with id {}", proj.name, proj.id);
 
                     proj
@@ -768,7 +773,7 @@ impl Shuttle {
 
     async fn account(&self) -> Result<()> {
         let client = self.client.as_ref().unwrap();
-        let user = client.get_current_user().await?;
+        let user = client.get_current_user().await?.into_inner();
         print!("{}", user.to_string_colored());
 
         Ok(())
@@ -807,7 +812,8 @@ impl Shuttle {
                 let u = client
                     .get_current_user()
                     .await
-                    .context("failed to check API key validity")?;
+                    .context("failed to check API key validity")?
+                    .into_inner();
                 println!("Logged in as {}", u.id.bold());
             }
         }
@@ -887,7 +893,7 @@ impl Shuttle {
     async fn stop(&self, tracking_args: DeploymentTrackingArgs) -> Result<()> {
         let client = self.client.as_ref().unwrap();
         let pid = self.ctx.project_id();
-        let res = client.stop_service(pid).await?;
+        let res = client.stop_service(pid).await?.into_inner();
         println!("{res}");
 
         if tracking_args.no_follow {
@@ -895,7 +901,7 @@ impl Shuttle {
         }
 
         wait_with_spinner(2000, |_, pb| async move {
-            let deployment = client.get_current_deployment(pid).await?;
+            let deployment = client.get_current_deployment(pid).await?.into_inner();
 
             let get_cleanup = |d: Option<DeploymentResponse>| {
                 move || {
@@ -939,11 +945,15 @@ impl Shuttle {
         let client = self.client.as_ref().unwrap();
         let pid = self.ctx.project_id();
         let logs = if args.all_deployments {
-            client.get_project_logs(pid).await?.logs
+            client.get_project_logs(pid).await?.into_inner().logs
         } else {
             let id = if args.latest {
                 // Find latest deployment (not always an active one)
-                let deployments = client.get_deployments(pid, 1, 1).await?.deployments;
+                let deployments = client
+                    .get_deployments(pid, 1, 1)
+                    .await?
+                    .into_inner()
+                    .deployments;
                 let Some(most_recent) = deployments.into_iter().next() else {
                     println!("No deployments found");
                     return Ok(());
@@ -953,14 +963,18 @@ impl Shuttle {
             } else if let Some(id) = args.id {
                 id
             } else {
-                let Some(current) = client.get_current_deployment(pid).await? else {
+                let Some(current) = client.get_current_deployment(pid).await?.into_inner() else {
                     println!("No deployments found");
                     return Ok(());
                 };
                 eprintln!("Getting logs from: {}", current.id);
                 current.id
             };
-            client.get_deployment_logs(pid, &id).await?.logs
+            client
+                .get_deployment_logs(pid, &id)
+                .await?
+                .into_inner()
+                .logs
         };
         for log in logs {
             if args.raw {
@@ -985,6 +999,7 @@ impl Shuttle {
         let mut deployments = client
             .get_deployments(self.ctx.project_id(), page as i32, limit as i32)
             .await?
+            .into_inner()
             .deployments;
         let page_hint = if deployments.len() == limit as usize {
             // hide the extra one and show hint instead
@@ -1012,16 +1027,16 @@ impl Shuttle {
         let pid = self.ctx.project_id();
 
         let deployment = match deployment_id {
-            Some(id) => client.get_deployment(pid, &id).await,
+            Some(id) => client.get_deployment(pid, &id).await?.into_inner(),
             None => {
-                let d = client.get_current_deployment(pid).await?;
+                let d = client.get_current_deployment(pid).await?.into_inner();
                 let Some(d) = d else {
                     println!("No deployment found");
                     return Ok(());
                 };
-                Ok(d)
+                d
             }
-        }?;
+        };
 
         println!("{}", deployment.to_string_colored());
 
@@ -1039,7 +1054,7 @@ impl Shuttle {
         let deployment_id = match deployment_id {
             Some(id) => id,
             None => {
-                let d = client.get_current_deployment(pid).await?;
+                let d = client.get_current_deployment(pid).await?.into_inner();
                 let Some(d) = d else {
                     println!("No deployment found");
                     return Ok(());
@@ -1047,7 +1062,7 @@ impl Shuttle {
                 d.id
             }
         };
-        let deployment = client.redeploy(pid, &deployment_id).await?;
+        let deployment = client.redeploy(pid, &deployment_id).await?.into_inner();
 
         if tracking_args.no_follow {
             println!("{}", deployment.to_string_colored());
@@ -1061,7 +1076,11 @@ impl Shuttle {
     async fn resources_list(&self, table_args: TableArgs, show_secrets: bool) -> Result<()> {
         let client = self.client.as_ref().unwrap();
         let pid = self.ctx.project_id();
-        let resources = client.get_service_resources(pid).await?.resources;
+        let resources = client
+            .get_service_resources(pid)
+            .await?
+            .into_inner()
+            .resources;
         let table = get_resource_tables(resources.as_slice(), pid, table_args.raw, show_secrets);
 
         println!("{table}");
@@ -1097,7 +1116,8 @@ impl Shuttle {
 
         let msg = client
             .delete_service_resource(self.ctx.project_id(), resource_type)
-            .await?;
+            .await?
+            .into_inner();
         println!("{msg}");
 
         eprintln!(
@@ -1126,6 +1146,7 @@ impl Shuttle {
         let certs = client
             .list_certificates(self.ctx.project_id())
             .await?
+            .into_inner()
             .certificates;
 
         let table = get_certificates_table(certs.as_ref(), table_args.raw);
@@ -1137,7 +1158,8 @@ impl Shuttle {
         let client = self.client.as_ref().unwrap();
         let cert = client
             .add_certificate(self.ctx.project_id(), domain.clone())
-            .await?;
+            .await?
+            .into_inner();
 
         println!("Added certificate for {}", cert.subject);
 
@@ -1170,7 +1192,8 @@ impl Shuttle {
 
         let msg = client
             .delete_certificate(self.ctx.project_id(), domain.clone())
-            .await?;
+            .await?
+            .into_inner();
         println!("{msg}");
 
         Ok(())
@@ -1645,7 +1668,8 @@ impl Shuttle {
 
             let deployment = client
                 .deploy(pid, DeploymentRequest::Image(deployment_req_image))
-                .await?;
+                .await?
+                .into_inner();
 
             if args.tracking_args.no_follow {
                 println!("{}", deployment.to_string_colored());
@@ -1717,14 +1741,15 @@ impl Shuttle {
         let pid = self.ctx.project_id();
 
         cargo_green_eprintln("Uploading", "build archive");
-        let arch = client.upload_archive(pid, archive).await?;
+        let arch = client.upload_archive(pid, archive).await?.into_inner();
         deployment_req.archive_version_id = arch.archive_version_id;
         deployment_req.build_meta = Some(build_meta);
 
         cargo_green_eprintln("Creating", "deployment");
         let deployment = client
             .deploy(pid, DeploymentRequest::BuildArchive(deployment_req))
-            .await?;
+            .await?
+            .into_inner();
 
         if args.tracking_args.no_follow {
             println!("{}", deployment.to_string_colored());
@@ -1743,7 +1768,7 @@ impl Shuttle {
     async fn track_deployment_status(&self, pid: &str, id: &str) -> Result<bool> {
         let client = self.client.as_ref().unwrap();
         let failed = wait_with_spinner(2000, |_, pb| async move {
-            let deployment = client.get_deployment(pid, id).await?;
+            let deployment = client.get_deployment(pid, id).await?.into_inner();
 
             let state = deployment.state.clone();
             pb.set_message(deployment.to_string_summary_colored());
@@ -1777,7 +1802,12 @@ impl Shuttle {
         let client = self.client.as_ref().unwrap();
         let failed = self.track_deployment_status(proj_id, depl_id).await?;
         if failed {
-            for log in client.get_deployment_logs(proj_id, depl_id).await?.logs {
+            for log in client
+                .get_deployment_logs(proj_id, depl_id)
+                .await?
+                .into_inner()
+                .logs
+            {
                 if raw {
                     println!("{}", log.line);
                 } else {
@@ -1793,7 +1823,7 @@ impl Shuttle {
     async fn project_create(&self) -> Result<()> {
         let client = self.client.as_ref().unwrap();
         let name = self.ctx.project_name();
-        let project = client.create_project(name).await?;
+        let project = client.create_project(name).await?.into_inner();
 
         println!("Created project '{}' with id {}", project.name, project.id);
 
@@ -1810,7 +1840,8 @@ impl Shuttle {
                     ..Default::default()
                 },
             )
-            .await?;
+            .await?
+            .into_inner();
 
         println!("Renamed project {} to '{}'", project.id, project.name);
 
@@ -1819,7 +1850,7 @@ impl Shuttle {
 
     async fn projects_list(&self, table_args: TableArgs) -> Result<()> {
         let client = self.client.as_ref().unwrap();
-        let all_projects = client.get_projects_list().await?.projects;
+        let all_projects = client.get_projects_list().await?.into_inner().projects;
         // partition by team id and print separate tables
         let mut all_projects_map = BTreeMap::new();
         for proj in all_projects {
@@ -1846,7 +1877,10 @@ impl Shuttle {
 
     async fn project_status(&self) -> Result<()> {
         let client = self.client.as_ref().unwrap();
-        let project = client.get_project(self.ctx.project_id()).await?;
+        let project = client
+            .get_project(self.ctx.project_id())
+            .await?
+            .into_inner();
         print!("{}", project.to_string_colored());
 
         Ok(())
@@ -1858,7 +1892,7 @@ impl Shuttle {
 
         if !no_confirm {
             // check that the project exists, and look up the name
-            let proj = client.get_project(pid).await?;
+            let proj = client.get_project(pid).await?.into_inner();
             eprintln!(
                 "{}",
                 formatdoc!(
@@ -1886,7 +1920,7 @@ impl Shuttle {
             }
         }
 
-        let res = client.delete_project(pid).await?;
+        let res = client.delete_project(pid).await?.into_inner();
 
         println!("{res}");
 

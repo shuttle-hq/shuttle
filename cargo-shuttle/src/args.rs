@@ -517,13 +517,13 @@ pub struct LogsArgs {
     #[arg(long)]
     pub raw: bool,
     /// View the first N log lines
-    #[arg(long, group = "output_mode", hide = true)]
+    #[arg(long, group = "pagination", hide = true)]
     pub head: Option<u32>,
     /// View the last N log lines
-    #[arg(long, group = "output_mode", hide = true)]
+    #[arg(long, group = "pagination", hide = true)]
     pub tail: Option<u32>,
     /// View all log lines
-    #[arg(long, group = "output_mode", hide = true)]
+    #[arg(long, group = "pagination", hide = true)]
     pub all: bool,
     /// Get logs from all deployments instead of one deployment
     #[arg(long, hide = true)]

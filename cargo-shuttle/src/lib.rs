@@ -750,7 +750,8 @@ impl Shuttle {
                         .interact()?;
 
                     let r = client.create_project(&name).await?;
-                    let proj = match self.output_mode {
+
+                    match self.output_mode {
                         OutputMode::Normal => {
                             let proj = r.into_inner();
                             eprintln!("Created project '{}' with id {}", proj.name, proj.id);
@@ -760,9 +761,7 @@ impl Shuttle {
                             println!("{}", r.raw_json);
                             r.into_inner()
                         }
-                    };
-
-                    proj
+                    }
                 }
             }
         };

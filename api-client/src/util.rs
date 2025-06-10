@@ -42,8 +42,14 @@ pub struct ParsedJson<T> {
 }
 
 impl<T> ParsedJson<T> {
+    pub fn as_ref(&self) -> &T {
+        &self.inner
+    }
     pub fn into_inner(self) -> T {
         self.inner
+    }
+    pub fn into_parts(self) -> (T, String) {
+        (self.inner, self.raw_json)
     }
 }
 

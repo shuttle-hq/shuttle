@@ -397,7 +397,7 @@ pub struct InitArgs {
     /// Clone a starter template from Shuttle's official examples
     #[arg(long, short, value_enum, conflicts_with_all = &["from", "subfolder"])]
     pub template: Option<InitTemplateArg>,
-    /// Clone a template from a git repository or local path using cargo-generate
+    /// Clone a template from a git repository or local path
     #[arg(long)]
     pub from: Option<String>,
     /// Path to the template in the source (used with --from)

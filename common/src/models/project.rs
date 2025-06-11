@@ -117,7 +117,7 @@ pub enum ComputeTier {
 }
 
 /// Sub-Response for the /user/me/usage backend endpoint
-#[derive(Debug, Default, Deserialize, Serialize, Clone)]
+#[derive(Debug, Default, Deserialize, Serialize, Clone, PartialEq)]
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub struct ProjectUsageResponse {
@@ -132,7 +132,7 @@ pub struct ProjectUsageResponse {
 }
 
 /// Build Minutes subquery for the [`ProjectUsageResponse`] struct
-#[derive(Debug, Default, Deserialize, Serialize, Clone)]
+#[derive(Debug, Default, Deserialize, Serialize, Clone, Eq, PartialEq)]
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub struct ProjectUsageBuild {
@@ -144,7 +144,7 @@ pub struct ProjectUsageBuild {
 }
 
 /// VCPU subquery for the [`ProjectUsageResponse`] struct
-#[derive(Debug, Default, Deserialize, Serialize, Clone)]
+#[derive(Debug, Default, Deserialize, Serialize, Clone, PartialEq)]
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub struct ProjectUsageVCPU {
@@ -156,7 +156,7 @@ pub struct ProjectUsageVCPU {
 }
 
 // Add this new struct for daily usage data
-#[derive(Debug, Default, Serialize, Deserialize, Clone)]
+#[derive(Debug, Default, Serialize, Deserialize, Clone, PartialEq)]
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub struct ProjectUsageDaily {

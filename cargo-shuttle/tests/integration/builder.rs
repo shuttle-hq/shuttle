@@ -4,7 +4,7 @@ use cargo_shuttle::builder::{build_workspace, BuiltService};
 
 #[tokio::test]
 #[should_panic(
-    expected = "Expected at least one package that Shuttle can build. Make sure your crate has a binary target that uses `#[shuttle_runtime::main]`."
+    expected = "Expected at least one target that Shuttle can build. Make sure your crate has a binary target that uses a fully qualified `#[shuttle_runtime::main]`."
 )]
 async fn not_shuttle() {
     let (tx, _) = tokio::sync::mpsc::channel::<String>(256);
@@ -16,7 +16,7 @@ async fn not_shuttle() {
 
 #[tokio::test]
 #[should_panic(
-    expected = "Expected at least one package that Shuttle can build. Make sure your crate has a binary target that uses `#[shuttle_runtime::main]`."
+    expected = "Expected at least one target that Shuttle can build. Make sure your crate has a binary target that uses a fully qualified `#[shuttle_runtime::main]`."
 )]
 async fn not_bin() {
     let (tx, _) = tokio::sync::mpsc::channel::<String>(256);
@@ -28,7 +28,7 @@ async fn not_bin() {
 
 #[tokio::test]
 #[should_panic(
-    expected = "Expected at least one package that Shuttle can build. Make sure your crate has a binary target that uses `#[shuttle_runtime::main]`."
+    expected = "Expected at least one target that Shuttle can build. Make sure your crate has a binary target that uses a fully qualified `#[shuttle_runtime::main]`."
 )]
 async fn not_full_macro() {
     let (tx, _) = tokio::sync::mpsc::channel::<String>(256);

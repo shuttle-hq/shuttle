@@ -141,8 +141,8 @@ fn find_shuttle_packages(metadata: &Metadata) -> Result<Vec<(Package, Target)>> 
 
 pub fn find_first_shuttle_package(metadata: &Metadata) -> Result<(Package, Target)> {
     find_shuttle_packages(metadata)?.into_iter().next().context(
-        "Expected at least one package that Shuttle can build. \
-        Make sure your crate has a binary target that uses `#[shuttle_runtime::main]`.",
+        "Expected at least one target that Shuttle can build. \
+        Make sure your crate has a binary target that uses a fully qualified `#[shuttle_runtime::main]`.",
     )
 }
 

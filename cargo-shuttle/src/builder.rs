@@ -2,21 +2,21 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{bail, Context, Result};
 use cargo_metadata::{Metadata, Package, Target};
 use shuttle_common::constants::RUNTIME_NAME;
 use tokio::io::AsyncBufReadExt;
 use tracing::{error, trace};
 
-#[derive(Clone, Debug, Eq, PartialEq)]
 /// This represents a compiled Shuttle service
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct BuiltService {
     pub workspace_path: PathBuf,
     pub target_name: String,
     pub executable_path: PathBuf,
 }
 
-/// Given a project directory path, builds the crate
+/// Builds Shuttle service in given project directory
 pub async fn build_workspace(
     project_path: &Path,
     release_mode: bool,
@@ -58,7 +58,7 @@ pub async fn build_workspace(
     let metadata = async_cargo_metadata(manifest_path.as_path()).await?;
     let (package, target) = find_first_shuttle_package(&metadata)?;
 
-    let service = compile(
+    let service = cargo_build(
         package,
         target,
         release_mode,
@@ -140,16 +140,13 @@ fn find_shuttle_packages(metadata: &Metadata) -> Result<Vec<(Package, Target)>> 
 }
 
 pub fn find_first_shuttle_package(metadata: &Metadata) -> Result<(Package, Target)> {
-    find_shuttle_packages(metadata)?
-        .into_iter()
-        .next()
-        .ok_or(anyhow!(
-            "Expected at least one package that Shuttle can build. \
-            Make sure your crate has a binary target that uses `#[shuttle_runtime::main]`."
-        ))
+    find_shuttle_packages(metadata)?.into_iter().next().context(
+        "Expected at least one package that Shuttle can build. \
+        Make sure your crate has a binary target that uses `#[shuttle_runtime::main]`.",
+    )
 }
 
-async fn compile(
+async fn cargo_build(
     package: Package,
     target: Target,
     release_mode: bool,

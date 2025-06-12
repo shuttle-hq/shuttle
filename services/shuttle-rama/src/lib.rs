@@ -1,10 +1,10 @@
 #![doc = include_str!("../README.md")]
 
 use rama::{
-    error::OpaqueError,
-    http::{server::HttpServer, service::web::response::IntoResponse, Request},
-    tcp::server::TcpListener,
     Service,
+    error::OpaqueError,
+    http::{Request, server::HttpServer, service::web::response::IntoResponse},
+    tcp::server::TcpListener,
 };
 use shuttle_runtime::tokio;
 use std::{convert::Infallible, fmt, net::SocketAddr};

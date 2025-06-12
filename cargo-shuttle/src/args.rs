@@ -42,11 +42,29 @@ pub struct ShuttleArgs {
     /// Turn on tracing output for Shuttle libraries. (WARNING: can print sensitive data)
     #[arg(global = true, long, env = "SHUTTLE_DEBUG")]
     pub debug: bool,
+    /// What format to output results in (where supported).
+    #[arg(
+        global = true,
+        long = "output",
+        env = "SHUTTLE_OUTPUT_MODE",
+        default_value = "normal"
+    )]
+    pub output_mode: OutputMode,
     #[command(flatten)]
     pub project_args: ProjectArgs,
 
     #[command(subcommand)]
     pub cmd: Command,
+}
+
+#[derive(
+    ValueEnum, Clone, Debug, Default, PartialEq /* , strum::EnumMessage, strum::VariantArray */,
+)]
+pub enum OutputMode {
+    #[default]
+    Normal,
+    Json,
+    // TODO?: add table / non-table / raw table / raw logs variants?
 }
 
 /// Global args for subcommands that deal with projects
@@ -158,7 +176,7 @@ pub enum GenerateCommand {
         shell: Shell,
         /// Output to a file (stdout by default)
         #[arg(short, long)]
-        output: Option<PathBuf>,
+        output_file: Option<PathBuf>,
     },
     /// Generate man page to the standard output
     Manpage,
@@ -519,13 +537,13 @@ pub struct LogsArgs {
     #[arg(long)]
     pub raw: bool,
     /// View the first N log lines
-    #[arg(long, group = "output_mode", hide = true)]
+    #[arg(long, group = "pagination", hide = true)]
     pub head: Option<u32>,
     /// View the last N log lines
-    #[arg(long, group = "output_mode", hide = true)]
+    #[arg(long, group = "pagination", hide = true)]
     pub tail: Option<u32>,
     /// View all log lines
-    #[arg(long, group = "output_mode", hide = true)]
+    #[arg(long, group = "pagination", hide = true)]
     pub all: bool,
     /// Get logs from all deployments instead of one deployment
     #[arg(long, hide = true)]

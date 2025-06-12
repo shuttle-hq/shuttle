@@ -397,7 +397,7 @@ pub struct BuildArgs {
     pub bacon: bool,
 
     // Docker-related args
-    /// Build/Run with docker instead of natively
+    /// Build with docker instead of natively. (EXPERIMENTAL for local runs)
     #[arg(long)]
     pub docker: bool,
     /// Additional tag for the docker image

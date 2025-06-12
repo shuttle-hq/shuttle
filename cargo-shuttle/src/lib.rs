@@ -1263,6 +1263,10 @@ impl Shuttle {
             return bacon::run_bacon(working_directory).await;
         }
 
+        if run_args.build_args.docker {
+            eprintln!("WARN: Local run with --docker is EXPERIMENTAL. Please submit feedback on GitHub or Discord if you encounter issues.");
+        }
+
         let secrets = Shuttle::get_secrets(&run_args.secret_args, working_directory, true)?
             .unwrap_or_default();
         Shuttle::find_available_port(&mut run_args);

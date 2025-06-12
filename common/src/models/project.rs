@@ -117,7 +117,7 @@ pub enum ComputeTier {
 }
 
 /// Sub-Response for the /user/me/usage backend endpoint
-#[derive(Debug, Default, Deserialize, Serialize, Clone)]
+#[derive(Debug, Default, Deserialize, Serialize, Clone, PartialEq)]
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub struct ProjectUsageResponse {
@@ -126,10 +126,13 @@ pub struct ProjectUsageResponse {
 
     /// Show the VCPU used by this project on the container platform.
     pub vcpu: ProjectUsageVCPU,
+
+    /// Daily usage breakdown for this project
+    pub daily: Vec<ProjectUsageDaily>,
 }
 
 /// Build Minutes subquery for the [`ProjectUsageResponse`] struct
-#[derive(Debug, Default, Deserialize, Serialize, Clone)]
+#[derive(Debug, Default, Deserialize, Serialize, Clone, Eq, PartialEq)]
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub struct ProjectUsageBuild {
@@ -141,7 +144,7 @@ pub struct ProjectUsageBuild {
 }
 
 /// VCPU subquery for the [`ProjectUsageResponse`] struct
-#[derive(Debug, Default, Deserialize, Serialize, Clone)]
+#[derive(Debug, Default, Deserialize, Serialize, Clone, PartialEq)]
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub struct ProjectUsageVCPU {
@@ -150,4 +153,22 @@ pub struct ProjectUsageVCPU {
 
     /// Used VCPU hours beyond the included reserved VCPU hours for a project.
     pub billable_hours: f32,
+}
+
+// Add this new struct for daily usage data
+#[derive(Debug, Default, Serialize, Deserialize, Clone, PartialEq)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[typeshare::typeshare]
+pub struct ProjectUsageDaily {
+    pub avg_cpu_utilised: f32,
+    pub avg_mem_utilised: f32,
+    pub billable_vcpu_hours: f32,
+    pub build_minutes: u32,
+    pub isodate: chrono::NaiveDate,
+    pub max_cpu_reserved: f32,
+    pub max_mem_reserved: f32,
+    pub min_cpu_reserved: f32,
+    pub min_mem_reserved: f32,
+    pub reserved_vcpu_hours: f32,
+    pub runtime_minutes: u32,
 }

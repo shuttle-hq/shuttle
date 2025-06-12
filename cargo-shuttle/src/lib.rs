@@ -1196,22 +1196,22 @@ impl Shuttle {
                 .find(|&secrets_file| secrets_file.exists() && secrets_file.is_file())
         });
 
-        Ok(if let Some(secrets_file) = secrets_file {
-            trace!("Loading secrets from {}", secrets_file.display());
-            if let Ok(secrets_str) = fs::read_to_string(secrets_file) {
-                let secrets = toml::from_str::<HashMap<String, String>>(&secrets_str)?;
-
-                trace!(keys = ?secrets.keys(), "available secrets");
-
-                Some(secrets)
-            } else {
-                trace!("No secrets were loaded");
-                None
-            }
-        } else {
+        let Some(secrets_file) = secrets_file else {
             trace!("No secrets file was found");
-            None
-        })
+            return Ok(None);
+        };
+
+        trace!("Loading secrets from {}", secrets_file.display());
+        let Ok(secrets_str) = fs::read_to_string(secrets_file) else {
+            tracing::warn!("Failed to read secrets file, no secrets were loaded");
+            return Ok(None);
+        };
+
+        let secrets = toml::from_str::<HashMap<String, String>>(&secrets_str)
+            .context("parsing secrets file")?;
+        trace!(keys = ?secrets.keys(), "Loaded secrets");
+
+        Ok(Some(secrets))
     }
 
     async fn local_build(&self, build_args: &BuildArgs) -> Result<Vec<BuiltService>> {
@@ -1581,9 +1581,7 @@ impl Shuttle {
             .keep();
         tracing::debug!("Building in {}", tempdir.display());
 
-        let build_files = self.gather_build_files(
-            None, // Secrets file does not matter in a local build
-        )?;
+        let build_files = self.gather_build_files()?;
         if build_files.is_empty() {
             error!("No files included in build. Aborting...");
             bail!("No files included in build");
@@ -1707,7 +1705,7 @@ impl Shuttle {
         }
 
         cargo_green_eprintln("Packing", "build files");
-        let archive = self.make_archive(args.secret_args.secrets.clone())?;
+        let archive = self.make_archive()?;
 
         if let Some(path) = args.output_archive {
             eprintln!("Writing archive to {}", path.display());
@@ -1898,10 +1896,7 @@ impl Shuttle {
     }
 
     /// Find list of all files to include in a build, ready for placing in a zip archive
-    fn gather_build_files(
-        &self,
-        secrets_file: Option<PathBuf>,
-    ) -> Result<BTreeMap<PathBuf, PathBuf>> {
+    fn gather_build_files(&self) -> Result<BTreeMap<PathBuf, PathBuf>> {
         let include_patterns = self.ctx.include();
         let working_directory = self.ctx.working_directory();
 
@@ -1929,16 +1924,8 @@ impl Shuttle {
             entries.push(r.context("list dir entry")?.into_path())
         }
 
-        let mut globs = GlobSetBuilder::new();
-
-        if let Some(secrets_file) = secrets_file.clone() {
-            entries.push(secrets_file);
-        } else {
-            // Default: Include all Secrets.toml files
-            globs.add(Glob::new("**/Secrets.toml").unwrap());
-        }
-
         // User provided includes
+        let mut globs = GlobSetBuilder::new();
         if let Some(rules) = include_patterns {
             for r in rules {
                 globs.add(Glob::new(r.as_str()).context(format!("parsing glob pattern {:?}", r))?);
@@ -1971,16 +1958,10 @@ impl Shuttle {
             }
 
             // zip file puts all files in root
-            let mut name = path
+            let name = path
                 .strip_prefix(working_directory)
                 .context("strip prefix of path")?
                 .to_owned();
-
-            // if this is the custom secrets file, rename it to Secrets.toml
-            if secrets_file.as_ref().is_some_and(|sf| sf == &path) {
-                name.pop();
-                name.push("Secrets.toml");
-            }
 
             archive_files.insert(path, name);
         }
@@ -1988,8 +1969,8 @@ impl Shuttle {
         Ok(archive_files)
     }
 
-    fn make_archive(&self, secrets_file: Option<PathBuf>) -> Result<Vec<u8>> {
-        let archive_files = self.gather_build_files(secrets_file)?;
+    fn make_archive(&self) -> Result<Vec<u8>> {
+        let archive_files = self.gather_build_files()?;
         if archive_files.is_empty() {
             error!("No files included in build. Aborting...");
             bail!("No files included in build");
@@ -2074,7 +2055,7 @@ fn create_spinner() -> ProgressBar {
 mod tests {
     use zip::ZipArchive;
 
-    use crate::args::{DeployArgs, ProjectArgs, SecretsArgs};
+    use crate::args::ProjectArgs;
     use crate::Shuttle;
     use std::fs;
     use std::io::Cursor;
@@ -2088,19 +2069,14 @@ mod tests {
         dunce::canonicalize(path).unwrap()
     }
 
-    async fn get_archive_entries(
-        project_args: ProjectArgs,
-        deploy_args: DeployArgs,
-    ) -> Vec<String> {
+    async fn get_archive_entries(project_args: ProjectArgs) -> Vec<String> {
         let mut shuttle = Shuttle::new(crate::Binary::Shuttle, None).unwrap();
         shuttle
             .load_project(&project_args, false, false)
             .await
             .unwrap();
 
-        let archive = shuttle
-            .make_archive(deploy_args.secret_args.secrets)
-            .unwrap();
+        let archive = shuttle.make_archive().unwrap();
 
         let mut zip = ZipArchive::new(Cursor::new(archive)).unwrap();
         (0..zip.len())
@@ -2129,14 +2105,13 @@ mod tests {
             working_directory: working_directory.clone(),
             name_or_id: Some("proj_archiving-test".to_owned()),
         };
-        let mut entries = get_archive_entries(project_args.clone(), Default::default()).await;
+        let mut entries = get_archive_entries(project_args.clone()).await;
         entries.sort();
 
         let expected = vec![
             ".gitignore",
             ".ignore",
             "Cargo.toml",
-            "Secrets.toml", // always included by default
             "Secrets.toml.example",
             "Shuttle.toml",
             "asset1", // normal file
@@ -2150,40 +2125,6 @@ mod tests {
             "src/main.rs",
         ];
         assert_eq!(entries, expected);
-
-        fs::remove_file(working_directory.join("Secrets.toml")).unwrap();
-        let mut entries = get_archive_entries(
-            project_args,
-            DeployArgs {
-                secret_args: SecretsArgs {
-                    secrets: Some(working_directory.join("Secrets.toml.example")),
-                },
-                ..Default::default()
-            },
-        )
-        .await;
-        entries.sort();
-
-        assert_eq!(
-            entries,
-            vec![
-                ".gitignore",
-                ".ignore",
-                "Cargo.toml",
-                "Secrets.toml", // got moved here
-                // Secrets.toml.example was the given secrets file, so it got moved
-                "Shuttle.toml",
-                "asset1", // normal file
-                "asset2", // .gitignore'd, but included in Shuttle.toml
-                // asset3 is .ignore'd
-                "asset4",                // .gitignore'd, but un-ignored in .ignore
-                "asset5",                // .ignore'd, but included in Shuttle.toml
-                "dist/dist1",            // .gitignore'd, but included in Shuttle.toml
-                "nested/static/nested1", // normal file
-                // nested/static/nestedignore is .gitignore'd
-                "src/main.rs",
-            ]
-        );
     }
 
     #[tokio::test]

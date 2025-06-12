@@ -61,7 +61,25 @@ pub async fn start(
     }
 
     #[cfg(feature = "setup-otel-exporter")]
-    let _guard = crate::telemetry::init_tracing_subscriber(crate_name, package_version);
+    let _guard = {
+        use tracing_subscriber::{fmt, prelude::*, registry, EnvFilter};
+        let (layers, guard) =
+            crate::telemetry::otel_tracing_subscriber(crate_name, package_version);
+
+        registry()
+            .with(layers)
+            .with(fmt::layer().without_time())
+            .with(
+                // let user override RUST_LOG in local run if they want to
+                EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+                    // otherwise use our default
+                    format!("info,{}=debug", crate_name).into()
+                }),
+            )
+            .init();
+
+        guard
+    };
 
     #[cfg(any(feature = "setup-tracing", feature = "setup-otel-exporter"))]
     tracing::warn!("Default tracing subscriber initialized (https://docs.shuttle.dev/docs/logs)");

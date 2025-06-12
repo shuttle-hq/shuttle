@@ -1,10 +1,7 @@
 use async_trait::async_trait;
 use libsql::{Builder, Database};
 use serde::{Deserialize, Serialize};
-use shuttle_service::{
-    error::{CustomError, Error as ShuttleError},
-    Environment, IntoResource, ResourceFactory, ResourceInputBuilder,
-};
+use shuttle_service::{Environment, IntoResource, ResourceFactory, ResourceInputBuilder};
 use url::Url;
 
 #[derive(Serialize, Default)]
@@ -43,14 +40,14 @@ pub enum Error {
     LocateLocalDB(std::io::Error),
 }
 
-impl From<Error> for shuttle_service::Error {
+impl From<Error> for shuttle_service::BoxDynError {
     fn from(error: Error) -> Self {
         let msg = match error {
             Error::UrlParseError(err) => format!("Failed to parse Turso Url: {}", err),
             Error::LocateLocalDB(err) => format!("Failed to get path to local db file: {}", err),
         };
 
-        ShuttleError::Custom(CustomError::msg(msg))
+        CustomError::msg(msg)
     }
 }
 
@@ -77,17 +74,17 @@ impl ResourceInputBuilder for Turso {
     type Input = TursoOutput;
     type Output = TursoOutput;
 
-    async fn build(self, factory: &ResourceFactory) -> Result<Self::Input, ShuttleError> {
+    async fn build(self, factory: &ResourceFactory) -> Result<Self::Input, shuttle_service::BoxDynError> {
         let md = factory.get_metadata();
         match md.env {
             Environment::Deployment => {
                 if self.addr.is_empty() {
-                    Err(ShuttleError::Custom(CustomError::msg("missing addr")))
+                    Err(CustomError::msg("missing addr"))
                 } else {
                     if !self.addr.starts_with("libsql://") && !self.addr.starts_with("https://") {
-                        return Err(ShuttleError::Custom(CustomError::msg(
+                        return Err(CustomError::msg(
                             "addr must start with either libsql:// or https://",
-                        )));
+                        ));
                     }
                     self.output_from_addr(&self.addr, true).await
                 }
@@ -121,23 +118,21 @@ impl ResourceInputBuilder for Turso {
 
 #[async_trait]
 impl IntoResource<Database> for TursoOutput {
-    async fn into_resource(self) -> Result<Database, shuttle_service::Error> {
-        let database = if self.remote {
+    async fn into_resource(self) -> Result<Database, shuttle_service::BoxDynError> {
+        if self.remote {
             Builder::new_remote(
                 self.conn_url.to_string(),
                 self.token
                     .clone()
-                    .ok_or(ShuttleError::Custom(CustomError::msg(
+                    .ok_or(CustomError::msg(
                         "missing token for remote database",
-                    )))?,
+                    ))?,
             )
             .build()
             .await
         } else {
             Builder::new_local(self.conn_url.to_string()).build().await
-        };
-
-        database.map_err(|err| ShuttleError::Custom(err.into()))
+        }
     }
 }
 

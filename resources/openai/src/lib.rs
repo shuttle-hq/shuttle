@@ -2,7 +2,7 @@ use async_openai::config::OpenAIConfig;
 use async_openai::Client;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
-use shuttle_service::{CustomError, Error, IntoResource, ResourceFactory, ResourceInputBuilder};
+use shuttle_service::{IntoResource, ResourceFactory, ResourceInputBuilder};
 
 pub use async_openai;
 
@@ -46,10 +46,10 @@ impl ResourceInputBuilder for OpenAI {
     type Input = Config;
     type Output = Config;
 
-    async fn build(self, _factory: &ResourceFactory) -> Result<Self::Input, Error> {
+    async fn build(self, _factory: &ResourceFactory) -> Result<Self::Input, shuttle_service::BoxDynError> {
         let api_key = self
             .api_key
-            .ok_or(Error::Custom(CustomError::msg("Open AI API key required")))?;
+            .ok_or(CustomError::msg("Open AI API key required"))?;
         let config = Config {
             api_base: self.api_base,
             api_key,
@@ -62,7 +62,7 @@ impl ResourceInputBuilder for OpenAI {
 
 #[async_trait]
 impl IntoResource<Client<OpenAIConfig>> for Config {
-    async fn into_resource(self) -> Result<Client<OpenAIConfig>, Error> {
+    async fn into_resource(self) -> Result<Client<OpenAIConfig>, shuttle_service::BoxDynError> {
         let mut openai_config = OpenAIConfig::new().with_api_key(self.api_key);
         if let Some(api_base) = self.api_base {
             openai_config = openai_config.with_api_base(api_base)

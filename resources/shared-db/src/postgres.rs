@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use shuttle_service::{
     resource::{ProvisionResourceRequest, ResourceType},
-    DatabaseResource, DbInput, Environment, Error, IntoResource, ResourceFactory,
+    DatabaseResource, DbInput, Environment, IntoResource, ResourceFactory,
     ResourceInputBuilder,
 };
 
@@ -46,7 +46,7 @@ impl ResourceInputBuilder for Postgres {
     type Input = MaybeRequest;
     type Output = OutputWrapper;
 
-    async fn build(self, factory: &ResourceFactory) -> Result<Self::Input, Error> {
+    async fn build(self, factory: &ResourceFactory) -> Result<Self::Input, shuttle_service::BoxDynError> {
         let md = factory.get_metadata();
         Ok(match md.env {
             Environment::Deployment => MaybeRequest::Request(ProvisionResourceRequest {
@@ -72,7 +72,7 @@ pub struct OutputWrapper(DatabaseResource);
 
 #[async_trait]
 impl IntoResource<String> for OutputWrapper {
-    async fn into_resource(self) -> Result<String, Error> {
+    async fn into_resource(self) -> Result<String, shuttle_service::BoxDynError> {
         Ok(match self.0 {
             DatabaseResource::ConnectionString(s) => s,
             DatabaseResource::Info(info) => info.connection_string(true),
@@ -83,14 +83,13 @@ impl IntoResource<String> for OutputWrapper {
 #[cfg(feature = "diesel-async")]
 #[async_trait]
 impl IntoResource<diesel_async::AsyncPgConnection> for OutputWrapper {
-    async fn into_resource(self) -> Result<diesel_async::AsyncPgConnection, Error> {
+    async fn into_resource(self) -> Result<diesel_async::AsyncPgConnection, shuttle_service::BoxDynError> {
         use diesel_async::{AsyncConnection, AsyncPgConnection};
 
         let connection_string: String = self.into_resource().await?;
 
         Ok(AsyncPgConnection::establish(&connection_string)
-            .await
-            .map_err(shuttle_service::error::CustomError::new)?)
+            .await?)
     }
 }
 
@@ -99,15 +98,14 @@ impl IntoResource<diesel_async::AsyncPgConnection> for OutputWrapper {
 impl IntoResource<diesel_bb8::Pool<diesel_async::AsyncPgConnection>> for OutputWrapper {
     async fn into_resource(
         self,
-    ) -> Result<diesel_bb8::Pool<diesel_async::AsyncPgConnection>, Error> {
+    ) -> Result<diesel_bb8::Pool<diesel_async::AsyncPgConnection>, shuttle_service::BoxDynError> {
         let connection_string: String = self.into_resource().await?;
 
         Ok(diesel_bb8::Pool::builder()
             .min_idle(Some(MIN_CONNECTIONS))
             .max_size(MAX_CONNECTIONS)
             .build(AsyncDieselConnectionManager::new(connection_string))
-            .await
-            .map_err(shuttle_service::error::CustomError::new)?)
+            .await?)
     }
 }
 
@@ -116,14 +114,13 @@ impl IntoResource<diesel_bb8::Pool<diesel_async::AsyncPgConnection>> for OutputW
 impl IntoResource<diesel_deadpool::Pool<diesel_async::AsyncPgConnection>> for OutputWrapper {
     async fn into_resource(
         self,
-    ) -> Result<diesel_deadpool::Pool<diesel_async::AsyncPgConnection>, Error> {
+    ) -> Result<diesel_deadpool::Pool<diesel_async::AsyncPgConnection>, shuttle_service::BoxDynError> {
         let connection_string: String = self.into_resource().await?;
 
         Ok(
             diesel_deadpool::Pool::builder(AsyncDieselConnectionManager::new(connection_string))
                 .max_size(MAX_CONNECTIONS as usize)
-                .build()
-                .map_err(shuttle_service::error::CustomError::new)?,
+                .build()?,
         )
     }
 }
@@ -131,35 +128,32 @@ impl IntoResource<diesel_deadpool::Pool<diesel_async::AsyncPgConnection>> for Ou
 #[cfg(feature = "sqlx")]
 #[async_trait]
 impl IntoResource<sqlx::PgPool> for OutputWrapper {
-    async fn into_resource(self) -> Result<sqlx::PgPool, Error> {
+    async fn into_resource(self) -> Result<sqlx::PgPool, shuttle_service::BoxDynError> {
         let connection_string: String = self.into_resource().await?;
 
         Ok(sqlx::postgres::PgPoolOptions::new()
             .min_connections(MIN_CONNECTIONS)
             .max_connections(MAX_CONNECTIONS)
             .connect(&connection_string)
-            .await
-            .map_err(shuttle_service::error::CustomError::new)?)
+            .await?)
     }
 }
 
 #[cfg(feature = "opendal-postgres")]
 #[async_trait]
 impl IntoResource<opendal::Operator> for OutputWrapper {
-    async fn into_resource(self) -> Result<opendal::Operator, Error> {
+    async fn into_resource(self) -> Result<opendal::Operator, shuttle_service::BoxDynError> {
         let connection_string: String = self.into_resource().await?;
         let pool = sqlx::postgres::PgPoolOptions::new()
             .min_connections(MIN_CONNECTIONS)
             .max_connections(MAX_CONNECTIONS)
             .connect(&connection_string)
-            .await
-            .map_err(shuttle_service::error::CustomError::new)?;
+            .await?;
         sqlx::query(
             "CREATE TABLE IF NOT EXISTS opendal (key TEXT PRIMARY KEY, value BYTEA NOT NULL)",
         )
         .execute(&pool)
-        .await
-        .map_err(shuttle_service::error::CustomError::new)?;
+        .await?;
 
         let config = opendal::services::Postgresql::default()
             .root("/")
@@ -169,8 +163,7 @@ impl IntoResource<opendal::Operator> for OutputWrapper {
             .key_field("key")
             // value field type in the table should be compatible with Rust's Vec<u8> like bytea
             .value_field("value");
-        let op = opendal::Operator::new(config)
-            .map_err(shuttle_service::error::CustomError::new)?
+        let op = opendal::Operator::new(config)?
             .finish();
 
         Ok(op)

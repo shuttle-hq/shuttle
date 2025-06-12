@@ -4,10 +4,7 @@ use std::str::FromStr;
 use async_trait::async_trait;
 use opendal::{Operator, Scheme};
 use serde::{Deserialize, Serialize};
-use shuttle_service::{
-    error::{CustomError, Error as ShuttleError},
-    IntoResource, ResourceFactory, ResourceInputBuilder,
-};
+use shuttle_service::{IntoResource, ResourceFactory, ResourceInputBuilder};
 
 #[derive(Serialize)]
 pub struct Opendal {
@@ -35,21 +32,12 @@ pub struct OpendalOutput {
     cfg: HashMap<String, String>,
 }
 
-pub struct Error(opendal::Error);
-
-impl From<Error> for shuttle_service::Error {
-    fn from(error: Error) -> Self {
-        let msg = format!("Failed to build opendal resource: {:?}", error.0);
-        ShuttleError::Custom(CustomError::msg(msg))
-    }
-}
-
 #[async_trait]
 impl ResourceInputBuilder for Opendal {
     type Input = OpendalOutput;
     type Output = OpendalOutput;
 
-    async fn build(self, factory: &ResourceFactory) -> Result<Self::Input, ShuttleError> {
+    async fn build(self, factory: &ResourceFactory) -> Result<Self::Input, shuttle_service::BoxDynError> {
         Ok(OpendalOutput {
             scheme: self.scheme,
             cfg: factory
@@ -63,10 +51,10 @@ impl ResourceInputBuilder for Opendal {
 
 #[async_trait]
 impl IntoResource<Operator> for OpendalOutput {
-    async fn into_resource(self) -> Result<Operator, shuttle_service::Error> {
-        let scheme = Scheme::from_str(&self.scheme).map_err(Error)?;
+    async fn into_resource(self) -> Result<Operator, shuttle_service::BoxDynError> {
+        let scheme = Scheme::from_str(&self.scheme)?;
 
-        Ok(Operator::via_iter(scheme, self.cfg).map_err(Error)?)
+        Ok(Operator::via_iter(scheme, self.cfg)?)
     }
 }
 

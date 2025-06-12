@@ -1,5 +1,4 @@
 #![doc = include_str!("../README.md")]
-use shuttle_runtime::{CustomError, Error};
 use std::net::SocketAddr;
 
 #[cfg(feature = "axum")]
@@ -17,27 +16,19 @@ pub struct AxumService(pub Router);
 
 #[shuttle_runtime::async_trait]
 impl shuttle_runtime::Service for AxumService {
-    /// Takes the router that is returned by the user in their [shuttle_runtime::main] function
-    /// and binds to an address passed in by shuttle.
-    async fn bind(mut self, addr: SocketAddr) -> Result<(), Error> {
+    async fn bind(mut self, addr: SocketAddr) -> Result<(), shuttle_runtime::BoxDynError> {
         #[cfg(feature = "axum")]
         axum::serve(
-            shuttle_runtime::tokio::net::TcpListener::bind(addr)
-                .await
-                .map_err(CustomError::new)?,
+            shuttle_runtime::tokio::net::TcpListener::bind(addr).await?,
             self.0,
         )
-        .await
-        .map_err(CustomError::new)?;
+        .await?;
         #[cfg(feature = "axum-0-7")]
         axum_0_7::serve(
-            shuttle_runtime::tokio::net::TcpListener::bind(addr)
-                .await
-                .map_err(CustomError::new)?,
+            shuttle_runtime::tokio::net::TcpListener::bind(addr).await?,
             self.0,
         )
-        .await
-        .map_err(CustomError::new)?;
+        .await?;
 
         Ok(())
     }
@@ -50,4 +41,4 @@ impl From<Router> for AxumService {
 }
 
 #[doc = include_str!("../README.md")]
-pub type ShuttleAxum = Result<AxumService, Error>;
+pub type ShuttleAxum = Result<AxumService, shuttle_runtime::BoxDynError>;

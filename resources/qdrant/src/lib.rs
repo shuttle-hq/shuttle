@@ -1,7 +1,6 @@
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use shuttle_service::{
-    error::{CustomError, Error},
     resource::{ProvisionResourceRequest, ResourceType},
     ContainerRequest, ContainerResponse, Environment, IntoResource, ResourceFactory,
     ResourceInputBuilder,
@@ -47,7 +46,7 @@ impl ResourceInputBuilder for Qdrant {
     // The response can be a provisioned container, depending on local/deployment and config.
     type Output = OutputWrapper;
 
-    async fn build(self, factory: &ResourceFactory) -> Result<Self::Input, Error> {
+    async fn build(self, factory: &ResourceFactory) -> Result<Self::Input, shuttle_service::BoxDynError> {
         let md = factory.get_metadata();
         match md.env {
             Environment::Deployment => match self.cloud_url {
@@ -55,9 +54,9 @@ impl ResourceInputBuilder for Qdrant {
                     url: cloud_url,
                     api_key: self.api_key,
                 })),
-                None => Err(Error::Custom(CustomError::msg(
+                None => Err(CustomError::msg(
                     "missing `cloud_url` parameter",
-                ))),
+                )),
             },
             Environment::Local => match self.local_url {
                 Some(local_url) => Ok(MaybeRequest::NotRequest(QdrantClientConfigWrap {
@@ -96,7 +95,7 @@ pub struct QdrantClientConfigWrap {
 
 #[async_trait]
 impl IntoResource<qdrant_client::Qdrant> for OutputWrapper {
-    async fn into_resource(self) -> Result<qdrant_client::Qdrant, Error> {
+    async fn into_resource(self) -> Result<qdrant_client::Qdrant, shuttle_service::BoxDynError> {
         let config = match self {
             Self::Container(output) => QdrantClientConfigWrap {
                 url: format!("http://localhost:{}", output.host_port),
@@ -106,7 +105,6 @@ impl IntoResource<qdrant_client::Qdrant> for OutputWrapper {
         };
         Ok(qdrant_client::config::QdrantConfig::from_url(&config.url)
             .api_key(config.api_key)
-            .build()
-            .map_err(|err| Error::Custom(err.into()))?)
+            .build()?)
     }
 }

@@ -1,5 +1,4 @@
 #![doc = include_str!("../README.md")]
-use shuttle_runtime::{CustomError, Error};
 use std::net::SocketAddr;
 
 pub use tower;
@@ -18,14 +17,9 @@ where
     T::Error: std::error::Error + Send + Sync,
     T::Future: std::future::Future + Send + Sync,
 {
-    /// Takes the service that is returned by the user in their [shuttle_runtime::main] function
-    /// and binds to an address passed in by shuttle.
-    async fn bind(mut self, addr: SocketAddr) -> Result<(), Error> {
+    async fn bind(mut self, addr: SocketAddr) -> Result<(), shuttle_runtime::BoxDynError> {
         let shared = tower::make::Shared::new(self.0);
-        hyper::Server::bind(&addr)
-            .serve(shared)
-            .await
-            .map_err(CustomError::new)?;
+        hyper::Server::bind(&addr).serve(shared).await?;
 
         Ok(())
     }
@@ -47,4 +41,4 @@ where
 }
 
 #[doc = include_str!("../README.md")]
-pub type ShuttleTower<T> = Result<TowerService<T>, Error>;
+pub type ShuttleTower<T> = Result<TowerService<T>, shuttle_runtime::BoxDynError>;

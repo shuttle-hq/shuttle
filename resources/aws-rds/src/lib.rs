@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use shuttle_service::{
     resource::{ProvisionResourceRequest, ResourceType},
-    DatabaseResource, DbInput, Environment, Error, IntoResource, ResourceFactory,
+    DatabaseResource, DbInput, Environment, IntoResource, ResourceFactory,
     ResourceInputBuilder,
 };
 
@@ -61,7 +61,7 @@ macro_rules! aws_engine {
                 type Input = MaybeRequest;
                 type Output = OutputWrapper;
 
-                async fn build(self, factory: &ResourceFactory) -> Result<Self::Input, Error> {
+                async fn build(self, factory: &ResourceFactory) -> Result<Self::Input, shuttle_service::BoxDynError> {
                     let md = factory.get_metadata();
                     Ok(match md.env {
                         Environment::Deployment => MaybeRequest::Request(ProvisionResourceRequest {
@@ -94,7 +94,7 @@ pub struct OutputWrapper(DatabaseResource);
 
 #[async_trait]
 impl IntoResource<String> for OutputWrapper {
-    async fn into_resource(self) -> Result<String, Error> {
+    async fn into_resource(self) -> Result<String, shuttle_service::BoxDynError> {
         Ok(match self.0 {
             DatabaseResource::ConnectionString(s) => s,
             DatabaseResource::Info(info) => info.connection_string(true),
@@ -111,26 +111,24 @@ mod _diesel_async {
     #[cfg(feature = "postgres")]
     #[async_trait]
     impl IntoResource<diesel_async::AsyncPgConnection> for OutputWrapper {
-        async fn into_resource(self) -> Result<diesel_async::AsyncPgConnection, Error> {
+        async fn into_resource(self) -> Result<diesel_async::AsyncPgConnection, shuttle_service::BoxDynError> {
             use diesel_async::{AsyncConnection, AsyncPgConnection};
 
             let connection_string: String = self.into_resource().await.unwrap();
             Ok(AsyncPgConnection::establish(&connection_string)
-                .await
-                .map_err(shuttle_service::error::CustomError::new)?)
+                .await?)
         }
     }
 
     #[cfg(any(feature = "mysql", feature = "mariadb"))]
     #[async_trait]
     impl IntoResource<diesel_async::AsyncMysqlConnection> for OutputWrapper {
-        async fn into_resource(self) -> Result<diesel_async::AsyncMysqlConnection, Error> {
+        async fn into_resource(self) -> Result<diesel_async::AsyncMysqlConnection, shuttle_service::BoxDynError> {
             use diesel_async::{AsyncConnection, AsyncMysqlConnection};
 
             let connection_string: String = self.into_resource().await.unwrap();
             Ok(AsyncMysqlConnection::establish(&connection_string)
-                .await
-                .map_err(shuttle_service::error::CustomError::new)?)
+                .await?)
         }
     }
 }
@@ -144,15 +142,14 @@ mod _diesel_async_bb8 {
     impl IntoResource<diesel_bb8::Pool<diesel_async::AsyncPgConnection>> for OutputWrapper {
         async fn into_resource(
             self,
-        ) -> Result<diesel_bb8::Pool<diesel_async::AsyncPgConnection>, Error> {
+        ) -> Result<diesel_bb8::Pool<diesel_async::AsyncPgConnection>, shuttle_service::BoxDynError> {
             let connection_string: String = self.into_resource().await.unwrap();
 
             Ok(diesel_bb8::Pool::builder()
                 .min_idle(Some(MIN_CONNECTIONS))
                 .max_size(MAX_CONNECTIONS)
                 .build(AsyncDieselConnectionManager::new(connection_string))
-                .await
-                .map_err(shuttle_service::error::CustomError::new)?)
+                .await?)
         }
     }
 
@@ -161,15 +158,14 @@ mod _diesel_async_bb8 {
     impl IntoResource<diesel_bb8::Pool<diesel_async::AsyncMysqlConnection>> for OutputWrapper {
         async fn into_resource(
             self,
-        ) -> Result<diesel_bb8::Pool<diesel_async::AsyncMysqlConnection>, Error> {
+        ) -> Result<diesel_bb8::Pool<diesel_async::AsyncMysqlConnection>, shuttle_service::BoxDynError> {
             let connection_string: String = self.into_resource().await.unwrap();
 
             Ok(diesel_bb8::Pool::builder()
                 .min_idle(Some(MIN_CONNECTIONS))
                 .max_size(MAX_CONNECTIONS)
                 .build(AsyncDieselConnectionManager::new(connection_string))
-                .await
-                .map_err(shuttle_service::error::CustomError::new)?)
+                .await?)
         }
     }
 }
@@ -183,7 +179,7 @@ mod _diesel_async_deadpool {
     impl IntoResource<diesel_deadpool::Pool<diesel_async::AsyncPgConnection>> for OutputWrapper {
         async fn into_resource(
             self,
-        ) -> Result<diesel_deadpool::Pool<diesel_async::AsyncPgConnection>, Error> {
+        ) -> Result<diesel_deadpool::Pool<diesel_async::AsyncPgConnection>, shuttle_service::BoxDynError> {
             let connection_string: String = self.into_resource().await.unwrap();
 
             Ok(
@@ -191,8 +187,7 @@ mod _diesel_async_deadpool {
                     connection_string,
                 ))
                 .max_size(MAX_CONNECTIONS as usize)
-                .build()
-                .map_err(shuttle_service::error::CustomError::new)?,
+                .build()?,
             )
         }
     }
@@ -202,7 +197,7 @@ mod _diesel_async_deadpool {
     impl IntoResource<diesel_deadpool::Pool<diesel_async::AsyncMysqlConnection>> for OutputWrapper {
         async fn into_resource(
             self,
-        ) -> Result<diesel_deadpool::Pool<diesel_async::AsyncMysqlConnection>, Error> {
+        ) -> Result<diesel_deadpool::Pool<diesel_async::AsyncMysqlConnection>, shuttle_service::BoxDynError> {
             let connection_string: String = self.into_resource().await.unwrap();
 
             Ok(
@@ -210,8 +205,7 @@ mod _diesel_async_deadpool {
                     connection_string,
                 ))
                 .max_size(MAX_CONNECTIONS as usize)
-                .build()
-                .map_err(shuttle_service::error::CustomError::new)?,
+                .build()?,
             )
         }
     }
@@ -224,30 +218,28 @@ mod _sqlx {
     #[cfg(feature = "postgres")]
     #[async_trait]
     impl IntoResource<sqlx::PgPool> for OutputWrapper {
-        async fn into_resource(self) -> Result<sqlx::PgPool, Error> {
+        async fn into_resource(self) -> Result<sqlx::PgPool, shuttle_service::BoxDynError> {
             let connection_string: String = self.into_resource().await.unwrap();
 
             Ok(sqlx::postgres::PgPoolOptions::new()
                 .min_connections(MIN_CONNECTIONS)
                 .max_connections(MAX_CONNECTIONS)
                 .connect(&connection_string)
-                .await
-                .map_err(shuttle_service::error::CustomError::new)?)
+                .await?)
         }
     }
 
     #[cfg(any(feature = "mysql", feature = "mariadb"))]
     #[async_trait]
     impl IntoResource<sqlx::MySqlPool> for OutputWrapper {
-        async fn into_resource(self) -> Result<sqlx::MySqlPool, Error> {
+        async fn into_resource(self) -> Result<sqlx::MySqlPool, shuttle_service::BoxDynError> {
             let connection_string: String = self.into_resource().await.unwrap();
 
             Ok(sqlx::mysql::MySqlPoolOptions::new()
                 .min_connections(MIN_CONNECTIONS)
                 .max_connections(MAX_CONNECTIONS)
                 .connect(&connection_string)
-                .await
-                .map_err(shuttle_service::error::CustomError::new)?)
+                .await?)
         }
     }
 }

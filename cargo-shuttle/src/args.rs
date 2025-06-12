@@ -398,7 +398,7 @@ pub struct BuildArgs {
 
     // Docker-related args
     /// Build/Run with docker instead of natively
-    #[arg(long, short = 'd')]
+    #[arg(long)]
     pub docker: bool,
     /// Additional tag for the docker image
     #[arg(long, short = 't')]

@@ -13,7 +13,7 @@ impl<F> shuttle_runtime::Service for ActixWebService<F>
 where
     F: FnOnce(&mut actix_web::web::ServiceConfig) + Send + Clone + 'static,
 {
-    async fn bind(mut self, addr: SocketAddr) -> Result<(), shuttle_runtime::Error> {
+    async fn bind(mut self, addr: SocketAddr) -> Result<(), shuttle_runtime::BoxDynError> {
         // Start a worker for each cpu, but no more than 4.
         let worker_count = num_cpus::get().min(4);
 
@@ -23,7 +23,7 @@ where
                 .bind(addr)?
                 .run();
 
-        server.await.map_err(shuttle_runtime::CustomError::new)?;
+        server.await?;
 
         Ok(())
     }
@@ -39,4 +39,4 @@ where
 }
 
 #[doc = include_str!("../README.md")]
-pub type ShuttleActixWeb<F> = Result<ActixWebService<F>, shuttle_runtime::Error>;
+pub type ShuttleActixWeb<F> = Result<ActixWebService<F>, shuttle_runtime::BoxDynError>;

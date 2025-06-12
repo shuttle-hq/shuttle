@@ -1,5 +1,4 @@
 #![doc = include_str!("../README.md")]
-use shuttle_runtime::{CustomError, Error};
 use std::net::SocketAddr;
 
 #[cfg(feature = "serenity")]
@@ -17,10 +16,8 @@ pub struct SerenityService(pub Client);
 
 #[shuttle_runtime::async_trait]
 impl shuttle_runtime::Service for SerenityService {
-    /// Takes the client that is returned by the user in their [shuttle_runtime::main] function
-    /// and starts it.
-    async fn bind(mut self, _addr: SocketAddr) -> Result<(), Error> {
-        self.0.start_autosharded().await.map_err(CustomError::new)?;
+    async fn bind(mut self, _addr: SocketAddr) -> Result<(), shuttle_runtime::BoxDynError> {
+        self.0.start_autosharded().await?;
 
         Ok(())
     }
@@ -33,4 +30,4 @@ impl From<Client> for SerenityService {
 }
 
 #[doc = include_str!("../README.md")]
-pub type ShuttleSerenity = Result<SerenityService, Error>;
+pub type ShuttleSerenity = Result<SerenityService, shuttle_runtime::BoxDynError>;

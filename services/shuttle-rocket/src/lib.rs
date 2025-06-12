@@ -8,9 +8,7 @@ pub struct RocketService(pub rocket::Rocket<rocket::Build>);
 
 #[shuttle_runtime::async_trait]
 impl shuttle_runtime::Service for RocketService {
-    /// Takes the router that is returned by the user in their [shuttle_runtime::main] function
-    /// and binds to an address passed in by shuttle.
-    async fn bind(mut self, addr: SocketAddr) -> Result<(), shuttle_runtime::Error> {
+    async fn bind(mut self, addr: SocketAddr) -> Result<(), shuttle_runtime::BoxDynError> {
         let shutdown = rocket::config::Shutdown {
             ctrlc: false,
             ..rocket::config::Shutdown::default()
@@ -25,12 +23,7 @@ impl shuttle_runtime::Service for RocketService {
             .merge((rocket::Config::LOG_LEVEL, rocket::config::LogLevel::Off))
             .merge((rocket::Config::SHUTDOWN, shutdown));
 
-        let _rocket = self
-            .0
-            .configure(config)
-            .launch()
-            .await
-            .map_err(shuttle_runtime::CustomError::new)?;
+        let _rocket = self.0.configure(config).launch().await?;
 
         Ok(())
     }
@@ -43,4 +36,4 @@ impl From<rocket::Rocket<rocket::Build>> for RocketService {
 }
 
 #[doc = include_str!("../README.md")]
-pub type ShuttleRocket = Result<RocketService, shuttle_runtime::Error>;
+pub type ShuttleRocket = Result<RocketService, shuttle_runtime::BoxDynError>;

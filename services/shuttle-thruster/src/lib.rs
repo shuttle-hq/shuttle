@@ -1,5 +1,4 @@
 #![doc = include_str!("../README.md")]
-use shuttle_runtime::Error;
 use std::net::SocketAddr;
 
 pub use thruster;
@@ -12,9 +11,7 @@ impl<T> shuttle_runtime::Service for ThrusterService<T>
 where
     T: thruster::ThrusterServer + Send + 'static,
 {
-    /// Takes the server that is returned by the user in their [shuttle_runtime::main] function
-    /// and binds to an address passed in by shuttle.
-    async fn bind(mut self, addr: SocketAddr) -> Result<(), Error> {
+    async fn bind(mut self, addr: SocketAddr) -> Result<(), shuttle_runtime::BoxDynError> {
         self.0.build(&addr.ip().to_string(), addr.port()).await;
 
         Ok(())
@@ -31,4 +28,4 @@ where
 }
 
 #[doc = include_str!("../README.md")]
-pub type ShuttleThruster<T> = Result<ThrusterService<T>, Error>;
+pub type ShuttleThruster<T> = Result<ThrusterService<T>, shuttle_runtime::BoxDynError>;

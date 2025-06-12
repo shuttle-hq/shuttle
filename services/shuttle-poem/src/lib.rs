@@ -10,11 +10,13 @@ impl<T> shuttle_runtime::Service for PoemService<T>
 where
     T: poem::Endpoint + Send + 'static,
 {
-    async fn bind(mut self, addr: std::net::SocketAddr) -> Result<(), shuttle_runtime::Error> {
+    async fn bind(
+        mut self,
+        addr: std::net::SocketAddr,
+    ) -> Result<(), shuttle_runtime::BoxDynError> {
         poem::Server::new(poem::listener::TcpListener::bind(addr))
             .run(self.0)
-            .await
-            .map_err(shuttle_runtime::CustomError::new)?;
+            .await?;
 
         Ok(())
     }
@@ -30,4 +32,4 @@ where
 }
 
 #[doc = include_str!("../README.md")]
-pub type ShuttlePoem<T> = Result<PoemService<T>, shuttle_runtime::Error>;
+pub type ShuttlePoem<T> = Result<PoemService<T>, shuttle_runtime::BoxDynError>;

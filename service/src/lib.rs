@@ -14,9 +14,7 @@ pub use shuttle_common::{
     ContainerRequest, ContainerResponse, DatabaseInfo, DatabaseResource, DbInput,
 };
 
-pub use crate::error::{CustomError, Error};
-
-pub mod error;
+pub type BoxDynError = Box<dyn std::error::Error>;
 
 /// Allows implementing plugins for the Shuttle main function.
 ///
@@ -49,7 +47,7 @@ pub trait ResourceInputBuilder: Default {
     type Output: Serialize + DeserializeOwned;
 
     /// Construct this resource config. The [`ResourceFactory`] provides access to secrets and metadata.
-    async fn build(self, factory: &ResourceFactory) -> Result<Self::Input, crate::Error>;
+    async fn build(self, factory: &ResourceFactory) -> Result<Self::Input, BoxDynError>;
 }
 
 /// A factory for getting metadata when building resources
@@ -92,13 +90,13 @@ pub trait IntoResource<R>: Serialize + DeserializeOwned {
     /// Initialize any logic for creating the final resource of type `R` from the base resource.
     ///
     /// Example: turn a connection string into a connection pool.
-    async fn into_resource(self) -> Result<R, crate::Error>;
+    async fn into_resource(self) -> Result<R, BoxDynError>;
 }
 
 // Base impl for [`ResourceInputBuilder::Output`] types that don't need to convert into anything else
 #[async_trait]
 impl<R: Serialize + DeserializeOwned + Send> IntoResource<R> for R {
-    async fn into_resource(self) -> Result<R, crate::Error> {
+    async fn into_resource(self) -> Result<R, BoxDynError> {
         Ok(self)
     }
 }
@@ -113,5 +111,5 @@ pub trait Service: Send {
     ///
     /// The passed [`SocketAddr`] receives proxied HTTP traffic from your Shuttle subdomain (or custom domain).
     /// Binding to the address is only relevant if this service is an HTTP server.
-    async fn bind(mut self, addr: SocketAddr) -> Result<(), error::Error>;
+    async fn bind(mut self, addr: SocketAddr) -> Result<(), BoxDynError>;
 }

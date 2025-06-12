@@ -1,5 +1,4 @@
 #![doc = include_str!("../README.md")]
-use shuttle_runtime::Error;
 use std::net::SocketAddr;
 use std::ops::Deref;
 
@@ -14,9 +13,7 @@ where
     T: Send + Sync + Clone + 'static + warp::Filter,
     T::Extract: warp::reply::Reply,
 {
-    /// Takes the router that is returned by the user in their [shuttle_runtime::main] function
-    /// and binds to an address passed in by shuttle.
-    async fn bind(mut self, addr: SocketAddr) -> Result<(), Error> {
+    async fn bind(mut self, addr: SocketAddr) -> Result<(), shuttle_runtime::BoxDynError> {
         warp::serve((*self).clone()).run(addr).await;
         Ok(())
     }
@@ -41,4 +38,5 @@ impl<T> Deref for WarpService<T> {
 }
 
 #[doc = include_str!("../README.md")]
-pub type ShuttleWarp<T> = Result<WarpService<warp::filters::BoxedFilter<T>>, Error>;
+pub type ShuttleWarp<T> =
+    Result<WarpService<warp::filters::BoxedFilter<T>>, shuttle_runtime::BoxDynError>;

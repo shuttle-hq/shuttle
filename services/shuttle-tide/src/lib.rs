@@ -1,5 +1,4 @@
 #![doc = include_str!("../README.md")]
-use shuttle_runtime::{CustomError, Error};
 use std::net::SocketAddr;
 
 pub use tide;
@@ -12,10 +11,8 @@ impl<T> shuttle_runtime::Service for TideService<T>
 where
     T: Clone + Send + Sync + 'static,
 {
-    /// Takes the router that is returned by the user in their [shuttle_runtime::main] function
-    /// and binds to an address passed in by shuttle.
-    async fn bind(mut self, addr: SocketAddr) -> Result<(), Error> {
-        self.0.listen(addr).await.map_err(CustomError::new)?;
+    async fn bind(mut self, addr: SocketAddr) -> Result<(), shuttle_runtime::BoxDynError> {
+        self.0.listen(addr).await?;
 
         Ok(())
     }
@@ -28,4 +25,4 @@ impl<T> From<tide::Server<T>> for TideService<T> {
 }
 
 #[doc = include_str!("../README.md")]
-pub type ShuttleTide<T> = Result<TideService<T>, Error>;
+pub type ShuttleTide<T> = Result<TideService<T>, shuttle_runtime::BoxDynError>;

@@ -1,12 +1,12 @@
 #![doc = include_str!("../README.md")]
 
 use rama::{
-    Service,
     error::OpaqueError,
-    http::{Request, server::HttpServer, service::web::response::IntoResponse},
+    http::{server::HttpServer, service::web::response::IntoResponse, Request},
     tcp::server::TcpListener,
+    Service,
 };
-use shuttle_runtime::{CustomError, Error, tokio};
+use shuttle_runtime::tokio;
 use std::{convert::Infallible, fmt, net::SocketAddr};
 
 /// A wrapper type for [`Service`] so we can implement [`shuttle_runtime::Service`] for it.
@@ -102,11 +102,10 @@ where
 {
     /// Takes the service that is returned by the user in their [shuttle_runtime::main] function
     /// and binds to an address passed in by shuttle.
-    async fn bind(self, addr: SocketAddr) -> Result<(), Error> {
+    async fn bind(self, addr: SocketAddr) -> Result<(), shuttle_runtime::BoxDynError> {
         TcpListener::build_with_state(self.state)
             .bind(addr)
-            .await
-            .map_err(|err| Error::BindPanic(err.to_string()))?
+            .await?
             .serve(self.svc.0)
             .await;
         Ok(())
@@ -122,21 +121,20 @@ where
 {
     /// Takes the service that is returned by the user in their [shuttle_runtime::main] function
     /// and binds to an address passed in by shuttle.
-    async fn bind(self, addr: SocketAddr) -> Result<(), Error> {
+    async fn bind(self, addr: SocketAddr) -> Result<(), shuttle_runtime::BoxDynError> {
         // shuttle only supports h1 between load balancer <=> web service,
         // h2 is terminated by shuttle's load balancer
         HttpServer::http1()
             .listen_with_state(self.state, addr, self.svc.0)
-            .await
-            .map_err(|err| CustomError::new(OpaqueError::from_boxed(err)))?;
+            .await?;
         Ok(())
     }
 }
 
 #[doc = include_str!("../README.md")]
-pub type ShuttleRamaTransport<S, State = ()> = Result<RamaService<Transport<S>, State>, Error>;
+pub type ShuttleRamaTransport<S, State = ()> =
+    Result<RamaService<Transport<S>, State>, shuttle_runtime::BoxDynError>;
 
 #[doc = include_str!("../README.md")]
-pub type ShuttleRamaApplication<S, State = ()> = Result<RamaService<Application<S>, State>, Error>;
-
-pub use shuttle_runtime::{Error as ShuttleError, Service as ShuttleService};
+pub type ShuttleRamaApplication<S, State = ()> =
+    Result<RamaService<Application<S>, State>, shuttle_runtime::BoxDynError>;

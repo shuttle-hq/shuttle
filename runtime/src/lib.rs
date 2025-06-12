@@ -19,7 +19,7 @@ pub use async_trait::async_trait;
 pub use plugins::{Metadata, Secrets};
 pub use shuttle_codegen::main;
 pub use shuttle_service::{
-    CustomError, DbInput, DeploymentMetadata, Environment, Error, IntoResource, ResourceFactory,
+    BoxDynError, DbInput, DeploymentMetadata, Environment, IntoResource, ResourceFactory,
     ResourceInputBuilder, SecretStore, Service,
 };
 pub use tokio;
@@ -42,16 +42,16 @@ pub mod __internals {
 
     #[async_trait]
     pub trait Loader {
-        async fn load(self, factory: ResourceFactory) -> Result<Vec<Vec<u8>>, Error>;
+        async fn load(self, factory: ResourceFactory) -> Result<Vec<Vec<u8>>, BoxDynError>;
     }
 
     #[async_trait]
     impl<F, O> Loader for F
     where
         F: FnOnce(ResourceFactory) -> O + Send,
-        O: Future<Output = Result<Vec<Vec<u8>>, Error>> + Send,
+        O: Future<Output = Result<Vec<Vec<u8>>, BoxDynError>> + Send,
     {
-        async fn load(self, factory: ResourceFactory) -> Result<Vec<Vec<u8>>, Error> {
+        async fn load(self, factory: ResourceFactory) -> Result<Vec<Vec<u8>>, BoxDynError> {
             self(factory).await
         }
     }
@@ -60,19 +60,19 @@ pub mod __internals {
     pub trait Runner {
         type Service: Service;
 
-        async fn run(self, resources: Vec<Vec<u8>>) -> Result<Self::Service, Error>;
+        async fn run(self, resources: Vec<Vec<u8>>) -> Result<Self::Service, BoxDynError>;
     }
 
     #[async_trait]
     impl<F, O, S> Runner for F
     where
         F: FnOnce(Vec<Vec<u8>>) -> O + Send,
-        O: Future<Output = Result<S, Error>> + Send,
+        O: Future<Output = Result<S, BoxDynError>> + Send,
         S: Service,
     {
         type Service = S;
 
-        async fn run(self, resources: Vec<Vec<u8>>) -> Result<Self::Service, Error> {
+        async fn run(self, resources: Vec<Vec<u8>>) -> Result<Self::Service, BoxDynError> {
             self(resources).await
         }
     }

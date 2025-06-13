@@ -61,7 +61,9 @@ use crate::args::{
     SecretsArgs, TableArgs, TemplateLocation,
 };
 pub use crate::args::{Command, ProjectArgs, RunArgs, ShuttleArgs};
-use crate::builder::{async_cargo_metadata, build_workspace, find_shuttle_packages, BuiltService};
+use crate::builder::{
+    async_cargo_metadata, build_workspace, find_first_shuttle_package, BuiltService,
+};
 use crate::config::RequestContext;
 use crate::provisioner_server::{ProvApiState, ProvisionerServer};
 use crate::util::{
@@ -1203,7 +1205,7 @@ impl Shuttle {
         })
     }
 
-    async fn pre_local_run(&self, run_args: &RunArgs) -> Result<Vec<BuiltService>> {
+    async fn pre_local_run(&self, run_args: &RunArgs) -> Result<BuiltService> {
         trace!("starting a local run with args: {run_args:?}");
 
         let (tx, mut rx) = tokio::sync::mpsc::channel::<String>(256);
@@ -1221,7 +1223,7 @@ impl Shuttle {
             working_directory.display()
         );
 
-        build_workspace(working_directory, run_args.release, tx, false).await
+        build_workspace(working_directory, run_args.release, tx).await
     }
 
     fn find_available_port(run_args: &mut RunArgs) {
@@ -1256,12 +1258,7 @@ impl Shuttle {
             return bacon::run_bacon(working_directory).await;
         }
 
-        let services = self.pre_local_run(&run_args).await?;
-        let service = services
-            .first()
-            .expect("at least one shuttle service")
-            .to_owned();
-
+        let service = self.pre_local_run(&run_args).await?;
         trace!(path = ?service.executable_path, "runtime executable");
 
         let secrets = Shuttle::get_secrets(&run_args.secret_args, working_directory, true)?
@@ -1292,7 +1289,7 @@ impl Shuttle {
         println!(
             "\n    {} {} on http://{}:{}\n",
             "Starting".bold().green(),
-            service.package_name,
+            service.target_name,
             ip,
             run_args.port,
         );
@@ -1494,13 +1491,10 @@ impl Shuttle {
         let mut rust_build_args = BuildArgsRust::default();
 
         let metadata = async_cargo_metadata(manifest_path.as_path()).await?;
-        let packages = find_shuttle_packages(&metadata)?;
         // TODO: support overriding this
-        let package = packages
-            .first()
-            .expect("Expected at least one crate with shuttle-runtime in the workspace");
-        let package_name = package.name.to_owned();
-        rust_build_args.package_name = Some(package_name);
+        let (package, target) = find_first_shuttle_package(&metadata)?;
+        rust_build_args.package_name = Some(package.name.clone());
+        rust_build_args.binary_name = Some(target.name.clone());
 
         // activate shuttle feature if present
         let (no_default_features, features) = if package.features.contains_key("shuttle") {

@@ -8,9 +8,11 @@ use syn::{
     parse_macro_input, parse_quote,
     punctuated::Punctuated,
     spanned::Spanned,
-    Attribute, Expr, ExprLit, FnArg, Ident, ItemFn, Lit, LitStr, Pat, PatIdent, Path, ReturnType,
-    Signature, Stmt, Token, Type, TypePath,
+    Attribute, Error, Expr, ExprLit, FnArg, Ident, ItemFn, Lit, LitStr, Pat, PatIdent, Path,
+    ReturnType, Signature, Stmt, Token, Type, TypePath,
 };
+
+const BUILD_MANIFEST_FILE: &str = ".shuttle/build_manifest.json";
 
 #[derive(Clone, Debug, Default)]
 struct RuntimeMacroArgs {
@@ -64,17 +66,56 @@ impl Parse for RuntimeMacroArgs {
     }
 }
 
-const BUILD_MANIFEST_FILE: &str = ".shuttle/build_manifest.json";
-
 pub(crate) fn tokens(attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut user_main_fn = parse_macro_input!(item as ItemFn);
     let loader_runner = LoaderAndRunner::from_item_fn(&mut user_main_fn);
 
+    // Start write build manifest - to be replaced by a syn parse stage
+    // --
     let attr_ast = parse_macro_input!(attr as RuntimeMacroArgs);
 
-    let json_str = serde_json::to_string(&attr_ast).unwrap();
+    let json_str = match serde_json::to_string(&attr_ast).map_err(|err| {
+        Error::new(
+            user_main_fn.span(),
+            format!("failed to serialize build manifest: {:?}", err),
+        )
+    }) {
+        Ok(json) => json,
+        Err(e) => return e.into_compile_error().into(),
+    };
 
-    std::fs::write(BUILD_MANIFEST_FILE, json_str).unwrap();
+    if let Some(shuttle_dir) = std::path::Path::new(BUILD_MANIFEST_FILE).parent() {
+        if !shuttle_dir.exists() {
+            match std::fs::create_dir_all(shuttle_dir).map_err(|err| {
+                Error::new(
+                    user_main_fn.span(),
+                    format!(
+                        "failed to create shuttle directory: {:?}: {}",
+                        shuttle_dir, err
+                    ),
+                )
+            }) {
+                Ok(_) => (),
+                Err(e) => return e.into_compile_error().into(),
+            };
+        }
+    }
+
+    match std::fs::write(BUILD_MANIFEST_FILE, json_str).map_err(|err| {
+        Error::new(
+            user_main_fn.span(),
+            format!(
+                "failed to write build manifest to '{}': {:?}",
+                BUILD_MANIFEST_FILE, err
+            ),
+        )
+    }) {
+        Ok(_) => (),
+        Err(e) => return e.into_compile_error().into(),
+    };
+
+    // End write build manifest
+    // --
 
     Into::into(quote! {
         fn main() {

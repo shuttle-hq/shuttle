@@ -118,7 +118,8 @@ fn find_shuttle_packages(metadata: &Metadata) -> Result<Vec<(Package, Target)>> 
             if t.is_bin()
                 && fs::read_to_string(t.src_path.as_std_path())
                     .context("reading to check for shuttle macro")?
-                    .contains("#[shuttle_runtime::main]")
+                    // don't look for the last ] so that we also find instances of `#[shuttle_runtime::main(...)]`
+                    .contains("#[shuttle_runtime::main")
             {
                 target = Some(t);
                 break;

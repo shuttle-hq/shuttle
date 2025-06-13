@@ -24,7 +24,7 @@ impl Serialize for RuntimeMacroArgs {
     where
         S: serde::Serializer,
     {
-        let len = 0 + self.instance_size.is_some() as usize;
+        let len = self.instance_size.is_some() as usize;
         let mut state = serializer.serialize_struct("RuntimeMacroArgs", len)?;
         if let Some(instance_size) = &self.instance_size {
             state.serialize_field("instance_size", &instance_size.value())?;

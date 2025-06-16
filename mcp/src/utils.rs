@@ -1,11 +1,16 @@
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 
-pub async fn execute_command(command: &str, args: Vec<String>) -> Result<String, String> {
+pub async fn execute_command(
+    command: &str,
+    args: Vec<String>,
+    cwd: &str,
+) -> Result<String, String> {
     let mut child = Command::new(command)
         .args(args)
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
+        .current_dir(cwd)
         .spawn()
         .map_err(|e| e.to_string())?;
 

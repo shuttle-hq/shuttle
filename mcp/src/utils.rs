@@ -1,5 +1,9 @@
+use std::future::Future;
+
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
+
+use crate::version::check_new_version;
 
 pub async fn execute_command(
     command: &str,
@@ -51,4 +55,21 @@ pub async fn execute_command(
     } else {
         Err(result)
     }
+}
+
+pub async fn run_tool<T, F>(func: T) -> Result<String, String>
+where
+    T: FnOnce() -> F,
+    F: Future<Output = Result<String, String>>,
+{
+    let has_new_version = check_new_version().await.map_err(|e| e.to_string())?;
+
+    if has_new_version {
+        return Ok(
+            "A new version of the MCP server is available. Please upgrade to the latest version."
+                .to_string(),
+        );
+    }
+
+    func().await
 }

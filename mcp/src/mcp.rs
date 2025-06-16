@@ -2,6 +2,7 @@ use crate::tools::{
     account::*, certificate::*, deployment::*, docs::*, feedback::*, generate::*, logs::*,
     project::*, resource::*, upgrade::*,
 };
+use crate::utils::run_tool;
 use rmcp::{
     model::{ServerCapabilities, ServerInfo},
     tool, ServerHandler,
@@ -50,20 +51,23 @@ impl ShuttleMcpServer {
         #[schemars(description = "Specify the working directory")]
         working_directory: Option<String>,
     ) -> Result<String, String> {
-        deploy(
-            cwd,
-            DeployParams {
-                allow_dirty,
-                output_archive,
-                no_follow,
-                raw,
-                secrets,
-                offline,
-                debug,
-                name,
-                working_directory,
-            },
-        )
+        run_tool(|| async {
+            deploy(
+                cwd,
+                DeployParams {
+                    allow_dirty,
+                    output_archive,
+                    no_follow,
+                    raw,
+                    secrets,
+                    offline,
+                    debug,
+                    name,
+                    working_directory,
+                },
+            )
+            .await
+        })
         .await
     }
 
@@ -95,18 +99,21 @@ impl ShuttleMcpServer {
         #[schemars(description = "Specify the working directory")]
         working_directory: Option<String>,
     ) -> Result<String, String> {
-        deployment_list(
-            cwd,
-            DeploymentListParams {
-                page,
-                limit,
-                raw,
-                name,
-                offline,
-                debug,
-                working_directory,
-            },
-        )
+        run_tool(|| async {
+            deployment_list(
+                cwd,
+                DeploymentListParams {
+                    page,
+                    limit,
+                    raw,
+                    name,
+                    offline,
+                    debug,
+                    working_directory,
+                },
+            )
+            .await
+        })
         .await
     }
 
@@ -132,16 +139,19 @@ impl ShuttleMcpServer {
         #[schemars(description = "Specify the working directory")]
         working_directory: Option<String>,
     ) -> Result<String, String> {
-        deployment_status(
-            cwd,
-            DeploymentStatusParams {
-                id,
-                name,
-                offline,
-                debug,
-                working_directory,
-            },
-        )
+        run_tool(|| async {
+            deployment_status(
+                cwd,
+                DeploymentStatusParams {
+                    id,
+                    name,
+                    offline,
+                    debug,
+                    working_directory,
+                },
+            )
+            .await
+        })
         .await
     }
 
@@ -175,18 +185,21 @@ impl ShuttleMcpServer {
         #[schemars(description = "Specify the working directory")]
         working_directory: Option<String>,
     ) -> Result<String, String> {
-        deployment_redeploy(
-            cwd,
-            DeploymentRedeployParams {
-                id,
-                no_follow,
-                raw,
-                name,
-                offline,
-                debug,
-                working_directory,
-            },
-        )
+        run_tool(|| async {
+            deployment_redeploy(
+                cwd,
+                DeploymentRedeployParams {
+                    id,
+                    no_follow,
+                    raw,
+                    name,
+                    offline,
+                    debug,
+                    working_directory,
+                },
+            )
+            .await
+        })
         .await
     }
 
@@ -217,17 +230,20 @@ impl ShuttleMcpServer {
         #[schemars(description = "Specify the working directory")]
         working_directory: Option<String>,
     ) -> Result<String, String> {
-        deployment_stop(
-            cwd,
-            DeploymentStopParams {
-                no_follow,
-                raw,
-                name,
-                offline,
-                debug,
-                working_directory,
-            },
-        )
+        run_tool(|| async {
+            deployment_stop(
+                cwd,
+                DeploymentStopParams {
+                    no_follow,
+                    raw,
+                    name,
+                    offline,
+                    debug,
+                    working_directory,
+                },
+            )
+            .await
+        })
         .await
     }
 
@@ -261,18 +277,21 @@ impl ShuttleMcpServer {
         #[schemars(description = "Specify the working directory")]
         working_directory: Option<String>,
     ) -> Result<String, String> {
-        logs(
-            cwd,
-            LogsParams {
-                id,
-                latest,
-                raw,
-                name,
-                offline,
-                debug,
-                working_directory,
-            },
-        )
+        run_tool(|| async {
+            logs(
+                cwd,
+                LogsParams {
+                    id,
+                    latest,
+                    raw,
+                    name,
+                    offline,
+                    debug,
+                    working_directory,
+                },
+            )
+            .await
+        })
         .await
     }
 
@@ -295,15 +314,18 @@ impl ShuttleMcpServer {
         #[schemars(description = "Specify the working directory")]
         working_directory: Option<String>,
     ) -> Result<String, String> {
-        project_create(
-            cwd,
-            ProjectCreateParams {
-                name,
-                offline,
-                debug,
-                working_directory,
-            },
-        )
+        run_tool(|| async {
+            project_create(
+                cwd,
+                ProjectCreateParams {
+                    name,
+                    offline,
+                    debug,
+                    working_directory,
+                },
+            )
+            .await
+        })
         .await
     }
 
@@ -329,16 +351,19 @@ impl ShuttleMcpServer {
         #[schemars(description = "Specify the working directory")]
         working_directory: Option<String>,
     ) -> Result<String, String> {
-        project_update_name(
-            cwd,
-            ProjectUpdateNameParams {
-                new_name,
-                name,
-                offline,
-                debug,
-                working_directory,
-            },
-        )
+        run_tool(|| async {
+            project_update_name(
+                cwd,
+                ProjectUpdateNameParams {
+                    new_name,
+                    name,
+                    offline,
+                    debug,
+                    working_directory,
+                },
+            )
+            .await
+        })
         .await
     }
 
@@ -361,15 +386,18 @@ impl ShuttleMcpServer {
         #[schemars(description = "Specify the working directory")]
         working_directory: Option<String>,
     ) -> Result<String, String> {
-        project_status(
-            cwd,
-            ProjectStatusParams {
-                name,
-                offline,
-                debug,
-                working_directory,
-            },
-        )
+        run_tool(|| async {
+            project_status(
+                cwd,
+                ProjectStatusParams {
+                    name,
+                    offline,
+                    debug,
+                    working_directory,
+                },
+            )
+            .await
+        })
         .await
     }
 
@@ -395,16 +423,19 @@ impl ShuttleMcpServer {
         #[schemars(description = "Specify the working directory")]
         working_directory: Option<String>,
     ) -> Result<String, String> {
-        project_list(
-            cwd,
-            ProjectListParams {
-                raw,
-                name,
-                offline,
-                debug,
-                working_directory,
-            },
-        )
+        run_tool(|| async {
+            project_list(
+                cwd,
+                ProjectListParams {
+                    raw,
+                    name,
+                    offline,
+                    debug,
+                    working_directory,
+                },
+            )
+            .await
+        })
         .await
     }
 
@@ -430,16 +461,19 @@ impl ShuttleMcpServer {
         #[schemars(description = "Specify the working directory")]
         working_directory: Option<String>,
     ) -> Result<String, String> {
-        project_delete(
-            cwd,
-            ProjectDeleteParams {
-                yes,
-                name,
-                offline,
-                debug,
-                working_directory,
-            },
-        )
+        run_tool(|| async {
+            project_delete(
+                cwd,
+                ProjectDeleteParams {
+                    yes,
+                    name,
+                    offline,
+                    debug,
+                    working_directory,
+                },
+            )
+            .await
+        })
         .await
     }
 
@@ -462,15 +496,18 @@ impl ShuttleMcpServer {
         #[schemars(description = "Specify the working directory")]
         working_directory: Option<String>,
     ) -> Result<String, String> {
-        project_link(
-            cwd,
-            ProjectLinkParams {
-                name,
-                offline,
-                debug,
-                working_directory,
-            },
-        )
+        run_tool(|| async {
+            project_link(
+                cwd,
+                ProjectLinkParams {
+                    name,
+                    offline,
+                    debug,
+                    working_directory,
+                },
+            )
+            .await
+        })
         .await
     }
 
@@ -499,17 +536,20 @@ impl ShuttleMcpServer {
         #[schemars(description = "Specify the working directory")]
         working_directory: Option<String>,
     ) -> Result<String, String> {
-        resource_list(
-            cwd,
-            ResourceListParams {
-                show_secrets,
-                raw,
-                name,
-                offline,
-                debug,
-                working_directory,
-            },
-        )
+        run_tool(|| async {
+            resource_list(
+                cwd,
+                ResourceListParams {
+                    show_secrets,
+                    raw,
+                    name,
+                    offline,
+                    debug,
+                    working_directory,
+                },
+            )
+            .await
+        })
         .await
     }
 
@@ -538,17 +578,20 @@ impl ShuttleMcpServer {
         #[schemars(description = "Specify the working directory")]
         working_directory: Option<String>,
     ) -> Result<String, String> {
-        resource_delete(
-            cwd,
-            ResourceDeleteParams {
-                resource_type,
-                yes,
-                name,
-                offline,
-                debug,
-                working_directory,
-            },
-        )
+        run_tool(|| async {
+            resource_delete(
+                cwd,
+                ResourceDeleteParams {
+                    resource_type,
+                    yes,
+                    name,
+                    offline,
+                    debug,
+                    working_directory,
+                },
+            )
+            .await
+        })
         .await
     }
 
@@ -574,16 +617,19 @@ impl ShuttleMcpServer {
         #[schemars(description = "Specify the working directory")]
         working_directory: Option<String>,
     ) -> Result<String, String> {
-        certificate_add(
-            cwd,
-            CertificateAddParams {
-                domain,
-                name,
-                offline,
-                debug,
-                working_directory,
-            },
-        )
+        run_tool(|| async {
+            certificate_add(
+                cwd,
+                CertificateAddParams {
+                    domain,
+                    name,
+                    offline,
+                    debug,
+                    working_directory,
+                },
+            )
+            .await
+        })
         .await
     }
 
@@ -609,16 +655,19 @@ impl ShuttleMcpServer {
         #[schemars(description = "Specify the working directory")]
         working_directory: Option<String>,
     ) -> Result<String, String> {
-        certificate_list(
-            cwd,
-            CertificateListParams {
-                raw,
-                name,
-                offline,
-                debug,
-                working_directory,
-            },
-        )
+        run_tool(|| async {
+            certificate_list(
+                cwd,
+                CertificateListParams {
+                    raw,
+                    name,
+                    offline,
+                    debug,
+                    working_directory,
+                },
+            )
+            .await
+        })
         .await
     }
 
@@ -647,17 +696,20 @@ impl ShuttleMcpServer {
         #[schemars(description = "Specify the working directory")]
         working_directory: Option<String>,
     ) -> Result<String, String> {
-        certificate_delete(
-            cwd,
-            CertificateDeleteParams {
-                domain,
-                yes,
-                name,
-                offline,
-                debug,
-                working_directory,
-            },
-        )
+        run_tool(|| async {
+            certificate_delete(
+                cwd,
+                CertificateDeleteParams {
+                    domain,
+                    yes,
+                    name,
+                    offline,
+                    debug,
+                    working_directory,
+                },
+            )
+            .await
+        })
         .await
     }
 
@@ -680,15 +732,18 @@ impl ShuttleMcpServer {
         #[schemars(description = "Specify the working directory")]
         working_directory: Option<String>,
     ) -> Result<String, String> {
-        account(
-            cwd,
-            AccountParams {
-                name,
-                offline,
-                debug,
-                working_directory,
-            },
-        )
+        run_tool(|| async {
+            account(
+                cwd,
+                AccountParams {
+                    name,
+                    offline,
+                    debug,
+                    working_directory,
+                },
+            )
+            .await
+        })
         .await
     }
 
@@ -717,17 +772,20 @@ impl ShuttleMcpServer {
         #[schemars(description = "Specify the working directory")]
         working_directory: Option<String>,
     ) -> Result<String, String> {
-        generate_shell(
-            cwd,
-            GenerateShellParams {
-                shell,
-                output,
-                name,
-                offline,
-                debug,
-                working_directory,
-            },
-        )
+        run_tool(|| async {
+            generate_shell(
+                cwd,
+                GenerateShellParams {
+                    shell,
+                    output,
+                    name,
+                    offline,
+                    debug,
+                    working_directory,
+                },
+            )
+            .await
+        })
         .await
     }
 
@@ -750,15 +808,18 @@ impl ShuttleMcpServer {
         #[schemars(description = "Specify the working directory")]
         working_directory: Option<String>,
     ) -> Result<String, String> {
-        generate_manpage(
-            cwd,
-            GenerateManpageParams {
-                name,
-                offline,
-                debug,
-                working_directory,
-            },
-        )
+        run_tool(|| async {
+            generate_manpage(
+                cwd,
+                GenerateManpageParams {
+                    name,
+                    offline,
+                    debug,
+                    working_directory,
+                },
+            )
+            .await
+        })
         .await
     }
 
@@ -781,15 +842,18 @@ impl ShuttleMcpServer {
         #[schemars(description = "Specify the working directory")]
         working_directory: Option<String>,
     ) -> Result<String, String> {
-        feedback(
-            cwd,
-            FeedbackParams {
-                name,
-                offline,
-                debug,
-                working_directory,
-            },
-        )
+        run_tool(|| async {
+            feedback(
+                cwd,
+                FeedbackParams {
+                    name,
+                    offline,
+                    debug,
+                    working_directory,
+                },
+            )
+            .await
+        })
         .await
     }
 
@@ -815,16 +879,19 @@ impl ShuttleMcpServer {
         #[schemars(description = "Specify the working directory")]
         working_directory: Option<String>,
     ) -> Result<String, String> {
-        upgrade(
-            cwd,
-            UpgradeParams {
-                preview,
-                name,
-                offline,
-                debug,
-                working_directory,
-            },
-        )
+        run_tool(|| async {
+            upgrade(
+                cwd,
+                UpgradeParams {
+                    preview,
+                    name,
+                    offline,
+                    debug,
+                    working_directory,
+                },
+            )
+            .await
+        })
         .await
     }
 
@@ -835,7 +902,7 @@ impl ShuttleMcpServer {
         #[schemars(description = "Search query for documentation")]
         query: String,
     ) -> Result<String, String> {
-        search_docs(query).await
+        run_tool(|| async { search_docs(query).await }).await
     }
 }
 

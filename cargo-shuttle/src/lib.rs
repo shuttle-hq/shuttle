@@ -1586,7 +1586,10 @@ impl Shuttle {
 
         eprintln!("Creating deployment...");
         let deployment = client
-            .deploy(pid, DeploymentRequest::BuildArchive(deployment_req))
+            .deploy(
+                pid,
+                DeploymentRequest::BuildArchive(Box::new(deployment_req)),
+            )
             .await?;
 
         if args.tracking_args.no_follow {

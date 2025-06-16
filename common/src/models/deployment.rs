@@ -129,7 +129,7 @@ pub struct UploadArchiveResponse {
 #[typeshare::typeshare]
 pub enum DeploymentRequest {
     /// Build an image from the source code in an attached zip archive
-    BuildArchive(DeploymentRequestBuildArchive),
+    BuildArchive(Box<DeploymentRequestBuildArchive>),
     // TODO?: Add GitRepo(DeploymentRequestGitRepo)
     /// Use this image directly. Can be used to skip the build step.
     Image(DeploymentRequestImage),

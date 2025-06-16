@@ -3,7 +3,10 @@ use rmcp::{
     tool, ServerHandler,
 };
 
-use crate::utils::execute_command;
+use crate::{
+    tools::deployment::{deploy, DeployParams},
+    utils::execute_command,
+};
 
 #[derive(Clone)]
 pub struct ShuttleMcpServer;
@@ -48,49 +51,21 @@ impl ShuttleMcpServer {
         #[schemars(description = "Specify the working directory")]
         working_directory: Option<String>,
     ) -> Result<String, String> {
-        let mut args = vec!["deploy".to_string()];
-
-        if allow_dirty.unwrap_or(false) {
-            args.push("--allow-dirty".to_string());
-        }
-
-        if let Some(output_archive) = output_archive {
-            args.push("--output-archive".to_string());
-            args.push(output_archive);
-        }
-
-        if no_follow.unwrap_or(false) {
-            args.push("--no-follow".to_string());
-        }
-
-        if raw.unwrap_or(false) {
-            args.push("--raw".to_string());
-        }
-
-        if let Some(secrets) = secrets {
-            args.push("--secrets".to_string());
-            args.push(secrets);
-        }
-
-        if offline.unwrap_or(false) {
-            args.push("--offline".to_string());
-        }
-
-        if debug.unwrap_or(false) {
-            args.push("--debug".to_string());
-        }
-
-        if let Some(working_directory) = working_directory {
-            args.push("--working-directory".to_string());
-            args.push(working_directory);
-        }
-
-        if let Some(name) = name {
-            args.push("--name".to_string());
-            args.push(name);
-        }
-
-        execute_command("shuttle", args, &cwd).await
+        deploy(
+            cwd,
+            DeployParams {
+                allow_dirty,
+                output_archive,
+                no_follow,
+                raw,
+                secrets,
+                offline,
+                debug,
+                name,
+                working_directory,
+            },
+        )
+        .await
     }
 
     #[tool(description = "List the deployments for a service")]

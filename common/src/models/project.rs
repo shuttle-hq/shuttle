@@ -62,6 +62,17 @@ impl ProjectResponse {
             writeln!(&mut s, "    - {uri}").unwrap();
         }
 
+        // Emit the user's instance size
+        if let Some(compute_tier) = &self.compute_tier {
+            writeln!(&mut s, "  Instance size: {}", compute_tier).unwrap_or_default();
+            writeln!(
+                &mut s,
+                "  Configured via `#[shuttle_runtime::main(instance_size = {})]`",
+                serde_json::to_string(compute_tier).unwrap()
+            )
+            .unwrap_or_default();
+        }
+
         s
     }
 }
@@ -100,11 +111,17 @@ pub struct ProjectUpdateRequest {
 #[typeshare::typeshare]
 pub enum ComputeTier {
     #[default]
+    #[strum(to_string = "Basic (0.25 vCPU / 0.5 GB)")]
     XS,
+    #[strum(to_string = "Small (0.5 vCPU / 1 GB)")]
     S,
+    #[strum(to_string = "Medium (1 vCPU / 2 GB)")]
     M,
+    #[strum(to_string = "Large (2 vCPU / 4 GB)")]
     L,
+    #[strum(to_string = "X Large (4 vCPU / 8 GB)")]
     XL,
+    #[strum(to_string = "XX Large (8 vCPU / 16 GB)")]
     XXL,
 
     /// Forward compatibility

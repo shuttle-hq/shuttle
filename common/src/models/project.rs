@@ -62,7 +62,7 @@ impl ProjectResponse {
             writeln!(&mut s, "    - {uri}").unwrap();
         }
 
-        // Emit the user's instance size
+        // Display compute tier information if configured
         if let Some(compute_tier) = &self.compute_tier {
             writeln!(&mut s, "  Instance size: {}", compute_tier).unwrap_or_default();
             writeln!(

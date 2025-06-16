@@ -180,7 +180,8 @@ pub struct BuildArgsRust {
     pub no_default_features: bool,
     /// Use the mold linker
     pub mold: bool,
-    /// provision manifest file
+    /// Path to the provision manifest file that defines the resources to be provisioned
+    /// for the application.
     pub provision_manifest: Option<String>,
 }
 

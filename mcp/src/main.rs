@@ -2,6 +2,7 @@ use rmcp::{transport::stdio, ServiceExt};
 
 use crate::mcp::ShuttleMcpServer;
 
+mod constants;
 mod mcp;
 mod tools;
 mod utils;

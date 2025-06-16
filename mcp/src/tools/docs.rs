@@ -1,6 +1,8 @@
+use crate::constants::SHUTTLE_DOCS_SEARCH_BASE_URL;
+
 pub async fn search_docs(query: String) -> Result<String, String> {
     let url = format!(
-        "https://shuttle-docs.dcodes.dev/search?q={}",
+        "{SHUTTLE_DOCS_SEARCH_BASE_URL}/search?q={}",
         urlencoding::encode(&query)
     );
 

@@ -1,5 +1,4 @@
-const GITHUB_RAW_BASE_URL: &'static str =
-    "https://raw.githubusercontent.com/dcodesdev/shuttle/refs/heads/main";
+use crate::constants::GITHUB_RAW_BASE_URL;
 
 pub async fn check_new_version() -> Result<bool, Box<dyn std::error::Error>> {
     let current_version = env!("CARGO_PKG_VERSION");

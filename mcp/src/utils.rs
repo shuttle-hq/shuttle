@@ -3,6 +3,7 @@ use std::future::Future;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 
+use crate::constants::INSTALL_SHUTTLE_MCP_COMMAND;
 use crate::version::check_new_version;
 
 pub async fn execute_command(
@@ -66,8 +67,10 @@ where
 
     if has_new_version {
         return Ok(
-            "A new version of the MCP server is available. Please upgrade to the latest version."
-                .to_string(),
+            format!(
+                "A new version of the MCP server is available. Please upgrade to the latest version by running the following command:\n\n{}",
+                INSTALL_SHUTTLE_MCP_COMMAND
+            )
         );
     }
 

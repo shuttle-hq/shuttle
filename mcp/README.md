@@ -36,7 +36,7 @@ rustup default nightly
 ### Install MCP server the binary
 
 ```bash
-cargo install --git https://github.com/dcodesdev/shuttle shuttle-mcp
+cargo install --git https://github.com/shuttle-hq/shuttle shuttle-mcp
 ```
 
 ## Configuration

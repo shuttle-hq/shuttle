@@ -4025,12 +4025,14 @@ dependencies = [
 
 [[package]]
 name = "shuttle-mcp"
-version = "0.55.0"
+version = "0.1.0"
 dependencies = [
  "reqwest",
  "rmcp",
+ "semver",
  "serde",
  "tokio",
+ "toml",
  "urlencoding",
 ]
 

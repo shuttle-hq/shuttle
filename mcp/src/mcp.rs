@@ -1,11 +1,10 @@
+use crate::tools::{
+    account::*, certificate::*, deployment::*, docs::*, feedback::*, generate::*, logs::*,
+    project::*, resource::*, upgrade::*,
+};
 use rmcp::{
     model::{ServerCapabilities, ServerInfo},
     tool, ServerHandler,
-};
-
-use crate::{
-    tools::deployment::{deploy, DeployParams},
-    utils::execute_command,
 };
 
 #[derive(Clone)]
@@ -96,41 +95,19 @@ impl ShuttleMcpServer {
         #[schemars(description = "Specify the working directory")]
         working_directory: Option<String>,
     ) -> Result<String, String> {
-        let mut args = vec!["deployment".to_string(), "list".to_string()];
-
-        if let Some(page) = page {
-            args.push("--page".to_string());
-            args.push(page.to_string());
-        }
-
-        if let Some(limit) = limit {
-            args.push("--limit".to_string());
-            args.push(limit.to_string());
-        }
-
-        if raw.unwrap_or(false) {
-            args.push("--raw".to_string());
-        }
-
-        if offline.unwrap_or(false) {
-            args.push("--offline".to_string());
-        }
-
-        if debug.unwrap_or(false) {
-            args.push("--debug".to_string());
-        }
-
-        if let Some(working_directory) = working_directory {
-            args.push("--working-directory".to_string());
-            args.push(working_directory);
-        }
-
-        if let Some(name) = name {
-            args.push("--name".to_string());
-            args.push(name);
-        }
-
-        execute_command("shuttle", args, &cwd).await
+        deployment_list(
+            cwd,
+            DeploymentListParams {
+                page,
+                limit,
+                raw,
+                name,
+                offline,
+                debug,
+                working_directory,
+            },
+        )
+        .await
     }
 
     #[tool(description = "View status of a deployment")]
@@ -155,31 +132,17 @@ impl ShuttleMcpServer {
         #[schemars(description = "Specify the working directory")]
         working_directory: Option<String>,
     ) -> Result<String, String> {
-        let mut args = vec!["deployment".to_string(), "status".to_string()];
-
-        if let Some(id) = id {
-            args.push(id);
-        }
-
-        if offline.unwrap_or(false) {
-            args.push("--offline".to_string());
-        }
-
-        if debug.unwrap_or(false) {
-            args.push("--debug".to_string());
-        }
-
-        if let Some(working_directory) = working_directory {
-            args.push("--working-directory".to_string());
-            args.push(working_directory);
-        }
-
-        if let Some(name) = name {
-            args.push("--name".to_string());
-            args.push(name);
-        }
-
-        execute_command("shuttle", args, &cwd).await
+        deployment_status(
+            cwd,
+            DeploymentStatusParams {
+                id,
+                name,
+                offline,
+                debug,
+                working_directory,
+            },
+        )
+        .await
     }
 
     #[tool(description = "Redeploy a previous deployment")]
@@ -212,39 +175,19 @@ impl ShuttleMcpServer {
         #[schemars(description = "Specify the working directory")]
         working_directory: Option<String>,
     ) -> Result<String, String> {
-        let mut args = vec!["deployment".to_string(), "redeploy".to_string()];
-
-        if let Some(id) = id {
-            args.push(id);
-        }
-
-        if no_follow.unwrap_or(false) {
-            args.push("--no-follow".to_string());
-        }
-
-        if raw.unwrap_or(false) {
-            args.push("--raw".to_string());
-        }
-
-        if offline.unwrap_or(false) {
-            args.push("--offline".to_string());
-        }
-
-        if debug.unwrap_or(false) {
-            args.push("--debug".to_string());
-        }
-
-        if let Some(working_directory) = working_directory {
-            args.push("--working-directory".to_string());
-            args.push(working_directory);
-        }
-
-        if let Some(name) = name {
-            args.push("--name".to_string());
-            args.push(name);
-        }
-
-        execute_command("shuttle", args, &cwd).await
+        deployment_redeploy(
+            cwd,
+            DeploymentRedeployParams {
+                id,
+                no_follow,
+                raw,
+                name,
+                offline,
+                debug,
+                working_directory,
+            },
+        )
+        .await
     }
 
     #[tool(description = "Stop running deployment(s)")]
@@ -274,35 +217,18 @@ impl ShuttleMcpServer {
         #[schemars(description = "Specify the working directory")]
         working_directory: Option<String>,
     ) -> Result<String, String> {
-        let mut args = vec!["deployment".to_string(), "stop".to_string()];
-
-        if no_follow.unwrap_or(false) {
-            args.push("--no-follow".to_string());
-        }
-
-        if raw.unwrap_or(false) {
-            args.push("--raw".to_string());
-        }
-
-        if offline.unwrap_or(false) {
-            args.push("--offline".to_string());
-        }
-
-        if debug.unwrap_or(false) {
-            args.push("--debug".to_string());
-        }
-
-        if let Some(working_directory) = working_directory {
-            args.push("--working-directory".to_string());
-            args.push(working_directory);
-        }
-
-        if let Some(name) = name {
-            args.push("--name".to_string());
-            args.push(name);
-        }
-
-        execute_command("shuttle", args, &cwd).await
+        deployment_stop(
+            cwd,
+            DeploymentStopParams {
+                no_follow,
+                raw,
+                name,
+                offline,
+                debug,
+                working_directory,
+            },
+        )
+        .await
     }
 
     #[tool(description = "View build and deployment logs")]
@@ -335,39 +261,19 @@ impl ShuttleMcpServer {
         #[schemars(description = "Specify the working directory")]
         working_directory: Option<String>,
     ) -> Result<String, String> {
-        let mut args = vec!["logs".to_string()];
-
-        if let Some(id) = id {
-            args.push(id);
-        }
-
-        if latest.unwrap_or(false) {
-            args.push("--latest".to_string());
-        }
-
-        if raw.unwrap_or(false) {
-            args.push("--raw".to_string());
-        }
-
-        if offline.unwrap_or(false) {
-            args.push("--offline".to_string());
-        }
-
-        if debug.unwrap_or(false) {
-            args.push("--debug".to_string());
-        }
-
-        if let Some(working_directory) = working_directory {
-            args.push("--working-directory".to_string());
-            args.push(working_directory);
-        }
-
-        if let Some(name) = name {
-            args.push("--name".to_string());
-            args.push(name);
-        }
-
-        execute_command("shuttle", args, &cwd).await
+        logs(
+            cwd,
+            LogsParams {
+                id,
+                latest,
+                raw,
+                name,
+                offline,
+                debug,
+                working_directory,
+            },
+        )
+        .await
     }
 
     #[tool(description = "Create a project on Shuttle")]
@@ -389,27 +295,16 @@ impl ShuttleMcpServer {
         #[schemars(description = "Specify the working directory")]
         working_directory: Option<String>,
     ) -> Result<String, String> {
-        let mut args = vec!["project".to_string(), "create".to_string()];
-
-        if offline.unwrap_or(false) {
-            args.push("--offline".to_string());
-        }
-
-        if debug.unwrap_or(false) {
-            args.push("--debug".to_string());
-        }
-
-        if let Some(working_directory) = working_directory {
-            args.push("--working-directory".to_string());
-            args.push(working_directory);
-        }
-
-        if let Some(name) = name {
-            args.push("--name".to_string());
-            args.push(name);
-        }
-
-        execute_command("shuttle", args, &cwd).await
+        project_create(
+            cwd,
+            ProjectCreateParams {
+                name,
+                offline,
+                debug,
+                working_directory,
+            },
+        )
+        .await
     }
 
     #[tool(description = "Update project config - rename the project")]
@@ -434,32 +329,17 @@ impl ShuttleMcpServer {
         #[schemars(description = "Specify the working directory")]
         working_directory: Option<String>,
     ) -> Result<String, String> {
-        let mut args = vec![
-            "project".to_string(),
-            "update".to_string(),
-            "name".to_string(),
-            new_name,
-        ];
-
-        if offline.unwrap_or(false) {
-            args.push("--offline".to_string());
-        }
-
-        if debug.unwrap_or(false) {
-            args.push("--debug".to_string());
-        }
-
-        if let Some(working_directory) = working_directory {
-            args.push("--working-directory".to_string());
-            args.push(working_directory);
-        }
-
-        if let Some(name) = name {
-            args.push("--name".to_string());
-            args.push(name);
-        }
-
-        execute_command("shuttle", args, &cwd).await
+        project_update_name(
+            cwd,
+            ProjectUpdateNameParams {
+                new_name,
+                name,
+                offline,
+                debug,
+                working_directory,
+            },
+        )
+        .await
     }
 
     #[tool(description = "Get the status of this project on Shuttle")]
@@ -481,27 +361,16 @@ impl ShuttleMcpServer {
         #[schemars(description = "Specify the working directory")]
         working_directory: Option<String>,
     ) -> Result<String, String> {
-        let mut args = vec!["project".to_string(), "status".to_string()];
-
-        if offline.unwrap_or(false) {
-            args.push("--offline".to_string());
-        }
-
-        if debug.unwrap_or(false) {
-            args.push("--debug".to_string());
-        }
-
-        if let Some(working_directory) = working_directory {
-            args.push("--working-directory".to_string());
-            args.push(working_directory);
-        }
-
-        if let Some(name) = name {
-            args.push("--name".to_string());
-            args.push(name);
-        }
-
-        execute_command("shuttle", args, &cwd).await
+        project_status(
+            cwd,
+            ProjectStatusParams {
+                name,
+                offline,
+                debug,
+                working_directory,
+            },
+        )
+        .await
     }
 
     #[tool(description = "List all projects you have access to")]
@@ -526,31 +395,17 @@ impl ShuttleMcpServer {
         #[schemars(description = "Specify the working directory")]
         working_directory: Option<String>,
     ) -> Result<String, String> {
-        let mut args = vec!["project".to_string(), "list".to_string()];
-
-        if raw.unwrap_or(false) {
-            args.push("--raw".to_string());
-        }
-
-        if offline.unwrap_or(false) {
-            args.push("--offline".to_string());
-        }
-
-        if debug.unwrap_or(false) {
-            args.push("--debug".to_string());
-        }
-
-        if let Some(working_directory) = working_directory {
-            args.push("--working-directory".to_string());
-            args.push(working_directory);
-        }
-
-        if let Some(name) = name {
-            args.push("--name".to_string());
-            args.push(name);
-        }
-
-        execute_command("shuttle", args, &cwd).await
+        project_list(
+            cwd,
+            ProjectListParams {
+                raw,
+                name,
+                offline,
+                debug,
+                working_directory,
+            },
+        )
+        .await
     }
 
     #[tool(description = "Delete a project and all linked data")]
@@ -575,31 +430,17 @@ impl ShuttleMcpServer {
         #[schemars(description = "Specify the working directory")]
         working_directory: Option<String>,
     ) -> Result<String, String> {
-        let mut args = vec!["project".to_string(), "delete".to_string()];
-
-        if yes.unwrap_or(false) {
-            args.push("--yes".to_string());
-        }
-
-        if offline.unwrap_or(false) {
-            args.push("--offline".to_string());
-        }
-
-        if debug.unwrap_or(false) {
-            args.push("--debug".to_string());
-        }
-
-        if let Some(working_directory) = working_directory {
-            args.push("--working-directory".to_string());
-            args.push(working_directory);
-        }
-
-        if let Some(name) = name {
-            args.push("--name".to_string());
-            args.push(name);
-        }
-
-        execute_command("shuttle", args, &cwd).await
+        project_delete(
+            cwd,
+            ProjectDeleteParams {
+                yes,
+                name,
+                offline,
+                debug,
+                working_directory,
+            },
+        )
+        .await
     }
 
     #[tool(description = "Link this workspace to a Shuttle project")]
@@ -621,30 +462,18 @@ impl ShuttleMcpServer {
         #[schemars(description = "Specify the working directory")]
         working_directory: Option<String>,
     ) -> Result<String, String> {
-        let mut args = vec!["project".to_string(), "link".to_string()];
-
-        if offline.unwrap_or(false) {
-            args.push("--offline".to_string());
-        }
-
-        if debug.unwrap_or(false) {
-            args.push("--debug".to_string());
-        }
-
-        if let Some(working_directory) = working_directory {
-            args.push("--working-directory".to_string());
-            args.push(working_directory);
-        }
-
-        if let Some(name) = name {
-            args.push("--name".to_string());
-            args.push(name);
-        }
-
-        execute_command("shuttle", args, &cwd).await
+        project_link(
+            cwd,
+            ProjectLinkParams {
+                name,
+                offline,
+                debug,
+                working_directory,
+            },
+        )
+        .await
     }
 
-    // Resource Management Commands
     #[tool(description = "List project resources")]
     async fn resource_list(
         &self,
@@ -670,35 +499,18 @@ impl ShuttleMcpServer {
         #[schemars(description = "Specify the working directory")]
         working_directory: Option<String>,
     ) -> Result<String, String> {
-        let mut args = vec!["resource".to_string(), "list".to_string()];
-
-        if show_secrets.unwrap_or(false) {
-            args.push("--show-secrets".to_string());
-        }
-
-        if raw.unwrap_or(false) {
-            args.push("--raw".to_string());
-        }
-
-        if offline.unwrap_or(false) {
-            args.push("--offline".to_string());
-        }
-
-        if debug.unwrap_or(false) {
-            args.push("--debug".to_string());
-        }
-
-        if let Some(working_directory) = working_directory {
-            args.push("--working-directory".to_string());
-            args.push(working_directory);
-        }
-
-        if let Some(name) = name {
-            args.push("--name".to_string());
-            args.push(name);
-        }
-
-        execute_command("shuttle", args, &cwd).await
+        resource_list(
+            cwd,
+            ResourceListParams {
+                show_secrets,
+                raw,
+                name,
+                offline,
+                debug,
+                working_directory,
+            },
+        )
+        .await
     }
 
     #[tool(description = "Delete a resource")]
@@ -726,36 +538,20 @@ impl ShuttleMcpServer {
         #[schemars(description = "Specify the working directory")]
         working_directory: Option<String>,
     ) -> Result<String, String> {
-        let mut args = vec!["resource".to_string(), "delete".to_string()];
-
-        args.push(resource_type);
-
-        if yes.unwrap_or(false) {
-            args.push("--yes".to_string());
-        }
-
-        if offline.unwrap_or(false) {
-            args.push("--offline".to_string());
-        }
-
-        if debug.unwrap_or(false) {
-            args.push("--debug".to_string());
-        }
-
-        if let Some(working_directory) = working_directory {
-            args.push("--working-directory".to_string());
-            args.push(working_directory);
-        }
-
-        if let Some(name) = name {
-            args.push("--name".to_string());
-            args.push(name);
-        }
-
-        execute_command("shuttle", args, &cwd).await
+        resource_delete(
+            cwd,
+            ResourceDeleteParams {
+                resource_type,
+                yes,
+                name,
+                offline,
+                debug,
+                working_directory,
+            },
+        )
+        .await
     }
 
-    // SSL Certificate Management Commands
     #[tool(description = "Add SSL certificate for custom domain")]
     async fn certificate_add(
         &self,
@@ -778,29 +574,17 @@ impl ShuttleMcpServer {
         #[schemars(description = "Specify the working directory")]
         working_directory: Option<String>,
     ) -> Result<String, String> {
-        let mut args = vec!["certificate".to_string(), "add".to_string()];
-
-        args.push(domain);
-
-        if offline.unwrap_or(false) {
-            args.push("--offline".to_string());
-        }
-
-        if debug.unwrap_or(false) {
-            args.push("--debug".to_string());
-        }
-
-        if let Some(working_directory) = working_directory {
-            args.push("--working-directory".to_string());
-            args.push(working_directory);
-        }
-
-        if let Some(name) = name {
-            args.push("--name".to_string());
-            args.push(name);
-        }
-
-        execute_command("shuttle", args, &cwd).await
+        certificate_add(
+            cwd,
+            CertificateAddParams {
+                domain,
+                name,
+                offline,
+                debug,
+                working_directory,
+            },
+        )
+        .await
     }
 
     #[tool(description = "List project certificates")]
@@ -825,31 +609,17 @@ impl ShuttleMcpServer {
         #[schemars(description = "Specify the working directory")]
         working_directory: Option<String>,
     ) -> Result<String, String> {
-        let mut args = vec!["certificate".to_string(), "list".to_string()];
-
-        if raw.unwrap_or(false) {
-            args.push("--raw".to_string());
-        }
-
-        if offline.unwrap_or(false) {
-            args.push("--offline".to_string());
-        }
-
-        if debug.unwrap_or(false) {
-            args.push("--debug".to_string());
-        }
-
-        if let Some(working_directory) = working_directory {
-            args.push("--working-directory".to_string());
-            args.push(working_directory);
-        }
-
-        if let Some(name) = name {
-            args.push("--name".to_string());
-            args.push(name);
-        }
-
-        execute_command("shuttle", args, &cwd).await
+        certificate_list(
+            cwd,
+            CertificateListParams {
+                raw,
+                name,
+                offline,
+                debug,
+                working_directory,
+            },
+        )
+        .await
     }
 
     #[tool(description = "Delete SSL certificate")]
@@ -877,36 +647,20 @@ impl ShuttleMcpServer {
         #[schemars(description = "Specify the working directory")]
         working_directory: Option<String>,
     ) -> Result<String, String> {
-        let mut args = vec!["certificate".to_string(), "delete".to_string()];
-
-        args.push(domain);
-
-        if yes.unwrap_or(false) {
-            args.push("--yes".to_string());
-        }
-
-        if offline.unwrap_or(false) {
-            args.push("--offline".to_string());
-        }
-
-        if debug.unwrap_or(false) {
-            args.push("--debug".to_string());
-        }
-
-        if let Some(working_directory) = working_directory {
-            args.push("--working-directory".to_string());
-            args.push(working_directory);
-        }
-
-        if let Some(name) = name {
-            args.push("--name".to_string());
-            args.push(name);
-        }
-
-        execute_command("shuttle", args, &cwd).await
+        certificate_delete(
+            cwd,
+            CertificateDeleteParams {
+                domain,
+                yes,
+                name,
+                offline,
+                debug,
+                working_directory,
+            },
+        )
+        .await
     }
 
-    // Account Management Commands
     #[tool(description = "Show account info")]
     async fn account(
         &self,
@@ -926,30 +680,18 @@ impl ShuttleMcpServer {
         #[schemars(description = "Specify the working directory")]
         working_directory: Option<String>,
     ) -> Result<String, String> {
-        let mut args = vec!["account".to_string()];
-
-        if offline.unwrap_or(false) {
-            args.push("--offline".to_string());
-        }
-
-        if debug.unwrap_or(false) {
-            args.push("--debug".to_string());
-        }
-
-        if let Some(working_directory) = working_directory {
-            args.push("--working-directory".to_string());
-            args.push(working_directory);
-        }
-
-        if let Some(name) = name {
-            args.push("--name".to_string());
-            args.push(name);
-        }
-
-        execute_command("shuttle", args, &cwd).await
+        account(
+            cwd,
+            AccountParams {
+                name,
+                offline,
+                debug,
+                working_directory,
+            },
+        )
+        .await
     }
 
-    // Utility Commands
     #[tool(description = "Generate shell completions")]
     async fn generate_shell(
         &self,
@@ -975,34 +717,18 @@ impl ShuttleMcpServer {
         #[schemars(description = "Specify the working directory")]
         working_directory: Option<String>,
     ) -> Result<String, String> {
-        let mut args = vec!["generate".to_string(), "shell".to_string()];
-
-        args.push(shell);
-
-        if let Some(output) = output {
-            args.push("--output".to_string());
-            args.push(output);
-        }
-
-        if offline.unwrap_or(false) {
-            args.push("--offline".to_string());
-        }
-
-        if debug.unwrap_or(false) {
-            args.push("--debug".to_string());
-        }
-
-        if let Some(working_directory) = working_directory {
-            args.push("--working-directory".to_string());
-            args.push(working_directory);
-        }
-
-        if let Some(name) = name {
-            args.push("--name".to_string());
-            args.push(name);
-        }
-
-        execute_command("shuttle", args, &cwd).await
+        generate_shell(
+            cwd,
+            GenerateShellParams {
+                shell,
+                output,
+                name,
+                offline,
+                debug,
+                working_directory,
+            },
+        )
+        .await
     }
 
     #[tool(description = "Generate man page")]
@@ -1024,27 +750,16 @@ impl ShuttleMcpServer {
         #[schemars(description = "Specify the working directory")]
         working_directory: Option<String>,
     ) -> Result<String, String> {
-        let mut args = vec!["generate".to_string(), "manpage".to_string()];
-
-        if offline.unwrap_or(false) {
-            args.push("--offline".to_string());
-        }
-
-        if debug.unwrap_or(false) {
-            args.push("--debug".to_string());
-        }
-
-        if let Some(working_directory) = working_directory {
-            args.push("--working-directory".to_string());
-            args.push(working_directory);
-        }
-
-        if let Some(name) = name {
-            args.push("--name".to_string());
-            args.push(name);
-        }
-
-        execute_command("shuttle", args, &cwd).await
+        generate_manpage(
+            cwd,
+            GenerateManpageParams {
+                name,
+                offline,
+                debug,
+                working_directory,
+            },
+        )
+        .await
     }
 
     #[tool(description = "Open GitHub issue for feedback")]
@@ -1066,27 +781,16 @@ impl ShuttleMcpServer {
         #[schemars(description = "Specify the working directory")]
         working_directory: Option<String>,
     ) -> Result<String, String> {
-        let mut args = vec!["feedback".to_string()];
-
-        if offline.unwrap_or(false) {
-            args.push("--offline".to_string());
-        }
-
-        if debug.unwrap_or(false) {
-            args.push("--debug".to_string());
-        }
-
-        if let Some(working_directory) = working_directory {
-            args.push("--working-directory".to_string());
-            args.push(working_directory);
-        }
-
-        if let Some(name) = name {
-            args.push("--name".to_string());
-            args.push(name);
-        }
-
-        execute_command("shuttle", args, &cwd).await
+        feedback(
+            cwd,
+            FeedbackParams {
+                name,
+                offline,
+                debug,
+                working_directory,
+            },
+        )
+        .await
     }
 
     #[tool(description = "Upgrade CLI binary")]
@@ -1111,32 +815,19 @@ impl ShuttleMcpServer {
         #[schemars(description = "Specify the working directory")]
         working_directory: Option<String>,
     ) -> Result<String, String> {
-        let mut args = vec!["upgrade".to_string()];
-
-        if preview.unwrap_or(false) {
-            args.push("--preview".to_string());
-        }
-
-        if offline.unwrap_or(false) {
-            args.push("--offline".to_string());
-        }
-
-        if debug.unwrap_or(false) {
-            args.push("--debug".to_string());
-        }
-
-        if let Some(working_directory) = working_directory {
-            args.push("--working-directory".to_string());
-            args.push(working_directory);
-        }
-
-        if let Some(name) = name {
-            args.push("--name".to_string());
-            args.push(name);
-        }
-
-        execute_command("shuttle", args, &cwd).await
+        upgrade(
+            cwd,
+            UpgradeParams {
+                preview,
+                name,
+                offline,
+                debug,
+                working_directory,
+            },
+        )
+        .await
     }
+
     #[tool(description = "Search Shuttle documentation")]
     async fn search_docs(
         &self,
@@ -1144,26 +835,7 @@ impl ShuttleMcpServer {
         #[schemars(description = "Search query for documentation")]
         query: String,
     ) -> Result<String, String> {
-        let url = format!(
-            "https://shuttle-docs.dcodes.dev/search?q={}",
-            urlencoding::encode(&query)
-        );
-
-        let client = reqwest::Client::new();
-        let response = client
-            .get(&url)
-            .send()
-            .await
-            .map_err(|e| format!("Request failed: {}", e))?;
-
-        if response.status().is_success() {
-            response
-                .text()
-                .await
-                .map_err(|e| format!("Failed to read response: {}", e))
-        } else {
-            Err(format!("Request failed with status: {}", response.status()))
-        }
+        search_docs(query).await
     }
 }
 

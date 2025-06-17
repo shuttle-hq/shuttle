@@ -64,24 +64,33 @@ pub async fn run(args: Args) {
             team_user_id,
             user_id,
         } => {
-            client
+            let res = client
                 .add_team_member(&team_user_id, user_id)
                 .await
                 .unwrap();
-            println!("added");
+            println!("{res}");
         }
         Command::RenewCerts => {
             let certs = client.get_old_certificates().await.unwrap();
             eprintln!("Starting renewals of {} certs in 5 seconds...", certs.len());
             tokio::time::sleep(tokio::time::Duration::from_millis(5000)).await;
+            let mut any_error = false;
             for (cert_id, subject, acm) in certs {
                 println!(
-                    "--> {cert_id} {subject} {}",
+                    "{cert_id} {subject} {}",
                     if acm.is_some() { "(ACM)" } else { "" }
                 );
-                println!("{:?}", client.renew_certificate(&cert_id).await);
+                println!(
+                    "  {:?}",
+                    client.renew_certificate(&cert_id).await.inspect_err(|_| {
+                        any_error = true;
+                    })
+                );
                 // prevent api rate limiting
                 tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
+            }
+            if any_error {
+                panic!("Error in loop occured");
             }
         }
         Command::UpdateProjectConfig { project_id, json } => {
@@ -120,13 +129,14 @@ pub async fn run(args: Args) {
             client.feature_flag(&entity, &flag, false).await.unwrap();
             println!("Removed flag {flag} for {entity}");
         }
-        Command::Gc {
+        Command::GcCommunity {
             days,
             stop_deployments,
+            send_emails,
             limit,
         } => {
             let project_ids = client.gc_free_tier(days).await.unwrap();
-            gc(client, project_ids, stop_deployments, limit).await;
+            gc(client, project_ids, stop_deployments, send_emails, limit).await;
         }
         Command::GcShuttlings {
             minutes,
@@ -134,7 +144,7 @@ pub async fn run(args: Args) {
             limit,
         } => {
             let project_ids = client.gc_shuttlings(minutes).await.unwrap();
-            gc(client, project_ids, stop_deployments, limit).await;
+            gc(client, project_ids, stop_deployments, false, limit).await;
         }
         Command::DeleteUser { user_id } => {
             eprintln!("Deleting user {} in 3 seconds...", user_id);
@@ -157,27 +167,51 @@ pub async fn run(args: Args) {
                 users.len()
             );
             tokio::time::sleep(tokio::time::Duration::from_millis(5000)).await;
+            let mut any_error = false;
             for user_id in users {
                 println!("{user_id}");
-                println!("  {:?}", client.downgrade_protrial(&user_id).await);
+                println!(
+                    "  {:?}",
+                    client.downgrade_protrial(&user_id).await.inspect_err(|_| {
+                        any_error = true;
+                    })
+                );
                 // prevent api rate limiting
                 tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
+            }
+            if any_error {
+                panic!("Error in loop occured");
             }
         }
         Command::FixRetentionPolicies => {
             let projects = client.get_projects_for_retention_policy().await.unwrap();
             eprintln!("Starting fix of {} log retention policies", projects.len());
+            let mut any_error = false;
             for pid in projects {
                 println!("{pid}");
-                println!("  {:?}", client.fix_retention_policy(&pid).await);
+                println!(
+                    "  {:?}",
+                    client.fix_retention_policy(&pid).await.inspect_err(|_| {
+                        any_error = true;
+                    })
+                );
                 // prevent api rate limiting
                 tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
+            }
+            if any_error {
+                panic!("Error in loop occured");
             }
         }
     };
 }
 
-async fn gc(client: Client, mut project_ids: Vec<String>, stop_deployments: bool, limit: u32) {
+async fn gc(
+    client: Client,
+    mut project_ids: Vec<String>,
+    stop_deployments: bool,
+    send_email: bool,
+    limit: u32,
+) {
     if !stop_deployments {
         for pid in &project_ids {
             println!("{pid}");
@@ -192,9 +226,24 @@ async fn gc(client: Client, mut project_ids: Vec<String>, stop_deployments: bool
         project_ids.len()
     );
     tokio::time::sleep(tokio::time::Duration::from_millis(5000)).await;
+    let mut any_error = false;
     for pid in project_ids {
-        println!("{}", client.inner.stop_service(&pid).await.unwrap());
+        println!("{pid}");
+        let call = if send_email {
+            client.stop_gc_inactive_project(&pid).await
+        } else {
+            client.inner.stop_service(&pid).await
+        };
+        println!(
+            "  {:?}",
+            call.inspect_err(|_| {
+                any_error = true;
+            })
+        );
         // prevent api rate limiting
         tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
+    }
+    if any_error {
+        panic!("Error in loop occured");
     }
 }

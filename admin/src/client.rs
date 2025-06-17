@@ -136,6 +136,11 @@ impl Client {
         self.inner.get_json(&path).await
     }
 
+    pub async fn stop_gc_inactive_project(&self, project_id: &str) -> Result<String> {
+        let path = format!("/admin/gc/stop-inactive-project/{project_id}");
+        self.inner.put_json(&path, Option::<()>::None).await
+    }
+
     pub async fn get_user(&self, user_id: &str) -> Result<UserResponse> {
         self.inner.get_json(format!("/admin/users/{user_id}")).await
     }

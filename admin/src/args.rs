@@ -79,13 +79,16 @@ pub enum Command {
         flag: String,
     },
 
-    /// Garbage collect free tier projects
-    Gc {
+    /// Garbage collect Community tier projects
+    GcCommunity {
         /// days since last deployment to filter by
         days: u32,
         /// loop and stop the returned projects instead of printing them
         #[arg(long)]
         stop_deployments: bool,
+        /// send emails to owners of projects
+        #[arg(long)]
+        send_emails: bool,
         /// limit how many projects to stop
         #[arg(long, default_value_t = 100)]
         limit: u32,

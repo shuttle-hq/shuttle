@@ -64,11 +64,11 @@ pub async fn run(args: Args) {
             team_user_id,
             user_id,
         } => {
-            client
+            let res = client
                 .add_team_member(&team_user_id, user_id)
                 .await
                 .unwrap();
-            println!("added");
+            println!("{res}");
         }
         Command::RenewCerts => {
             let certs = client.get_old_certificates().await.unwrap();
@@ -229,24 +229,17 @@ async fn gc(
     let mut any_error = false;
     for pid in project_ids {
         println!("{pid}");
-        if send_email {
-            println!(
-                "  {:?}",
-                client
-                    .stop_gc_inactive_project(&pid)
-                    .await
-                    .inspect_err(|_| {
-                        any_error = true;
-                    })
-            );
+        let call = if send_email {
+            client.stop_gc_inactive_project(&pid).await
         } else {
-            println!(
-                "  {:?}",
-                client.inner.stop_service(&pid).await.inspect_err(|_| {
-                    any_error = true;
-                })
-            );
-        }
+            client.inner.stop_service(&pid).await
+        };
+        println!(
+            "  {:?}",
+            call.inspect_err(|_| {
+                any_error = true;
+            })
+        );
         // prevent api rate limiting
         tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
     }

@@ -65,12 +65,6 @@ impl ProjectResponse {
         // Display compute tier information if configured
         if let Some(compute_tier) = &self.compute_tier {
             writeln!(&mut s, "  Instance size: {}", compute_tier).unwrap_or_default();
-            writeln!(
-                &mut s,
-                "  Configured via `#[shuttle_runtime::main(instance_size = {})]`",
-                serde_json::to_string(compute_tier).unwrap()
-            )
-            .unwrap_or_default();
         }
 
         s

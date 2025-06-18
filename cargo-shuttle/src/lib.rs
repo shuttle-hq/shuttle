@@ -1514,7 +1514,7 @@ impl Shuttle {
         // Look for a build manifest file at .shuttle/build_manifest.json which specifies resources
         // that need to be provisioned for the application
         let default_manifest = Path::new(".shuttle").join("build_manifest.json");
-        if std::fs::exists(&default_manifest).is_ok() {
+        if std::fs::exists(Path::new(env!("CARGO_MANIFEST_DIR")).join(&default_manifest)).is_ok() {
             rust_build_args.provision_manifest =
                 default_manifest.into_os_string().into_string().ok();
         }

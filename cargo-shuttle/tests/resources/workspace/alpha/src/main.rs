@@ -1,4 +1,4 @@
-use axum::{routing::get, Router};
+use shuttle_axum::axum::{routing::get, Router};
 
 async fn hello_world() -> &'static str {
     shared::hello()

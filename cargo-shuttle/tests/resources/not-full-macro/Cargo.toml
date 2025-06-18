@@ -1,5 +1,5 @@
 [package]
-name = "is-bin"
+name = "not-full-macro"
 version = "0.1.0"
 edition = "2021"
 

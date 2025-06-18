@@ -57,7 +57,8 @@ pub async fn run(args: Args) {
             let res = client
                 .update_project_owner(&project_id, new_user_id)
                 .await
-                .unwrap();
+                .unwrap()
+                .into_inner();
             println!("{res:?}");
         }
         Command::AddUserToTeam {
@@ -67,11 +68,12 @@ pub async fn run(args: Args) {
             let res = client
                 .add_team_member(&team_user_id, user_id)
                 .await
-                .unwrap();
+                .unwrap()
+                .into_inner();
             println!("{res}");
         }
         Command::RenewCerts => {
-            let certs = client.get_old_certificates().await.unwrap();
+            let certs = client.get_old_certificates().await.unwrap().into_inner();
             eprintln!("Starting renewals of {} certs in 5 seconds...", certs.len());
             tokio::time::sleep(tokio::time::Duration::from_millis(5000)).await;
             let mut any_error = false;
@@ -135,7 +137,7 @@ pub async fn run(args: Args) {
             send_emails,
             limit,
         } => {
-            let project_ids = client.gc_free_tier(days).await.unwrap();
+            let project_ids = client.gc_free_tier(days).await.unwrap().into_inner();
             gc(client, project_ids, stop_deployments, send_emails, limit).await;
         }
         Command::GcShuttlings {
@@ -143,7 +145,7 @@ pub async fn run(args: Args) {
             stop_deployments,
             limit,
         } => {
-            let project_ids = client.gc_shuttlings(minutes).await.unwrap();
+            let project_ids = client.gc_shuttlings(minutes).await.unwrap().into_inner();
             gc(client, project_ids, stop_deployments, false, limit).await;
         }
         Command::DeleteUser { user_id } => {
@@ -157,11 +159,15 @@ pub async fn run(args: Args) {
             println!("Set {user_id} to {tier}");
         }
         Command::Everything { query } => {
-            let v = client.get_user_everything(&query).await.unwrap();
+            let v = client
+                .get_user_everything(&query)
+                .await
+                .unwrap()
+                .into_inner();
             println!("{}", serde_json::to_string_pretty(&v).unwrap());
         }
         Command::DowngradeProTrials => {
-            let users = client.get_expired_protrials().await.unwrap();
+            let users = client.get_expired_protrials().await.unwrap().into_inner();
             eprintln!(
                 "Starting downgrade of {} users in 5 seconds...",
                 users.len()
@@ -172,9 +178,13 @@ pub async fn run(args: Args) {
                 println!("{user_id}");
                 println!(
                     "  {:?}",
-                    client.downgrade_protrial(&user_id).await.inspect_err(|_| {
-                        any_error = true;
-                    })
+                    client
+                        .downgrade_protrial(&user_id)
+                        .await
+                        .map(|r| r.into_inner())
+                        .inspect_err(|_| {
+                            any_error = true;
+                        })
                 );
                 // prevent api rate limiting
                 tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
@@ -184,16 +194,24 @@ pub async fn run(args: Args) {
             }
         }
         Command::FixRetentionPolicies => {
-            let projects = client.get_projects_for_retention_policy().await.unwrap();
+            let projects = client
+                .get_projects_for_retention_policy()
+                .await
+                .unwrap()
+                .into_inner();
             eprintln!("Starting fix of {} log retention policies", projects.len());
             let mut any_error = false;
             for pid in projects {
                 println!("{pid}");
                 println!(
                     "  {:?}",
-                    client.fix_retention_policy(&pid).await.inspect_err(|_| {
-                        any_error = true;
-                    })
+                    client
+                        .fix_retention_policy(&pid)
+                        .await
+                        .map(|r| r.into_inner())
+                        .inspect_err(|_| {
+                            any_error = true;
+                        })
                 );
                 // prevent api rate limiting
                 tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
@@ -230,9 +248,16 @@ async fn gc(
     for pid in project_ids {
         println!("{pid}");
         let call = if send_email {
-            client.stop_gc_inactive_project(&pid).await
+            client
+                .stop_gc_inactive_project(&pid)
+                .await
+                .map(|r| r.into_inner())
         } else {
-            client.inner.stop_service(&pid).await
+            client
+                .inner
+                .stop_service(&pid)
+                .await
+                .map(|r| r.into_inner())
         };
         println!(
             "  {:?}",

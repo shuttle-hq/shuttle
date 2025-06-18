@@ -11,14 +11,14 @@ use crate::init::create_or_update_ignore_file;
 
 /// An impl of [`ConfigManager`] which is localised to a working directory
 pub struct LocalConfigManager {
-    working_directory: PathBuf,
+    directory: PathBuf,
     file_name: String,
 }
 
 impl LocalConfigManager {
-    pub fn new<P: AsRef<Path>>(working_directory: P, file_name: String) -> Self {
+    pub fn new<P: AsRef<Path>>(directory: P, file_name: String) -> Self {
         Self {
-            working_directory: working_directory.as_ref().to_path_buf(),
+            directory: directory.as_ref().to_path_buf(),
             file_name,
         }
     }
@@ -26,7 +26,7 @@ impl LocalConfigManager {
 
 impl ConfigManager for LocalConfigManager {
     fn directory(&self) -> PathBuf {
-        self.working_directory.clone()
+        self.directory.clone()
     }
 
     fn filename(&self) -> PathBuf {
@@ -159,7 +159,7 @@ impl RequestContext {
                 .as_ref()
                 .unwrap()
                 .manager
-                .working_directory
+                .directory
                 .join(".gitignore"),
         )
         .context("Failed to create .gitignore file")?;
@@ -260,17 +260,12 @@ impl RequestContext {
         }
     }
 
-    /// Get the current context working directory
+    /// Get the cargo workspace root directory
     ///
     /// # Panics
     /// Panics if project configuration has not been loaded.
-    pub fn working_directory(&self) -> &Path {
-        self.project
-            .as_ref()
-            .unwrap()
-            .manager
-            .working_directory
-            .as_path()
+    pub fn project_directory(&self) -> &Path {
+        self.project.as_ref().unwrap().manager.directory.as_path()
     }
 
     /// Set the API key to the global configuration. Will persist the file.

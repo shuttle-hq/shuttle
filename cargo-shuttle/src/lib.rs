@@ -1305,15 +1305,15 @@ impl Shuttle {
             }
         });
 
-        let working_directory = self.ctx.working_directory();
+        let project_directory = self.ctx.project_directory();
 
         println!(
             "{} {}",
             "    Building".bold().green(),
-            working_directory.display()
+            project_directory.display()
         );
 
-        build_workspace(working_directory, run_args.release, tx).await
+        build_workspace(project_directory, run_args.release, tx).await
     }
 
     fn find_available_port(run_args: &mut RunArgs) {
@@ -1336,7 +1336,7 @@ impl Shuttle {
 
     async fn local_run(&self, mut run_args: RunArgs, debug: bool) -> Result<()> {
         let project_name = self.ctx.project_name().to_owned();
-        let working_directory = self.ctx.working_directory();
+        let project_directory = self.ctx.project_directory();
 
         // Handle bacon mode
         if run_args.bacon {
@@ -1345,13 +1345,13 @@ impl Shuttle {
                 "Starting".bold().green(),
                 project_name
             );
-            return bacon::run_bacon(working_directory).await;
+            return bacon::run_bacon(project_directory).await;
         }
 
         let service = self.pre_local_run(&run_args).await?;
         trace!(path = ?service.executable_path, "runtime executable");
 
-        let secrets = Shuttle::get_secrets(&run_args.secret_args, working_directory, true)?
+        let secrets = Shuttle::get_secrets(&run_args.secret_args, project_directory, true)?
             .unwrap_or_default();
         Shuttle::find_available_port(&mut run_args);
         if let Some(warning) = check_and_warn_runtime_version(&service.executable_path).await? {
@@ -1544,10 +1544,10 @@ impl Shuttle {
 
     async fn deploy(&mut self, args: DeployArgs) -> Result<()> {
         let client = self.client.as_ref().unwrap();
-        let working_directory = self.ctx.working_directory();
-        let manifest_path = working_directory.join("Cargo.toml");
+        let project_directory = self.ctx.project_directory();
+        let manifest_path = project_directory.join("Cargo.toml");
 
-        let secrets = Shuttle::get_secrets(&args.secret_args, working_directory, false)?;
+        let secrets = Shuttle::get_secrets(&args.secret_args, project_directory, false)?;
 
         // Image deployment mode
         if let Some(image) = args.image {
@@ -1606,7 +1606,7 @@ impl Shuttle {
         // Look for a build manifest file at .shuttle/build_manifest.json which specifies resources
         // that need to be provisioned for the application
         let default_manifest = Path::new(".shuttle").join("build_manifest.json");
-        if std::fs::exists(working_directory.join(&default_manifest)).is_ok() {
+        if std::fs::exists(project_directory.join(&default_manifest)).is_ok() {
             rust_build_args.provision_manifest =
                 default_manifest.into_os_string().into_string().ok();
         }
@@ -1628,7 +1628,7 @@ impl Shuttle {
 
         // TODO: have all of the above be configurable in CLI and Shuttle.toml
 
-        if let Ok(repo) = Repository::discover(working_directory) {
+        if let Ok(repo) = Repository::discover(project_directory) {
             let repo_path = repo
                 .workdir()
                 .context("getting working directory of repository")?;
@@ -1902,7 +1902,7 @@ impl Shuttle {
     fn make_archive(&self, secrets_file: Option<PathBuf>) -> Result<Vec<u8>> {
         let include_patterns = self.ctx.include();
 
-        let working_directory = self.ctx.working_directory();
+        let project_directory = self.ctx.project_directory();
 
         //
         // Mixing include and exclude overrides messes up the .ignore and .gitignore etc,
@@ -1911,7 +1911,7 @@ impl Shuttle {
         let mut entries = Vec::new();
 
         // Default excludes
-        let ignore_overrides = OverrideBuilder::new(working_directory)
+        let ignore_overrides = OverrideBuilder::new(project_directory)
             .add("!.git/")
             .context("adding override `!.git/`")?
             .add("!target/")
@@ -1920,7 +1920,7 @@ impl Shuttle {
             .context(format!("adding override `!{STORAGE_DIRNAME}/`"))?
             .build()
             .context("building archive override rules")?;
-        for r in WalkBuilder::new(working_directory)
+        for r in WalkBuilder::new(project_directory)
             .hidden(false)
             .overrides(ignore_overrides)
             .build()
@@ -1946,10 +1946,10 @@ impl Shuttle {
 
         // Find the files
         let globs = globs.build().context("glob glob")?;
-        for entry in walkdir::WalkDir::new(working_directory) {
+        for entry in walkdir::WalkDir::new(project_directory) {
             let path = entry.context("list dir")?.into_path();
             if globs.is_match(
-                path.strip_prefix(working_directory)
+                path.strip_prefix(project_directory)
                     .context("strip prefix of path")?,
             ) {
                 entries.push(path);
@@ -1971,7 +1971,7 @@ impl Shuttle {
 
             // zip file puts all files in root
             let mut name = path
-                .strip_prefix(working_directory)
+                .strip_prefix(project_directory)
                 .context("strip prefix of path")?
                 .to_owned();
 

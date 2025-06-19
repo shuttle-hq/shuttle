@@ -53,6 +53,11 @@ export interface BuildArgsRust {
 	no_default_features: boolean;
 	/** Use the mold linker */
 	mold: boolean;
+	/**
+	 * Path to the provision manifest file that defines the resources to be provisioned
+	 * for the application.
+	 */
+	provision_manifest?: string;
 }
 
 export interface BuildMeta {

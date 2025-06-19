@@ -3814,6 +3814,7 @@ dependencies = [
  "quote",
  "serde",
  "serde_json",
+ "shuttle-common",
  "syn",
  "tokio",
  "trybuild",

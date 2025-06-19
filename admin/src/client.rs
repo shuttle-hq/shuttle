@@ -54,14 +54,14 @@ impl Client {
 
     pub async fn get_project_config(&self, project_id: &str) -> Result<ParsedJson<Value>> {
         self.inner
-            .get_json(format!("/admin/projects/{project_id}/config"))
+            .get_json(format!("/admin/projects/{project_id}/raw-data"))
             .await
     }
 
     pub async fn upgrade_project_to_lb(&self, project_id: &str) -> Result<ParsedJson<Value>> {
         self.inner
             .put_json(
-                format!("/admin/projects/{project_id}/config"),
+                format!("/admin/projects/{project_id}/alb"),
                 Option::<()>::None,
             )
             .await

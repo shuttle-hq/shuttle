@@ -145,8 +145,15 @@ impl Client {
         self.inner.get_json(&path).await
     }
 
-    pub async fn stop_gc_inactive_project(&self, project_id: &str) -> Result<ParsedJson<String>> {
-        let path = format!("/admin/gc/stop-inactive-project/{project_id}");
+    pub async fn stop_gc_inactive_project(
+        &self,
+        project_id: &str,
+        notify: bool,
+    ) -> Result<ParsedJson<String>> {
+        let path = format!(
+            "/admin/gc/stop-inactive-project/{project_id}{}",
+            if notify { "?notify=true" } else { "" }
+        );
         self.inner.put_json(&path, Option::<()>::None).await
     }
 

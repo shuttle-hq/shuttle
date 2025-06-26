@@ -227,11 +227,11 @@ impl Shuttle {
                 )
                 | Command::Logs { .. }
         ) {
-            // Command::Run only uses load_local (below) instead of load_project since it does not target a project in the API
+            // Command::Run only uses load_local_config (below) instead of load_project since it does not target a project in the API
             self.load_project(
                 &args.project_args,
                 matches!(args.cmd, Command::Project(ProjectCommand::Link)),
-                // only deploy should create a project if the provided name is not found in the project list.
+                // only the deploy command should create a project if the provided name is not found in the project list.
                 // (project start should always make the POST call, it's an upsert operation)
                 matches!(args.cmd, Command::Deploy(..)),
             )
@@ -259,7 +259,7 @@ impl Shuttle {
             Command::Logout(logout_args) => self.logout(logout_args).await,
             Command::Feedback => open_gh_issue(),
             Command::Run(run_args) => {
-                self.ctx.load_local(&args.project_args)?;
+                self.ctx.load_local_config(&args.project_args)?;
                 self.local_run(run_args, args.debug).await
             }
             Command::Deploy(deploy_args) => self.deploy(deploy_args).await,
@@ -322,10 +322,11 @@ impl Shuttle {
         let git_template = args.git_template()?;
         let no_git = args.no_git;
 
-        let needs_name = project_args.name_or_id.is_none();
+        let needs_name = project_args.name.is_none();
         let needs_template = git_template.is_none();
         let needs_path = !provided_path_to_init;
         let needs_login = self.ctx.api_key().is_err() && args.login_args.api_key.is_none();
+        let should_link = project_args.id.is_some();
         let interactive = needs_name || needs_template || needs_path || needs_login;
 
         let theme = ColorfulTheme::default();
@@ -343,7 +344,7 @@ impl Shuttle {
         let mut prev_name: Option<String> = None;
         loop {
             // prompt if interactive
-            let name: String = if let Some(name) = project_args.name_or_id.clone() {
+            let name: String = if let Some(name) = project_args.name.clone() {
                 name
             } else {
                 // not using `validate_with` due to being blocking.
@@ -354,7 +355,7 @@ impl Shuttle {
             let force_name = args.force_name
                 || (needs_name && prev_name.as_ref().is_some_and(|prev| prev == &name));
             if force_name {
-                project_args.name_or_id = Some(name);
+                project_args.name = Some(name);
                 break;
             }
             // validate and take action based on result
@@ -381,12 +382,9 @@ impl Shuttle {
 
         // 3. Confirm the project directory
         let path = if needs_path {
-            let path = args.path.join(
-                project_args
-                    .name_or_id
-                    .as_ref()
-                    .expect("name should be set"),
-            );
+            let path = args
+                .path
+                .join(project_args.name.as_ref().expect("name should be set"));
 
             loop {
                 eprintln!("Where should we create this project?");
@@ -552,7 +550,7 @@ impl Shuttle {
         crate::init::generate_project(
             path.clone(),
             project_args
-                .name_or_id
+                .name
                 .as_ref()
                 .expect("to have a project name provided"),
             &template,
@@ -560,14 +558,20 @@ impl Shuttle {
         )?;
         eprintln!();
 
-        // 6. Confirm that the user wants to create the project environment on Shuttle
-        let should_create_project = if !interactive {
-            args.create_env
-        } else if args.create_env {
+        // 6. Confirm that the user wants to create the project on Shuttle
+        let should_create_project = if should_link {
+            // user wants to link project that already exists
+            false
+        } else if !interactive {
+            // non-interactive mode: use value of arg
+            args.create_project
+        } else if args.create_project {
+            // interactive and arg is true
             true
         } else {
+            // interactive and arg was not set, so ask
             let name = project_args
-                .name_or_id
+                .name
                 .as_ref()
                 .expect("to have a project name provided");
 
@@ -581,9 +585,9 @@ impl Shuttle {
             should_create
         };
 
-        if should_create_project {
+        if should_link || should_create_project {
             // Set the project working directory path to the init path,
-            // so `load_project` is ran with the correct project path
+            // so `load_project` is ran with the correct project path when linking
             project_args.working_directory.clone_from(&path);
 
             self.load_project(&project_args, true, true).await?;
@@ -606,7 +610,7 @@ impl Shuttle {
             .map(|r| r.into_inner())
         {
             Ok(true) => {
-                project_args.name_or_id = Some(name);
+                project_args.name = Some(name);
 
                 true
             }
@@ -626,7 +630,7 @@ impl Shuttle {
                 }
                 // Else, the API error was about something else.
                 // Ignore and keep going to not prevent the flow of the init command.
-                project_args.name_or_id = Some(name);
+                project_args.name = Some(name);
                 eprintln!(
                     "{}",
                     "Failed to check if project name is available.".yellow()
@@ -645,49 +649,54 @@ impl Shuttle {
     ) -> Result<()> {
         trace!("project arguments: {project_args:?}");
 
-        self.ctx.load_local(project_args)?;
-
+        self.ctx.load_local_config(project_args)?;
         // load project id from file if exists
-        self.ctx.load_local_internal(project_args)?;
-        if let Some(name) = project_args.name_or_id.as_ref() {
-            // uppercase project id
-            if let Some(suffix) = name.strip_prefix("proj_") {
+        self.ctx.load_local_internal_config(project_args)?;
+
+        if let Some(id) = project_args.id.as_ref() {
+            // ensure ULID part is uppercase
+            if let Some(suffix) = id.strip_prefix("proj_") {
                 // Soft (dumb) validation of ULID format in the id (ULIDs are 26 chars)
                 if suffix.len() == 26 {
                     let proj_id_uppercase = format!("proj_{}", suffix.to_ascii_uppercase());
-                    if *name != proj_id_uppercase {
+                    if *id != proj_id_uppercase {
                         eprintln!("INFO: Converted project id to '{}'", proj_id_uppercase);
                         self.ctx.set_project_id(proj_id_uppercase);
                     }
                 }
             }
+            // if linking, save and return
+            if do_linking {
+                eprintln!("Linking to project {}", self.ctx.project_id());
+                self.ctx.save_local_internal()?;
+                return Ok(());
+            }
+        }
+        if let Some(name) = project_args.name.as_ref() {
             // translate project name to project id if a name was given
-            if !name.starts_with("proj_") {
-                trace!("unprefixed project id found, assuming it's a project name");
-                let client = self.client.as_ref().unwrap();
-                trace!(%name, "looking up project id from project name");
-                if let Some(proj) = client
-                    .get_projects_list()
-                    .await?
-                    .into_inner()
-                    .projects
-                    .into_iter()
-                    .find(|p| p.name == *name)
-                {
-                    trace!("found project by name");
+            let client = self.client.as_ref().unwrap();
+            trace!(%name, "looking up project id from project name");
+            if let Some(proj) = client
+                .get_projects_list()
+                .await?
+                .into_inner()
+                .projects
+                .into_iter()
+                .find(|p| p.name == *name)
+            {
+                trace!("found project by name");
+                self.ctx.set_project_id(proj.id);
+            } else {
+                trace!("did not find project by name");
+                if create_missing_project {
+                    trace!("creating project since it was not found");
+                    let proj = client.create_project(name).await?.into_inner();
+                    eprintln!("Created project '{}' with id {}", proj.name, proj.id);
                     self.ctx.set_project_id(proj.id);
-                } else {
-                    trace!("did not find project by name");
-                    if create_missing_project {
-                        trace!("creating project since it was not found");
-                        let proj = client.create_project(name).await?.into_inner();
-                        eprintln!("Created project '{}' with id {}", proj.name, proj.id);
-                        self.ctx.set_project_id(proj.id);
-                    }
                 }
             }
-            // if called from Link command, command-line override is saved to file
-            if do_linking {
+            // if linking and project id known at this point, save and return
+            if do_linking && self.ctx.project_id_found() {
                 eprintln!("Linking to project {}", self.ctx.project_id());
                 self.ctx.save_local_internal()?;
                 return Ok(());
@@ -695,24 +704,19 @@ impl Shuttle {
         }
         // if project id is still not known or an explicit linking is wanted, start the linking prompt
         if !self.ctx.project_id_found() || do_linking {
-            self.project_link(None).await?;
+            self.project_link_interactive().await?;
         }
 
         Ok(())
     }
 
-    async fn project_link(&mut self, id_or_name: Option<String>) -> Result<()> {
+    async fn project_link_interactive(&mut self) -> Result<()> {
         let client = self.client.as_ref().unwrap();
         let projs = client.get_projects_list().await?.into_inner().projects;
 
         let theme = ColorfulTheme::default();
 
-        let proj = if let Some(id_or_name) = id_or_name {
-            projs
-                .into_iter()
-                .find(|p| p.id == id_or_name || p.name == id_or_name)
-                .ok_or(anyhow!("Did not find project '{id_or_name}'."))?
-        } else {
+        let proj = {
             let selected_project = if projs.is_empty() {
                 eprintln!("Create a new project to link to this directory:");
 
@@ -2121,7 +2125,8 @@ mod tests {
 
         let project_args = ProjectArgs {
             working_directory: working_directory.clone(),
-            name_or_id: Some("proj_archiving-test".to_owned()),
+            name: Some("proj_archiving-test".to_owned()),
+            id: None,
         };
         let mut entries = get_archive_entries(project_args.clone(), Default::default()).await;
         entries.sort();
@@ -2184,7 +2189,8 @@ mod tests {
     async fn finds_workspace_root() {
         let project_args = ProjectArgs {
             working_directory: path_from_workspace_root("examples/axum/hello-world/src"),
-            name_or_id: None,
+            name: None,
+            id: None,
         };
 
         assert_eq!(

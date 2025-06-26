@@ -36,7 +36,8 @@ async fn shuttle_run(working_directory: &str, external: bool) -> String {
                 api_env: None,
                 project_args: ProjectArgs {
                     working_directory: working_directory.clone(),
-                    name_or_id: None,
+                    name: None,
+                    id: None,
                 },
                 offline: false,
                 debug: false,

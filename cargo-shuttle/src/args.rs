@@ -73,9 +73,12 @@ pub struct ProjectArgs {
     /// Specify the working directory
     #[arg(global = true, long, visible_alias = "wd", default_value = ".", value_parser = OsStringValueParser::new().try_map(parse_path))]
     pub working_directory: PathBuf,
-    /// Specify the name or id of the project
-    #[arg(global = true, long = "name", visible_alias = "id")]
-    pub name_or_id: Option<String>,
+    /// Specify the name of the project to target or create
+    #[arg(global = true, long)]
+    pub name: Option<String>,
+    /// Specify the id of the project to target
+    #[arg(global = true, long)]
+    pub id: Option<String>,
 }
 
 impl ProjectArgs {
@@ -411,9 +414,9 @@ pub struct InitArgs {
     /// Don't check the project name's validity or availability and use it anyways
     #[arg(long)]
     pub force_name: bool,
-    /// Whether to start the container for this project on Shuttle, and claim the project name
-    #[arg(long)]
-    pub create_env: bool,
+    /// Whether to create a project on Shuttle
+    #[arg(long, visible_alias = "create_env")]
+    pub create_project: bool,
     /// Don't initialize a new git repository
     #[arg(long)]
     pub no_git: bool,
@@ -640,7 +643,8 @@ mod tests {
     fn workspace_path() {
         let project_args = ProjectArgs {
             working_directory: path_from_workspace_root("examples/axum/hello-world/src"),
-            name_or_id: None,
+            name: None,
+            id: None,
         };
 
         assert_eq!(
@@ -653,7 +657,8 @@ mod tests {
     fn project_name() {
         let project_args = ProjectArgs {
             working_directory: path_from_workspace_root("examples/axum/hello-world/src"),
-            name_or_id: None,
+            name: None,
+            id: None,
         };
 
         assert_eq!(
@@ -668,7 +673,8 @@ mod tests {
             working_directory: path_from_workspace_root(
                 "examples/rocket/workspace/hello-world/src",
             ),
-            name_or_id: None,
+            name: None,
+            id: None,
         };
 
         assert_eq!(

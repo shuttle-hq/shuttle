@@ -3,6 +3,8 @@ name = "archiving-test"
 version = "0.1.0"
 edition = "2021"
 
+[workspace]
+
 [dependencies]
 # This test crate is never compiled, so bumping these is not needed
 axum = "0.6.18"

@@ -716,57 +716,55 @@ impl Shuttle {
 
         let theme = ColorfulTheme::default();
 
-        let proj = {
-            let selected_project = if projs.is_empty() {
-                eprintln!("Create a new project to link to this directory:");
+        let selected_project = if projs.is_empty() {
+            eprintln!("Create a new project to link to this directory:");
 
+            None
+        } else {
+            eprintln!("Which project do you want to link this directory to?");
+
+            let mut items = projs
+                .iter()
+                .map(|p| {
+                    if let Some(team_id) = p.team_id.as_ref() {
+                        format!("Team {}: {}", team_id, p.name)
+                    } else {
+                        p.name.clone()
+                    }
+                })
+                .collect::<Vec<_>>();
+            items.extend_from_slice(&["[CREATE NEW]".to_string()]);
+            let index = Select::with_theme(&theme)
+                .items(&items)
+                .default(0)
+                .interact()?;
+
+            if index == projs.len() {
+                // last item selected (create new)
                 None
             } else {
-                eprintln!("Which project do you want to link this directory to?");
+                Some(projs[index].clone())
+            }
+        };
 
-                let mut items = projs
-                    .iter()
-                    .map(|p| {
-                        if let Some(team_id) = p.team_id.as_ref() {
-                            format!("Team {}: {}", team_id, p.name)
-                        } else {
-                            p.name.clone()
-                        }
-                    })
-                    .collect::<Vec<_>>();
-                items.extend_from_slice(&["[CREATE NEW]".to_string()]);
-                let index = Select::with_theme(&theme)
-                    .items(&items)
-                    .default(0)
+        let proj = match selected_project {
+            Some(proj) => proj,
+            None => {
+                let name: String = Input::with_theme(&theme)
+                    .with_prompt("Project name")
                     .interact()?;
 
-                if index == projs.len() {
-                    // last item selected (create new)
-                    None
-                } else {
-                    Some(projs[index].clone())
-                }
-            };
+                let r = client.create_project(&name).await?;
 
-            match selected_project {
-                Some(proj) => proj,
-                None => {
-                    let name: String = Input::with_theme(&theme)
-                        .with_prompt("Project name")
-                        .interact()?;
-
-                    let r = client.create_project(&name).await?;
-
-                    match self.output_mode {
-                        OutputMode::Normal => {
-                            let proj = r.into_inner();
-                            eprintln!("Created project '{}' with id {}", proj.name, proj.id);
-                            proj
-                        }
-                        OutputMode::Json => {
-                            println!("{}", r.raw_json);
-                            r.into_inner()
-                        }
+                match self.output_mode {
+                    OutputMode::Normal => {
+                        let proj = r.into_inner();
+                        eprintln!("Created project '{}' with id {}", proj.name, proj.id);
+                        proj
+                    }
+                    OutputMode::Json => {
+                        println!("{}", r.raw_json);
+                        r.into_inner()
                     }
                 }
             }

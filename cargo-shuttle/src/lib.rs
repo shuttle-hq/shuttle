@@ -2123,8 +2123,8 @@ mod tests {
 
         let project_args = ProjectArgs {
             working_directory: working_directory.clone(),
-            name: Some("proj_archiving-test".to_owned()),
-            id: None,
+            name: None,
+            id: Some("proj_archiving-test".to_owned()),
         };
         let mut entries = get_archive_entries(project_args.clone(), Default::default()).await;
         entries.sort();

@@ -18,7 +18,8 @@ async fn shuttle_command(cmd: Command, working_directory: &str) -> anyhow::Resul
                 api_env: None,
                 project_args: ProjectArgs {
                     working_directory,
-                    name_or_id: None,
+                    name: None,
+                    id: None,
                 },
                 offline: false,
                 debug: false,

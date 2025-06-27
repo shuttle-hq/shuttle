@@ -245,7 +245,7 @@ pub struct DeploymentRequestImage {
 pub struct DeploymentMetadata {
     pub env: Environment,
     pub project_name: String,
-    /// Path to a folder that persists between deployments
+    /// Path to a recommended folder for disk storage during local runs
     pub storage_path: PathBuf,
 }
 

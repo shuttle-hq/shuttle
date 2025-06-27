@@ -4,7 +4,6 @@ use std::path::PathBuf;
 
 use async_trait::async_trait;
 use serde::{de::DeserializeOwned, Serialize};
-use shuttle_common::constants::STORAGE_DIRNAME;
 pub use shuttle_common::{
     models::{
         deployment::{DeploymentMetadata, Environment},
@@ -80,7 +79,7 @@ impl ResourceFactory {
         DeploymentMetadata {
             env: self.env,
             project_name: self.project_name.to_string(),
-            storage_path: PathBuf::from(STORAGE_DIRNAME),
+            storage_path: PathBuf::from(".shuttle-storage"),
         }
     }
 }

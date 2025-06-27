@@ -101,7 +101,7 @@ mod tests {
         #[shuttle_runtime::main]
         async fn main() -> ShuttleAxum {}
         "#;
-        assert!(find_user_main_fn(&rust).unwrap().is_some());
+        assert!(find_user_main_fn(rust).unwrap().is_some());
 
         // importing the main macro is not yet supported
         let rust = r#"
@@ -109,7 +109,7 @@ mod tests {
         #[main]
         async fn main() -> ShuttleAxum {}
         "#;
-        assert!(find_user_main_fn(&rust).unwrap().is_none());
+        assert!(find_user_main_fn(rust).unwrap().is_none());
     }
 
     #[test]
@@ -117,12 +117,12 @@ mod tests {
         let rust = r#"
         #[shuttle_runtime::main]
         #[shuttle_infra(
-            thing = "great",
+            this_thing = "great",
         )]
         async fn main() -> ShuttleAxum {}
         "#;
-        let expected = serde_json::json!({"thing": "great"});
-        let actual = parse_infra(&rust).unwrap();
+        let expected = serde_json::json!({"this_thing": "great"});
+        let actual = parse_infra(rust).unwrap();
         assert_eq!(expected, actual);
     }
 }

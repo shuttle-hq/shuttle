@@ -33,11 +33,9 @@ pub(crate) fn tokens(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let loader_runner = LoaderAndRunner::from_item_fn(&mut user_main_fn);
 
     // take away the #[shuttle_infra(...)] attribute since it is not used by runtime
-    user_main_fn.attrs = user_main_fn
+    user_main_fn
         .attrs
-        .into_iter()
-        .filter(|attr| !attr.path().is_ident("shuttle_infra"))
-        .collect();
+        .retain(|attr| !attr.path().is_ident("shuttle_infra"));
 
     Into::into(quote! {
         fn main() {

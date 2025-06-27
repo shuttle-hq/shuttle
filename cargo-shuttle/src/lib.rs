@@ -158,7 +158,7 @@ impl Shuttle {
 
         self.output_mode = args.output_mode;
 
-        // All commands that call the API
+        // Set up the API client for all commands that call the API
         if matches!(
             args.cmd,
             Command::Init(..)
@@ -171,10 +171,6 @@ impl Shuttle {
                 | Command::Resource(..)
                 | Command::Certificate(..)
                 | Command::Project(..)
-        ) || (
-            // project linking on beta requires api client
-            // TODO: refactor so that beta local run does not need to know project id / always uses crate name ???
-            matches!(args.cmd, Command::Run(..))
         ) {
             let api_url = args
                 .api_url
@@ -210,7 +206,7 @@ impl Shuttle {
             self.client = Some(client);
         }
 
-        // All commands that need to know which project is being handled
+        // Load project context for all commands that need to know which project is being targetted
         if matches!(
             args.cmd,
             Command::Deploy(..)
@@ -227,12 +223,12 @@ impl Shuttle {
                 )
                 | Command::Logs { .. }
         ) {
-            // Command::Run only uses load_local_config (below) instead of load_project since it does not target a project in the API
+            // Command::Run only uses `load_local_config` (below) instead of `load_project` since it does not target a project in the API
             self.load_project(
                 &args.project_args,
                 matches!(args.cmd, Command::Project(ProjectCommand::Link)),
-                // only the deploy command should create a project if the provided name is not found in the project list.
-                // (project start should always make the POST call, it's an upsert operation)
+                // Only the deploy command should create a project if the provided name is not found in the project list.
+                // (ProjectCommand::Create should always make the POST call since it's an upsert operation)
                 matches!(args.cmd, Command::Deploy(..)),
             )
             .await?;
@@ -255,7 +251,7 @@ impl Shuttle {
                 }
             },
             Command::Account => self.account().await,
-            Command::Login(login_args) => self.login(login_args, args.offline).await,
+            Command::Login(login_args) => self.login(login_args, args.offline, true).await,
             Command::Logout(logout_args) => self.logout(logout_args).await,
             Command::Feedback => open_gh_issue(),
             Command::Run(run_args) => {
@@ -301,7 +297,7 @@ impl Shuttle {
                 ProjectCommand::Status => self.project_status().await,
                 ProjectCommand::List { table, .. } => self.projects_list(table).await,
                 ProjectCommand::Delete(ConfirmationArgs { yes }) => self.project_delete(yes).await,
-                ProjectCommand::Link => Ok(()), // logic is done in `load_local`
+                ProjectCommand::Link => Ok(()), // logic is done in `load_project` in previous step
             },
             Command::Upgrade { preview } => update_cargo_shuttle(preview).await,
         }
@@ -334,10 +330,10 @@ impl Shuttle {
         // 1. Log in (if not logged in yet)
         if needs_login {
             eprintln!("First, let's log in to your Shuttle account.");
-            self.login(args.login_args.clone(), offline).await?;
+            self.login(args.login_args.clone(), offline, false).await?;
             eprintln!();
         } else if args.login_args.api_key.is_some() {
-            self.login(args.login_args.clone(), offline).await?;
+            self.login(args.login_args.clone(), offline, false).await?;
         }
 
         // 2. Ask for project name or validate the given one
@@ -690,6 +686,7 @@ impl Shuttle {
                 trace!("did not find project by name");
                 if create_missing_project {
                     trace!("creating project since it was not found");
+                    // This is a side effect (non-primary output), so OutputMode::Json is not considered
                     let proj = client.create_project(name).await?.into_inner();
                     eprintln!("Created project '{}' with id {}", proj.name, proj.id);
                     self.ctx.set_project_id(proj.id);
@@ -754,19 +751,11 @@ impl Shuttle {
                     .with_prompt("Project name")
                     .interact()?;
 
-                let r = client.create_project(&name).await?;
+                // This is a side effect (non-primary output), so OutputMode::Json is not considered
+                let proj = client.create_project(&name).await?.into_inner();
+                eprintln!("Created project '{}' with id {}", proj.name, proj.id);
 
-                match self.output_mode {
-                    OutputMode::Normal => {
-                        let proj = r.into_inner();
-                        eprintln!("Created project '{}' with id {}", proj.name, proj.id);
-                        proj
-                    }
-                    OutputMode::Json => {
-                        println!("{}", r.raw_json);
-                        r.into_inner()
-                    }
-                }
+                proj
             }
         };
 
@@ -793,7 +782,7 @@ impl Shuttle {
     }
 
     /// Log in with the given API key or after prompting the user for one.
-    async fn login(&mut self, login_args: LoginArgs, offline: bool) -> Result<()> {
+    async fn login(&mut self, login_args: LoginArgs, offline: bool, login_cmd: bool) -> Result<()> {
         let api_key = match login_args.api_key {
             Some(api_key) => api_key,
             None => {
@@ -822,12 +811,23 @@ impl Shuttle {
             if offline {
                 eprintln!("INFO: Skipping API key verification");
             } else {
-                let u = client
+                let (user, raw_json) = client
                     .get_current_user()
                     .await
                     .context("failed to check API key validity")?
-                    .into_inner();
-                println!("Logged in as {}", u.id.bold());
+                    .into_parts();
+                if login_cmd {
+                    match self.output_mode {
+                        OutputMode::Normal => {
+                            println!("Logged in as {}", user.id.bold());
+                        }
+                        OutputMode::Json => {
+                            println!("{}", raw_json);
+                        }
+                    }
+                } else {
+                    eprintln!("Logged in as {}", user.id.bold());
+                }
             }
         }
 
@@ -914,12 +914,19 @@ impl Shuttle {
         }
 
         wait_with_spinner(2000, |_, pb| async move {
-            let deployment = client.get_current_deployment(pid).await?.into_inner();
+            let (deployment, raw_json) = client.get_current_deployment(pid).await?.into_parts();
 
             let get_cleanup = |d: Option<DeploymentResponse>| {
                 move || {
                     if let Some(d) = d {
-                        eprintln!("{}", d.to_string_colored());
+                        match self.output_mode {
+                            OutputMode::Normal => {
+                                eprintln!("{}", d.to_string_colored());
+                            }
+                            OutputMode::Json => {
+                                // last deployment response already printed
+                            }
+                        }
                     }
                 }
             };
@@ -928,18 +935,25 @@ impl Shuttle {
             };
 
             let state = deployment.state.clone();
-            pb.set_message(deployment.to_string_summary_colored());
+            match self.output_mode {
+                OutputMode::Normal => {
+                    pb.set_message(deployment.to_string_summary_colored());
+                }
+                OutputMode::Json => {
+                    println!("{}", raw_json);
+                }
+            }
             let cleanup = get_cleanup(Some(deployment));
             match state {
-                    DeploymentState::Pending
-                    | DeploymentState::Stopping
-                    | DeploymentState::InProgress
-                    | DeploymentState::Running => Ok(None),
-                    DeploymentState::Building // a building deployment should take it back to InProgress then Running, so don't follow that sequence
-                    | DeploymentState::Failed
-                    | DeploymentState::Stopped
-                    | DeploymentState::Unknown(_) => Ok(Some(cleanup)),
-                }
+                DeploymentState::Pending
+                | DeploymentState::Stopping
+                | DeploymentState::InProgress
+                | DeploymentState::Running => Ok(None),
+                DeploymentState::Building // a building deployment should take it back to InProgress then Running, so don't follow that sequence
+                | DeploymentState::Failed
+                | DeploymentState::Stopped
+                | DeploymentState::Unknown(_) => Ok(Some(cleanup)),
+            }
         })
         .await?;
 
@@ -1713,19 +1727,35 @@ impl Shuttle {
     async fn track_deployment_status(&self, pid: &str, id: &str) -> Result<bool> {
         let client = self.client.as_ref().unwrap();
         let failed = wait_with_spinner(2000, |_, pb| async move {
-            let deployment = client.get_deployment(pid, id).await?.into_inner();
+            let (deployment, raw_json) = client.get_deployment(pid, id).await?.into_parts();
 
             let state = deployment.state.clone();
-            pb.set_message(deployment.to_string_summary_colored());
+            match self.output_mode {
+                OutputMode::Normal => {
+                    pb.set_message(deployment.to_string_summary_colored());
+                }
+                OutputMode::Json => {
+                    println!("{}", raw_json);
+                }
+            }
             let failed = state == DeploymentState::Failed;
             let cleanup = move || {
-                eprintln!("{}", deployment.to_string_colored());
+                match self.output_mode {
+                    OutputMode::Normal => {
+                        eprintln!("{}", deployment.to_string_colored());
+                    }
+                    OutputMode::Json => {
+                        // last deployment response already printed
+                    }
+                }
                 failed
             };
             match state {
+                // non-end states
                 DeploymentState::Pending
                 | DeploymentState::Building
                 | DeploymentState::InProgress => Ok(None),
+                // end states
                 DeploymentState::Running
                 | DeploymentState::Stopped
                 | DeploymentState::Stopping
@@ -1747,16 +1777,20 @@ impl Shuttle {
         let client = self.client.as_ref().unwrap();
         let failed = self.track_deployment_status(proj_id, depl_id).await?;
         if failed {
-            for log in client
-                .get_deployment_logs(proj_id, depl_id)
-                .await?
-                .into_inner()
-                .logs
-            {
-                if raw {
-                    println!("{}", log.line);
-                } else {
-                    println!("{log}");
+            let r = client.get_deployment_logs(proj_id, depl_id).await?;
+            match self.output_mode {
+                OutputMode::Normal => {
+                    let logs = r.into_inner().logs;
+                    for log in logs {
+                        if raw {
+                            println!("{}", log.line);
+                        } else {
+                            println!("{log}");
+                        }
+                    }
+                }
+                OutputMode::Json => {
+                    println!("{}", r.raw_json);
                 }
             }
             return Err(anyhow!("Deployment failed"));

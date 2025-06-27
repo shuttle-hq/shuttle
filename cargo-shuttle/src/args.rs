@@ -42,7 +42,7 @@ pub struct ShuttleArgs {
     /// Turn on tracing output for Shuttle libraries. (WARNING: can print sensitive data)
     #[arg(global = true, long, env = "SHUTTLE_DEBUG")]
     pub debug: bool,
-    /// What format to output results in (where supported).
+    /// What format to print output in
     #[arg(
         global = true,
         long = "output",
@@ -57,9 +57,7 @@ pub struct ShuttleArgs {
     pub cmd: Command,
 }
 
-#[derive(
-    ValueEnum, Clone, Debug, Default, PartialEq /* , strum::EnumMessage, strum::VariantArray */,
-)]
+#[derive(ValueEnum, Clone, Debug, Default, PartialEq)]
 pub enum OutputMode {
     #[default]
     Normal,
@@ -67,7 +65,7 @@ pub enum OutputMode {
     // TODO?: add table / non-table / raw table / raw logs variants?
 }
 
-/// Global args for subcommands that deal with projects
+/// Global project-related options
 #[derive(Args, Clone, Debug)]
 pub struct ProjectArgs {
     /// Specify the working directory

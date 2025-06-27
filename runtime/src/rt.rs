@@ -104,7 +104,7 @@ pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + S
                 };
                 let io = TokioIo::new(stream);
 
-                tokio::task::spawn(async move {
+                tokio::spawn(async move {
                     if let Err(err) = http1::Builder::new()
                         .serve_connection(
                             io,

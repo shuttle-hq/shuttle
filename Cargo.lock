@@ -422,6 +422,7 @@ dependencies = [
  "serde_json",
  "shuttle-api-client",
  "shuttle-common",
+ "shuttle-macros",
  "strum",
  "tempfile",
  "tokio",
@@ -3812,11 +3813,7 @@ dependencies = [
  "proc-macro-error2",
  "proc-macro2",
  "quote",
- "serde",
- "serde_json",
- "shuttle-common",
  "syn",
- "tokio",
  "trybuild",
 ]
 
@@ -3841,6 +3838,15 @@ dependencies = [
  "typeshare",
  "utoipa",
  "zeroize",
+]
+
+[[package]]
+name = "shuttle-macros"
+version = "0.55.0"
+dependencies = [
+ "proc-macro2",
+ "serde_json",
+ "syn",
 ]
 
 [[package]]
@@ -5347,3 +5353,67 @@ dependencies = [
  "cc",
  "pkg-config",
 ]
+
+[[patch.unused]]
+name = "shuttle-actix-web"
+version = "0.55.0"
+
+[[patch.unused]]
+name = "shuttle-aws-rds"
+version = "0.55.0"
+
+[[patch.unused]]
+name = "shuttle-axum"
+version = "0.55.0"
+
+[[patch.unused]]
+name = "shuttle-openai"
+version = "0.55.0"
+
+[[patch.unused]]
+name = "shuttle-opendal"
+version = "0.55.0"
+
+[[patch.unused]]
+name = "shuttle-poem"
+version = "0.55.0"
+
+[[patch.unused]]
+name = "shuttle-qdrant"
+version = "0.55.0"
+
+[[patch.unused]]
+name = "shuttle-rocket"
+version = "0.55.0"
+
+[[patch.unused]]
+name = "shuttle-salvo"
+version = "0.55.0"
+
+[[patch.unused]]
+name = "shuttle-serenity"
+version = "0.55.0"
+
+[[patch.unused]]
+name = "shuttle-shared-db"
+version = "0.55.0"
+
+[[patch.unused]]
+name = "shuttle-thruster"
+version = "0.55.0"
+
+[[patch.unused]]
+name = "shuttle-tide"
+version = "0.55.0"
+
+[[patch.unused]]
+name = "shuttle-tower"
+version = "0.55.0"
+
+[[patch.unused]]
+name = "shuttle-turso"
+version = "0.55.0"
+
+[[patch.unused]]
+name = "shuttle-warp"
+version = "0.55.0"

@@ -47,6 +47,7 @@ use shuttle_common::{
     },
     tables::{deployments_table, get_certificates_table, get_projects_table, get_resource_tables},
 };
+use shuttle_macros::parse_infra;
 use strum::{EnumMessage, VariantArray};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::time::{sleep, Duration};
@@ -1605,13 +1606,13 @@ impl Shuttle {
         rust_build_args.no_default_features = no_default_features;
         rust_build_args.features = features.map(|v| v.join(","));
 
-        // Look for a build manifest file at .shuttle/build_manifest.json which specifies resources
-        // that need to be provisioned for the application
-        let default_manifest = Path::new(".shuttle").join("build_manifest.json");
-        if std::fs::exists(project_directory.join(&default_manifest)).is_ok() {
-            rust_build_args.provision_manifest =
-                default_manifest.into_os_string().into_string().ok();
-        }
+        rust_build_args.provision_manifest = Some(
+            serde_json::to_string(
+                &parse_infra(&read_to_string(target.src_path.as_path()).unwrap())
+                    .context("parsing infra")?,
+            )
+            .unwrap(),
+        );
 
         rust_build_args.shuttle_runtime_version = package
             .dependencies

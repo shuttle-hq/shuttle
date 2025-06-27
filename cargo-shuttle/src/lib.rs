@@ -1606,14 +1606,6 @@ impl Shuttle {
         rust_build_args.no_default_features = no_default_features;
         rust_build_args.features = features.map(|v| v.join(","));
 
-        rust_build_args.provision_manifest = Some(
-            serde_json::to_string(
-                &parse_infra(&read_to_string(target.src_path.as_path()).unwrap())
-                    .context("parsing infra")?,
-            )
-            .unwrap(),
-        );
-
         rust_build_args.shuttle_runtime_version = package
             .dependencies
             .iter()
@@ -1630,6 +1622,14 @@ impl Shuttle {
         deployment_req.build_args = Some(BuildArgs::Rust(rust_build_args));
 
         // TODO: have all of the above be configurable in CLI and Shuttle.toml
+
+        deployment_req.infra = Some(
+            parse_infra(
+                &read_to_string(target.src_path.as_path())
+                    .context("reading target file when extracting infra annotations")?,
+            )
+            .context("parsing infra annotations")?,
+        );
 
         if let Ok(repo) = Repository::discover(project_directory) {
             let repo_path = repo

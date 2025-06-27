@@ -143,6 +143,7 @@ fn find_shuttle_packages(metadata: &Metadata) -> Result<Vec<(Package, Target)>> 
     Ok(packages)
 }
 
+/// Find first crate in workspace with a runtime dependency and main macro
 pub fn find_first_shuttle_package(metadata: &Metadata) -> Result<(Package, Target)> {
     find_shuttle_packages(metadata)?.into_iter().next().context(
         "Expected at least one target that Shuttle can build. \

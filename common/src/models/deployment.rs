@@ -2,6 +2,7 @@ use std::{collections::HashMap, path::PathBuf};
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use strum::{Display, EnumString};
 
 #[cfg(feature = "display")]
@@ -148,6 +149,7 @@ pub struct DeploymentRequestBuildArchive {
     /// TODO: Remove this in favour of a separate secrets uploading action.
     pub secrets: Option<HashMap<String, String>>,
     pub build_meta: Option<BuildMeta>,
+    pub infra: Option<Value>,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -180,9 +182,6 @@ pub struct BuildArgsRust {
     pub no_default_features: bool,
     /// Use the mold linker
     pub mold: bool,
-    /// Path to the provision manifest file that defines the resources to be provisioned
-    /// for the application.
-    pub provision_manifest: Option<String>,
 }
 
 impl Default for BuildArgsRust {
@@ -196,7 +195,6 @@ impl Default for BuildArgsRust {
             features: Default::default(),
             no_default_features: Default::default(),
             mold: Default::default(),
-            provision_manifest: Default::default(),
         }
     }
 }

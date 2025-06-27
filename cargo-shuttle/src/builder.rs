@@ -5,7 +5,7 @@ use std::process::Stdio;
 use anyhow::{bail, Context, Result};
 use cargo_metadata::{Metadata, Package, Target};
 use shuttle_common::constants::RUNTIME_NAME;
-use shuttle_macros::find_user_main_fn;
+use shuttle_infra::find_user_main_fn;
 use tokio::io::AsyncBufReadExt;
 use tracing::{error, trace};
 

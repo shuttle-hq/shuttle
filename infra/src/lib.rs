@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use proc_macro2::Span;
 use syn::{parse_file, parse_quote, Attribute, Item, ItemFn, LitStr, Path};
 
-/// Takes rust source code and looks for a function annotated with `#[shuttle_runtime::main]`.
+/// Takes rust source code and finds the `#[shuttle_runtime::main]`.
 /// Then, parses the `#[shuttle_infra(...)]` attribute of that function and returns a map of string->string, or null if the attribute is not there.
 pub fn parse_infra(rust_source_code: &str) -> Result<serde_json::Value, syn::Error> {
     let user_main_fn = find_user_main_fn(rust_source_code)?;
@@ -28,6 +28,7 @@ pub fn parse_infra(rust_source_code: &str) -> Result<serde_json::Value, syn::Err
     // TODO: also parse user_main_fn argument attributes (resources) and add to IR
 }
 
+/// Parses rust source code and looks for a function annotated with `#[shuttle_runtime::main]`.
 pub fn find_user_main_fn(rust_source_code: &str) -> Result<Option<ItemFn>, syn::Error> {
     let ast = parse_file(rust_source_code)?;
 
@@ -102,6 +103,7 @@ mod tests {
         "#;
         assert!(find_user_main_fn(&rust).unwrap().is_some());
 
+        // importing the main macro is not yet supported
         let rust = r#"
         use shuttle_runtime::main;
         #[main]

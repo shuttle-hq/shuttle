@@ -36,7 +36,7 @@ rustup default nightly
 ### Install MCP server the binary
 
 ```bash
-cargo install --git https://github.com/shuttle-hq/shuttle shuttle-mcp
+cargo install shuttle-mcp
 ```
 
 ## Configuration
@@ -56,3 +56,5 @@ Add the following to your MCP client configuration:
 ```
 
 That's it! 🚀 You can now use the **Shuttle MCP server** in your MCP client. ✨
+
+For more information, please refer to the [Shuttle documentation](https://docs.shuttle.dev/integrations/mcp-server).

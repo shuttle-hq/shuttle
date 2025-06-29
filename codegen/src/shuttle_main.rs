@@ -2,15 +2,166 @@ use proc_macro::TokenStream;
 use proc_macro2::Span;
 use proc_macro_error2::emit_error;
 use quote::{quote, ToTokens};
+use serde::{ser::SerializeStruct, Serialize};
 use syn::{
-    parse::Parse, parse_macro_input, parse_quote, punctuated::Punctuated, spanned::Spanned,
-    Attribute, Expr, ExprLit, FnArg, Ident, ItemFn, Lit, Pat, PatIdent, Path, ReturnType,
-    Signature, Stmt, Token, Type, TypePath,
+    parse::{Parse, ParseStream},
+    parse_macro_input, parse_quote,
+    punctuated::Punctuated,
+    spanned::Spanned,
+    Attribute, Error, Expr, ExprLit, FnArg, Ident, ItemFn, Lit, LitStr, Pat, PatIdent, Path,
+    ReturnType, Signature, Stmt, Token, Type, TypePath,
 };
 
-pub(crate) fn tokens(_attr: TokenStream, item: TokenStream) -> TokenStream {
+const BUILD_MANIFEST_FILE: &str = ".shuttle/build_manifest.json";
+
+/// Configuration options for the `shuttle_runtime` macro.
+///
+/// This struct represents the arguments that can be passed to the
+/// `#[shuttle_runtime(...)]` attribute macro. It currently supports:
+///
+/// - `instance_size`: An optional string literal that specifies the size of the
+///   instance to use for deploying the application. For example, "xs" or "m".
+///
+/// Example usage:
+/// ```rust
+/// #[shuttle_runtime(instance_size = "l")]
+/// async fn main() -> ShuttleActix {
+///     // ...
+/// }
+/// ```
+#[derive(Clone, Debug, Default)]
+struct RuntimeMacroArgs {
+    instance_size: Option<LitStr>,
+}
+
+impl Serialize for RuntimeMacroArgs {
+    /// Serializes the RuntimeMacroArgs struct into JSON.
+    ///
+    /// This is used to write configuration to the build manifest file.
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let len = self.instance_size.is_some() as usize;
+        let mut state = serializer.serialize_struct("RuntimeMacroArgs", len)?;
+        if let Some(instance_size) = &self.instance_size {
+            state.serialize_field("instance_size", &instance_size.value())?;
+        }
+
+        state.end()
+    }
+}
+
+impl Parse for RuntimeMacroArgs {
+    /// Parses the arguments provided to the `#[shuttle_runtime(...)]` attribute macro.
+    ///
+    /// This implementation accepts key-value pairs separated by commas, where:
+    /// - `instance_size`: The size of the instance to use for the application
+    ///
+    /// Returns a Result containing either the parsed RuntimeMacroArgs or a syntax error.
+    /// If an unrecognized key is provided, it will return an error with a helpful
+    /// message explaining the invalid key.
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        let mut instance_size = None;
+
+        while !input.is_empty() {
+            let key: Ident = input.parse()?;
+            input.parse::<Token![=]>()?;
+
+            match key.to_string().as_str() {
+                "instance_size" => {
+                    instance_size = Some(input.parse::<LitStr>()?);
+                }
+                unknown_key => {
+                    return Err(syn::Error::new(
+                        key.span(),
+                        format!(
+                            "Invalid `shuttle_runtime` macro attribute key: '{}'",
+                            unknown_key
+                        ),
+                    ))
+                }
+            }
+
+            if !input.is_empty() {
+                input.parse::<Token![,]>()?;
+            }
+        }
+
+        Ok(RuntimeMacroArgs { instance_size })
+    }
+}
+
+/// Entry point for the `#[shuttle_runtime]` attribute macro.
+///
+/// This function processes the attribute arguments and the annotated function,
+/// generating code that:
+///
+/// 1. Serializes the attribute arguments to a build manifest file
+/// 2. Transforms the user's main function to support Shuttle's deployment model
+/// 3. Generates loader and runner functions to handle resource initialization
+///
+/// The generated code will:
+/// - Create a Tokio runtime to run the async code
+/// - Process any resource attributes on function parameters
+/// - Handle secret interpolation in resource configuration strings
+/// - Invoke the Shuttle framework's startup mechanism
+///
+/// # Arguments
+///
+/// * `attr` - The TokenStream representing the attribute arguments
+/// * `item` - The TokenStream representing the annotated function
+///
+pub(crate) fn tokens(attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut user_main_fn = parse_macro_input!(item as ItemFn);
     let loader_runner = LoaderAndRunner::from_item_fn(&mut user_main_fn);
+
+    // Start write build manifest - to be replaced by a syn parse stage
+    // --
+    let attr_ast = parse_macro_input!(attr as RuntimeMacroArgs);
+
+    let json_str = match serde_json::to_string(&attr_ast).map_err(|err| {
+        Error::new(
+            user_main_fn.span(),
+            format!("failed to serialize build manifest: {:?}", err),
+        )
+    }) {
+        Ok(json) => json,
+        Err(e) => return e.into_compile_error().into(),
+    };
+
+    if let Some(shuttle_dir) = std::path::Path::new(BUILD_MANIFEST_FILE).parent() {
+        if !shuttle_dir.exists() {
+            match std::fs::create_dir_all(shuttle_dir).map_err(|err| {
+                Error::new(
+                    user_main_fn.span(),
+                    format!(
+                        "failed to create shuttle directory: {:?}: {}",
+                        shuttle_dir, err
+                    ),
+                )
+            }) {
+                Ok(_) => (),
+                Err(e) => return e.into_compile_error().into(),
+            };
+        }
+    }
+
+    match std::fs::write(BUILD_MANIFEST_FILE, json_str).map_err(|err| {
+        Error::new(
+            user_main_fn.span(),
+            format!(
+                "failed to write build manifest to '{}': {:?}",
+                BUILD_MANIFEST_FILE, err
+            ),
+        )
+    }) {
+        Ok(_) => (),
+        Err(e) => return e.into_compile_error().into(),
+    };
+
+    // End write build manifest
+    // --
 
     Into::into(quote! {
         fn main() {

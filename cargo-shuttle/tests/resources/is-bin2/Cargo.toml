@@ -1,7 +1,11 @@
 [package]
-name = "is-bin"
+name = "is-bin2"
 version = "0.1.0"
 edition = "2021"
+
+[[bin]]
+name = "weirdchamp"
+path = "src/my_entrypoint.rs"
 
 [workspace]
 

@@ -129,7 +129,7 @@ pub struct UploadArchiveResponse {
 #[typeshare::typeshare]
 pub enum DeploymentRequest {
     /// Build an image from the source code in an attached zip archive
-    BuildArchive(DeploymentRequestBuildArchive),
+    BuildArchive(Box<DeploymentRequestBuildArchive>),
     // TODO?: Add GitRepo(DeploymentRequestGitRepo)
     /// Use this image directly. Can be used to skip the build step.
     Image(DeploymentRequestImage),
@@ -180,6 +180,9 @@ pub struct BuildArgsRust {
     pub no_default_features: bool,
     /// Use the mold linker
     pub mold: bool,
+    /// Path to the provision manifest file that defines the resources to be provisioned
+    /// for the application.
+    pub provision_manifest: Option<String>,
 }
 
 impl Default for BuildArgsRust {
@@ -193,6 +196,7 @@ impl Default for BuildArgsRust {
             features: Default::default(),
             no_default_features: Default::default(),
             mold: Default::default(),
+            provision_manifest: Default::default(),
         }
     }
 }

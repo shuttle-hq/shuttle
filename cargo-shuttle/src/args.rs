@@ -42,6 +42,14 @@ pub struct ShuttleArgs {
     /// Turn on tracing output for Shuttle libraries. (WARNING: can print sensitive data)
     #[arg(global = true, long, env = "SHUTTLE_DEBUG")]
     pub debug: bool,
+    /// What format to print output in
+    #[arg(
+        global = true,
+        long = "output",
+        env = "SHUTTLE_OUTPUT_MODE",
+        default_value = "normal"
+    )]
+    pub output_mode: OutputMode,
     #[command(flatten)]
     pub project_args: ProjectArgs,
 
@@ -49,15 +57,26 @@ pub struct ShuttleArgs {
     pub cmd: Command,
 }
 
-/// Global args for subcommands that deal with projects
+#[derive(ValueEnum, Clone, Debug, Default, PartialEq)]
+pub enum OutputMode {
+    #[default]
+    Normal,
+    Json,
+    // TODO?: add table / non-table / raw table / raw logs variants?
+}
+
+/// Global project-related options
 #[derive(Args, Clone, Debug)]
 pub struct ProjectArgs {
     /// Specify the working directory
     #[arg(global = true, long, visible_alias = "wd", default_value = ".", value_parser = OsStringValueParser::new().try_map(parse_path))]
     pub working_directory: PathBuf,
-    /// Specify the name or id of the project
-    #[arg(global = true, long = "name", visible_alias = "id")]
-    pub name_or_id: Option<String>,
+    /// Specify the name of the project to target or create
+    #[arg(global = true, long)]
+    pub name: Option<String>,
+    /// Specify the id of the project to target
+    #[arg(global = true, long)]
+    pub id: Option<String>,
 }
 
 impl ProjectArgs {
@@ -152,7 +171,7 @@ pub enum GenerateCommand {
         shell: Shell,
         /// Output to a file (stdout by default)
         #[arg(short, long)]
-        output: Option<PathBuf>,
+        output_file: Option<PathBuf>,
     },
     /// Generate man page to the standard output
     Manpage,
@@ -379,7 +398,7 @@ pub struct InitArgs {
     /// Clone a starter template from Shuttle's official examples
     #[arg(long, short, value_enum, conflicts_with_all = &["from", "subfolder"])]
     pub template: Option<InitTemplateArg>,
-    /// Clone a template from a git repository or local path using cargo-generate
+    /// Clone a template from a git repository or local path
     #[arg(long)]
     pub from: Option<String>,
     /// Path to the template in the source (used with --from)
@@ -393,9 +412,9 @@ pub struct InitArgs {
     /// Don't check the project name's validity or availability and use it anyways
     #[arg(long)]
     pub force_name: bool,
-    /// Whether to start the container for this project on Shuttle, and claim the project name
-    #[arg(long)]
-    pub create_env: bool,
+    /// Whether to create a project on Shuttle
+    #[arg(long, visible_alias = "create_env")]
+    pub create_project: bool,
     /// Don't initialize a new git repository
     #[arg(long)]
     pub no_git: bool,
@@ -499,13 +518,13 @@ pub struct LogsArgs {
     #[arg(long)]
     pub raw: bool,
     /// View the first N log lines
-    #[arg(long, group = "output_mode", hide = true)]
+    #[arg(long, group = "pagination", hide = true)]
     pub head: Option<u32>,
     /// View the last N log lines
-    #[arg(long, group = "output_mode", hide = true)]
+    #[arg(long, group = "pagination", hide = true)]
     pub tail: Option<u32>,
     /// View all log lines
-    #[arg(long, group = "output_mode", hide = true)]
+    #[arg(long, group = "pagination", hide = true)]
     pub all: bool,
     /// Get logs from all deployments instead of one deployment
     #[arg(long, hide = true)]
@@ -622,7 +641,8 @@ mod tests {
     fn workspace_path() {
         let project_args = ProjectArgs {
             working_directory: path_from_workspace_root("examples/axum/hello-world/src"),
-            name_or_id: None,
+            name: None,
+            id: None,
         };
 
         assert_eq!(
@@ -635,7 +655,8 @@ mod tests {
     fn project_name() {
         let project_args = ProjectArgs {
             working_directory: path_from_workspace_root("examples/axum/hello-world/src"),
-            name_or_id: None,
+            name: None,
+            id: None,
         };
 
         assert_eq!(
@@ -650,7 +671,8 @@ mod tests {
             working_directory: path_from_workspace_root(
                 "examples/rocket/workspace/hello-world/src",
             ),
-            name_or_id: None,
+            name: None,
+            id: None,
         };
 
         assert_eq!(

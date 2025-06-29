@@ -1,3 +1,5 @@
+use std::fmt::Debug;
+
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use bytes::Bytes;
@@ -8,7 +10,7 @@ use shuttle_common::models::error::ApiError;
 /// Helpers for consuming and parsing response bodies and handling parsing of an ApiError if the response is 4xx/5xx
 #[async_trait]
 pub trait ToBodyContent {
-    async fn to_json<T: DeserializeOwned>(self) -> Result<T>;
+    async fn to_json<T: DeserializeOwned>(self) -> Result<ParsedJson<T>>;
     async fn to_text(self) -> Result<String>;
     async fn to_bytes(self) -> Result<Bytes>;
     async fn to_empty(self) -> Result<()>;
@@ -34,9 +36,40 @@ fn bytes_to_string_with_fallback(bytes: Bytes) -> String {
     String::from_utf8(bytes.to_vec()).unwrap_or_else(|_| format!("[{} bytes]", bytes.len()))
 }
 
+pub struct ParsedJson<T> {
+    inner: T,
+    pub raw_json: String,
+}
+
+impl<T> ParsedJson<T> {
+    pub fn into_inner(self) -> T {
+        self.inner
+    }
+    pub fn into_parts(self) -> (T, String) {
+        (self.inner, self.raw_json)
+    }
+}
+
+impl<T> AsRef<T> for ParsedJson<T> {
+    fn as_ref(&self) -> &T {
+        &self.inner
+    }
+}
+
+impl<T: Debug> Debug for ParsedJson<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.inner.fmt(f)
+    }
+}
+impl<T: std::fmt::Display> std::fmt::Display for ParsedJson<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.inner.fmt(f)
+    }
+}
+
 #[async_trait]
 impl ToBodyContent for reqwest::Response {
-    async fn to_json<T: DeserializeOwned>(self) -> Result<T> {
+    async fn to_json<T: DeserializeOwned>(self) -> Result<ParsedJson<T>> {
         let status_code = self.status();
         let bytes = self.bytes().await?;
         let string = bytes_to_string_with_fallback(bytes);
@@ -48,7 +81,12 @@ impl ToBodyContent for reqwest::Response {
             return Err(into_api_error(&string, status_code).into());
         }
 
-        serde_json::from_str(&string).context("failed to parse a successful response")
+        let t = serde_json::from_str(&string).context("failed to parse a successful response")?;
+
+        Ok(ParsedJson {
+            inner: t,
+            raw_json: string,
+        })
     }
 
     async fn to_text(self) -> Result<String> {

@@ -11,14 +11,14 @@ use crate::init::create_or_update_ignore_file;
 
 /// An impl of [`ConfigManager`] which is localised to a working directory
 pub struct LocalConfigManager {
-    working_directory: PathBuf,
+    directory: PathBuf,
     file_name: String,
 }
 
 impl LocalConfigManager {
-    pub fn new<P: AsRef<Path>>(working_directory: P, file_name: String) -> Self {
+    pub fn new<P: AsRef<Path>>(directory: P, file_name: String) -> Self {
         Self {
-            working_directory: working_directory.as_ref().to_path_buf(),
+            directory: directory.as_ref().to_path_buf(),
             file_name,
         }
     }
@@ -26,7 +26,7 @@ impl LocalConfigManager {
 
 impl ConfigManager for LocalConfigManager {
     fn directory(&self) -> PathBuf {
-        self.working_directory.clone()
+        self.directory.clone()
     }
 
     fn filename(&self) -> PathBuf {
@@ -96,7 +96,7 @@ impl RequestContext {
         })
     }
 
-    pub fn load_local_internal(&mut self, project_args: &ProjectArgs) -> Result<()> {
+    pub fn load_local_internal_config(&mut self, project_args: &ProjectArgs) -> Result<()> {
         let workspace_path = project_args
             .workspace_path()
             .unwrap_or(project_args.working_directory.clone());
@@ -119,10 +119,10 @@ impl RequestContext {
         let config = project_internal.as_mut().unwrap();
 
         // Project id is preferred in this order:
-        // 1. Name given on command line
-        // 2. Name from .shuttle/config.toml file
-        match (&project_args.name_or_id, &config.id) {
-            // Command-line name parameter trumps everything
+        // 1. Id given on command line
+        // 2. Id from .shuttle/config.toml file
+        match (&project_args.id, &config.id) {
+            // Command-line id parameter trumps everything
             (Some(id_from_args), _) => {
                 trace!("using command-line project id");
                 config.id = Some(id_from_args.clone());
@@ -159,7 +159,7 @@ impl RequestContext {
                 .as_ref()
                 .unwrap()
                 .manager
-                .working_directory
+                .directory
                 .join(".gitignore"),
         )
         .context("Failed to create .gitignore file")?;
@@ -167,13 +167,8 @@ impl RequestContext {
         Ok(())
     }
 
-    /// Load the project configuration at the given `working_directory`
-    ///
-    /// Ensures that if `--name` is not specified on the command-line, and either the project
-    /// file does not exist, or it has not set the `name` key then the `ProjectConfig` instance
-    /// has `ProjectConfig.name = Some("crate-name")`.
-    pub fn load_local(&mut self, project_args: &ProjectArgs) -> Result<()> {
-        // Shuttle.toml
+    /// Load the Shuttle.toml project configuration at the given `working_directory`
+    pub fn load_local_config(&mut self, project_args: &ProjectArgs) -> Result<()> {
         let project = Self::get_local_config(project_args)?;
 
         self.project = Some(project);
@@ -181,7 +176,7 @@ impl RequestContext {
         Ok(())
     }
 
-    pub fn get_local_config(
+    fn get_local_config(
         project_args: &ProjectArgs,
     ) -> Result<Config<LocalConfigManager, ProjectConfig>> {
         let workspace_path = project_args
@@ -209,7 +204,7 @@ impl RequestContext {
         // 2. Name from Shuttle.toml file
         // 3. Name from Cargo.toml package if it's a crate
         // 4. Name from the workspace directory if it's a workspace
-        match (&project_args.name_or_id, &config.name) {
+        match (&project_args.name, &config.name) {
             // Command-line name parameter trumps everything
             (Some(name_from_args), _) => {
                 trace!("using command-line project name");
@@ -260,17 +255,12 @@ impl RequestContext {
         }
     }
 
-    /// Get the current context working directory
+    /// Get the cargo workspace root directory
     ///
     /// # Panics
     /// Panics if project configuration has not been loaded.
-    pub fn working_directory(&self) -> &Path {
-        self.project
-            .as_ref()
-            .unwrap()
-            .manager
-            .working_directory
-            .as_path()
+    pub fn project_directory(&self) -> &Path {
+        self.project.as_ref().unwrap().manager.directory.as_path()
     }
 
     /// Set the API key to the global configuration. Will persist the file.
@@ -384,7 +374,8 @@ mod tests {
     fn get_local_config_finds_name_in_cargo_toml() {
         let project_args = ProjectArgs {
             working_directory: path_from_workspace_root("examples/axum/hello-world/"),
-            name_or_id: None,
+            name: None,
+            id: None,
         };
 
         let local_config = RequestContext::get_local_config(&project_args).unwrap();
@@ -396,7 +387,8 @@ mod tests {
     fn get_local_config_finds_name_from_workspace_dir() {
         let project_args = ProjectArgs {
             working_directory: path_from_workspace_root("examples/rocket/workspace/hello-world/"),
-            name_or_id: None,
+            name: None,
+            id: None,
         };
 
         let local_config = RequestContext::get_local_config(&project_args).unwrap();
@@ -408,7 +400,8 @@ mod tests {
     fn setting_name_overrides_name_in_config() {
         let project_args = ProjectArgs {
             working_directory: path_from_workspace_root("examples/axum/hello-world/"),
-            name_or_id: Some("my-fancy-project-name".to_owned()),
+            name: Some("my-fancy-project-name".to_owned()),
+            id: None,
         };
 
         let local_config = RequestContext::get_local_config(&project_args).unwrap();

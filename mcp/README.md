@@ -48,7 +48,7 @@ Add the following to your MCP client configuration:
 ```json
 {
   "mcpServers": {
-    "shuttle-tools": {
+    "shuttle": {
       "command": "shuttle-mcp"
     }
   }

@@ -4026,7 +4026,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-mcp"
-version = "0.1.1"
+version = "0.55.0"
 dependencies = [
  "reqwest",
  "rmcp",

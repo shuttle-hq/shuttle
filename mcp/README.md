@@ -4,12 +4,13 @@ A Model Context Protocol (MCP) server that provides comprehensive access to Shut
 
 ## Overview
 
-This MCP server transforms all Shuttle CLI commands into MCP tools, enabling AI assistants to interact with Shuttle's deployment platform programmatically. It supports all major Shuttle operations including deployments, project management, resource management, SSL certificates, authentication, and utilities.
+This MCP server transforms all Shuttle CLI commands into MCP tools, enabling AI assistants to interact with Shuttle's deployment platform programmatically. It supports all major Shuttle operations including deployments, project management, resource management, SSL certificates, authentication, documentation search, and utilities.
 
 ## Features
 
 ### Core Commands
 
+- **Documentation Search**: Search the Shuttle documentation
 - **Deployment**: Deploy projects with various options
 - **Deployment Management**: List, status, redeploy, and stop deployments
 - **Logging**: View build and deployment logs

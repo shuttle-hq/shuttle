@@ -1,6 +1,7 @@
 use crate::utils::execute_command;
 
 pub struct DeployParams {
+    pub image: Option<String>,
     pub allow_dirty: Option<bool>,
     pub output_archive: Option<String>,
     pub no_follow: Option<bool>,
@@ -51,6 +52,11 @@ pub struct DeploymentStopParams {
 
 pub async fn deploy(cwd: String, params: DeployParams) -> Result<String, String> {
     let mut args = vec!["deploy".to_string()];
+
+    if let Some(image) = params.image {
+        args.push("--image".to_string());
+        args.push(image);
+    }
 
     if params.allow_dirty.unwrap_or(false) {
         args.push("--allow-dirty".to_string());

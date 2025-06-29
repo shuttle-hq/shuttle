@@ -2,7 +2,7 @@ use crate::utils::execute_command;
 
 pub struct GenerateShellParams {
     pub shell: String,
-    pub output: Option<String>,
+    pub output_file: Option<String>,
     pub name: Option<String>,
     pub offline: Option<bool>,
     pub debug: Option<bool>,
@@ -21,9 +21,9 @@ pub async fn generate_shell(cwd: String, params: GenerateShellParams) -> Result<
 
     args.push(params.shell);
 
-    if let Some(output) = params.output {
-        args.push("--output".to_string());
-        args.push(output);
+    if let Some(output_file) = params.output_file {
+        args.push("--output-file".to_string());
+        args.push(output_file);
     }
 
     if params.offline.unwrap_or(false) {

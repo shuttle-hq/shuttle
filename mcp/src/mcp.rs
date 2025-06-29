@@ -20,6 +20,9 @@ impl ShuttleMcpServer {
         #[schemars(description = "Specify the working directory")]
         cwd: String,
         #[tool(param)]
+        #[schemars(description = "WIP: Deploy this Docker image instead of building one")]
+        image: Option<String>,
+        #[tool(param)]
         #[schemars(description = "Allow deployment with uncommitted files")]
         allow_dirty: Option<bool>,
         #[tool(param)]
@@ -55,6 +58,7 @@ impl ShuttleMcpServer {
             deploy(
                 cwd,
                 DeployParams {
+                    image,
                     allow_dirty,
                     output_archive,
                     no_follow,
@@ -262,8 +266,23 @@ impl ShuttleMcpServer {
         #[schemars(description = "View logs from the most recent deployment")]
         latest: Option<bool>,
         #[tool(param)]
+        #[schemars(description = "Follow log output")]
+        follow: Option<bool>,
+        #[tool(param)]
         #[schemars(description = "Don't display timestamps and log origin tags")]
         raw: Option<bool>,
+        #[tool(param)]
+        #[schemars(description = "View the first N log lines")]
+        head: Option<u32>,
+        #[tool(param)]
+        #[schemars(description = "View the last N log lines")]
+        tail: Option<u32>,
+        #[tool(param)]
+        #[schemars(description = "View all log lines")]
+        all: Option<bool>,
+        #[tool(param)]
+        #[schemars(description = "Get logs from all deployments instead of one deployment")]
+        all_deployments: Option<bool>,
         #[tool(param)]
         #[schemars(description = "Specify the name or id of the project")]
         name: Option<String>,
@@ -283,7 +302,12 @@ impl ShuttleMcpServer {
                 LogsParams {
                     id,
                     latest,
+                    follow,
                     raw,
+                    head,
+                    tail,
+                    all,
+                    all_deployments,
                     name,
                     offline,
                     debug,
@@ -758,7 +782,7 @@ impl ShuttleMcpServer {
         shell: String,
         #[tool(param)]
         #[schemars(description = "Output to a file (stdout by default)")]
-        output: Option<String>,
+        output_file: Option<String>,
         #[tool(param)]
         #[schemars(description = "Specify the name or id of the project")]
         name: Option<String>,
@@ -777,7 +801,7 @@ impl ShuttleMcpServer {
                 cwd,
                 GenerateShellParams {
                     shell,
-                    output,
+                    output_file,
                     name,
                     offline,
                     debug,

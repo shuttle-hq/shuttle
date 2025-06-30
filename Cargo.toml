@@ -92,5 +92,5 @@ walkdir = "2.3.3"
 webbrowser = "1.0.1"
 zeroize = "1.6.0"
 zip = "3"
-rmcp = "0.1.5"
+rmcp = { version = "0.1.5", features = ["server", "transport-io"] }
 urlencoding = "2.1.3"

@@ -5,6 +5,7 @@ use std::process::Stdio;
 use anyhow::{bail, Context, Result};
 use cargo_metadata::{Metadata, Package, Target};
 use shuttle_common::constants::RUNTIME_NAME;
+use shuttle_infra::find_user_main_fn;
 use tokio::io::AsyncBufReadExt;
 use tracing::{error, trace};
 
@@ -116,10 +117,12 @@ fn find_shuttle_packages(metadata: &Metadata) -> Result<Vec<(Package, Target)>> 
         let mut target = None;
         for t in member.targets.iter() {
             if t.is_bin()
-                && fs::read_to_string(t.src_path.as_std_path())
-                    .context("reading to check for shuttle macro")?
-                    // don't look for the last ] so that we also find instances of `#[shuttle_runtime::main(...)]`
-                    .contains("#[shuttle_runtime::main")
+                && find_user_main_fn(
+                    &fs::read_to_string(t.src_path.as_std_path())
+                        .context("reading to check for shuttle macro")?,
+                )
+                .context("parsing rust file when checking for shuttle macro")?
+                .is_some()
             {
                 target = Some(t);
                 break;
@@ -140,6 +143,7 @@ fn find_shuttle_packages(metadata: &Metadata) -> Result<Vec<(Package, Target)>> 
     Ok(packages)
 }
 
+/// Find first crate in workspace with a runtime dependency and main macro
 pub fn find_first_shuttle_package(metadata: &Metadata) -> Result<(Package, Target)> {
     find_shuttle_packages(metadata)?.into_iter().next().context(
         "Expected at least one target that Shuttle can build. \

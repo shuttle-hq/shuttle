@@ -7,6 +7,7 @@ members = [
   "cargo-shuttle",
   "codegen",
   "common",
+  "infra",
   "runtime",
   "service",
 ]
@@ -23,6 +24,7 @@ shuttle-api-client = { path = "api-client", version = "0.55.0", default-features
 shuttle-builder = { path = "builder", version = "0.55.0" }
 shuttle-codegen = { path = "codegen", version = "0.55.0" }
 shuttle-common = { path = "common", version = "0.55.0" }
+shuttle-infra = { path = "infra", version = "0.55.0" }
 shuttle-service = { path = "service", version = "0.55.0" }
 
 anyhow = "1.0.66"

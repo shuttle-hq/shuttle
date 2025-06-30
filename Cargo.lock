@@ -474,6 +474,7 @@ dependencies = [
  "shuttle-api-client",
  "shuttle-builder",
  "shuttle-common",
+ "shuttle-infra",
  "strum",
  "tempfile",
  "tokio",
@@ -3873,11 +3874,7 @@ dependencies = [
  "proc-macro-error2",
  "proc-macro2",
  "quote",
- "serde",
- "serde_json",
- "shuttle-common",
  "syn",
- "tokio",
  "trybuild",
 ]
 
@@ -3902,6 +3899,15 @@ dependencies = [
  "typeshare",
  "utoipa",
  "zeroize",
+]
+
+[[package]]
+name = "shuttle-infra"
+version = "0.55.0"
+dependencies = [
+ "proc-macro2",
+ "serde_json",
+ "syn",
 ]
 
 [[package]]

@@ -1,4 +1,4 @@
-use crate::{constants::SHUTTLE_DOCS_SEARCH_BASE_URL, utils::build_client};
+use crate::mcp::{constants::SHUTTLE_DOCS_SEARCH_BASE_URL, utils::build_client};
 
 pub async fn search_docs(query: String) -> Result<String, String> {
     let url = format!(

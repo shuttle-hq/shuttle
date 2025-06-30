@@ -1,6 +1,6 @@
 use serde::Deserialize;
 
-use crate::utils::build_client;
+use crate::mcp::utils::build_client;
 
 #[derive(Deserialize)]
 struct CratesIoResponse {

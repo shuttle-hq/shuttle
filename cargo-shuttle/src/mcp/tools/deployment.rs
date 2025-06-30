@@ -1,4 +1,4 @@
-use crate::utils::execute_command;
+use crate::mcp::utils::execute_command;
 
 pub struct DeployParams {
     pub image: Option<String>,

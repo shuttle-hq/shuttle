@@ -161,6 +161,7 @@ pub enum Command {
         #[arg(long)]
         preview: bool,
     },
+    Mcp,
 }
 
 #[derive(Subcommand)]

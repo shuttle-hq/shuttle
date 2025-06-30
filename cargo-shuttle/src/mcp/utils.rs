@@ -4,8 +4,8 @@ use reqwest::header::{HeaderMap, ORIGIN, USER_AGENT};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 
-use crate::constants::INSTALL_SHUTTLE_MCP_COMMAND;
-use crate::version::check_new_version;
+use crate::mcp::constants::INSTALL_SHUTTLE_MCP_COMMAND;
+use crate::mcp::version::check_new_version;
 
 pub async fn execute_command(
     command: &str,

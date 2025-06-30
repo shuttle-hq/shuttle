@@ -1,8 +1,8 @@
-use crate::tools::{
+use crate::mcp::tools::{
     account::*, certificate::*, deployment::*, docs::*, feedback::*, generate::*, logs::*,
     project::*, resource::*, upgrade::*,
 };
-use crate::utils::run_tool;
+use crate::mcp::utils::run_tool;
 use rmcp::{
     model::{ServerCapabilities, ServerInfo},
     tool, ServerHandler,

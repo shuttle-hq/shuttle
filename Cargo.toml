@@ -6,7 +6,6 @@ members = [
   "cargo-shuttle",
   "codegen",
   "common",
-  "mcp",
   "runtime",
   "service",
 ]

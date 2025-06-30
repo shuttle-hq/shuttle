@@ -23,6 +23,7 @@ shuttle-api-client = { path = "api-client", version = "0.55.0", default-features
 shuttle-codegen = { path = "codegen", version = "0.55.0" }
 shuttle-common = { path = "common", version = "0.55.0" }
 shuttle-service = { path = "service", version = "0.55.0" }
+shuttle-mcp = { path = "mcp", version = "0.55.0" }
 
 anyhow = "1.0.66"
 assert_cmd = "2.0.6"

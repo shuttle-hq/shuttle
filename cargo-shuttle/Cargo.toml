@@ -65,8 +65,7 @@ url = { workspace = true }
 walkdir = { workspace = true }
 webbrowser = { workspace = true }
 zip = { workspace = true }
-rmcp = { workspace = true }
-urlencoding = { workspace = true }
+shuttle-mcp = { workspace = true }
 
 [dev-dependencies]
 assert_cmd = { workspace = true }

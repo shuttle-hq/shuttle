@@ -2,7 +2,6 @@ mod args;
 pub mod builder;
 pub mod config;
 mod init;
-mod mcp;
 mod provisioner_server;
 mod util;
 
@@ -28,8 +27,6 @@ use ignore::WalkBuilder;
 use indicatif::ProgressBar;
 use indoc::formatdoc;
 use reqwest::header::HeaderMap;
-use rmcp::transport::stdio;
-use rmcp::ServiceExt;
 use shuttle_api_client::ShuttleApiClient;
 use shuttle_common::{
     constants::{
@@ -68,7 +65,6 @@ use crate::builder::{
     async_cargo_metadata, build_workspace, find_first_shuttle_package, BuiltService,
 };
 use crate::config::RequestContext;
-use crate::mcp::mcp::ShuttleMcpServer;
 use crate::provisioner_server::{ProvApiState, ProvisionerServer};
 use crate::util::{
     bacon, check_and_warn_runtime_version, generate_completions, generate_manpage,
@@ -304,11 +300,7 @@ impl Shuttle {
                 ProjectCommand::Link => Ok(()), // logic is done in `load_project` in previous step
             },
             Command::Upgrade { preview } => update_cargo_shuttle(preview).await,
-            Command::Mcp => {
-                let service = ShuttleMcpServer.serve(stdio()).await?;
-                service.waiting().await?;
-                Ok(())
-            }
+            Command::Mcp => shuttle_mcp::run_mcp_server().await,
         }
     }
 

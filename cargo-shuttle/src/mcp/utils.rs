@@ -4,7 +4,7 @@ use reqwest::header::{HeaderMap, ORIGIN, USER_AGENT};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 
-use crate::mcp::constants::INSTALL_SHUTTLE_MCP_COMMAND;
+use crate::mcp::constants::UPGRADE_SHUTTLE_MCP_COMMAND;
 use crate::mcp::version::check_new_version;
 
 pub async fn execute_command(
@@ -69,7 +69,7 @@ where
     if has_new_version {
         return Ok(format!(
             "A new version of the MCP server is available. Please upgrade to the latest version by running the following command:\n\n{}",
-            INSTALL_SHUTTLE_MCP_COMMAND
+            UPGRADE_SHUTTLE_MCP_COMMAND
         ));
     }
 

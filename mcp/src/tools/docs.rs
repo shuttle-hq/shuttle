@@ -1,5 +1,4 @@
-use crate::constants::SHUTTLE_DOCS_SEARCH_BASE_URL;
-use reqwest::header::{HeaderMap, ORIGIN};
+use crate::{constants::SHUTTLE_DOCS_SEARCH_BASE_URL, utils::build_client};
 
 pub async fn search_docs(query: String) -> Result<String, String> {
     let url = format!(
@@ -7,13 +6,7 @@ pub async fn search_docs(query: String) -> Result<String, String> {
         urlencoding::encode(&query)
     );
 
-    let mut headers = HeaderMap::new();
-    headers.insert(ORIGIN, "Shuttle MCP".parse().unwrap());
-
-    let client = reqwest::Client::builder()
-        .default_headers(headers)
-        .build()
-        .map_err(|e| format!("Failed to build client: {}", e))?;
+    let client = build_client()?;
 
     let response = client
         .get(&url)

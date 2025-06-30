@@ -1,5 +1,6 @@
 use std::future::Future;
 
+use reqwest::header::{HeaderMap, ORIGIN, USER_AGENT};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 
@@ -58,7 +59,7 @@ pub async fn execute_command(
     }
 }
 
-pub async fn run_tool<T, F>(func: T) -> Result<String, String>
+pub async fn run_tool<T, F>(tool: T) -> Result<String, String>
 where
     T: FnOnce() -> F,
     F: Future<Output = Result<String, String>>,
@@ -66,13 +67,22 @@ where
     let has_new_version = check_new_version().await.map_err(|e| e.to_string())?;
 
     if has_new_version {
-        return Ok(
-            format!(
-                "A new version of the MCP server is available. Please upgrade to the latest version by running the following command:\n\n{}",
-                INSTALL_SHUTTLE_MCP_COMMAND
-            )
-        );
+        return Ok(format!(
+            "A new version of the MCP server is available. Please upgrade to the latest version by running the following command:\n\n{}",
+            INSTALL_SHUTTLE_MCP_COMMAND
+        ));
     }
 
-    func().await
+    tool().await
+}
+
+pub fn build_client() -> Result<reqwest::Client, String> {
+    let mut headers = HeaderMap::new();
+    headers.insert(ORIGIN, "Shuttle MCP".parse().unwrap());
+    headers.insert(USER_AGENT, "Shuttle MCP".parse().unwrap());
+
+    reqwest::Client::builder()
+        .default_headers(headers)
+        .build()
+        .map_err(|e| format!("Failed to build client: {}", e))
 }

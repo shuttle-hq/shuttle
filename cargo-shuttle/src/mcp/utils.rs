@@ -4,9 +4,6 @@ use reqwest::header::{HeaderMap, ORIGIN, USER_AGENT};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 
-use crate::mcp::constants::UPGRADE_SHUTTLE_MCP_COMMAND;
-use crate::mcp::version::check_new_version;
-
 pub async fn execute_command(
     command: &str,
     args: Vec<String>,
@@ -64,15 +61,8 @@ where
     T: FnOnce() -> F,
     F: Future<Output = Result<String, String>>,
 {
-    let has_new_version = check_new_version().await.map_err(|e| e.to_string())?;
-
-    if has_new_version {
-        return Ok(format!(
-            "A new version of the MCP server is available. Please upgrade to the latest version by running the following command:\n\n{}",
-            UPGRADE_SHUTTLE_MCP_COMMAND
-        ));
-    }
-
+    // Run checks (if any) before running the tool
+    // Used to do version checks but now removed.
     tool().await
 }
 

@@ -54,7 +54,7 @@ use strum::{EnumMessage, VariantArray};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::time::{sleep, Duration};
 use tokio_tungstenite::tungstenite::Message;
-use tracing::{debug, error, info, trace};
+use tracing::{debug, error, info, trace, warn};
 use tracing_subscriber::{fmt, prelude::*, registry, EnvFilter};
 use util::cargo_green_eprintln;
 use zip::write::FileOptions;
@@ -649,6 +649,8 @@ impl Shuttle {
         }
     }
 
+    /// Ensures a project id is known, either by explicit --id/--name args or config file(s)
+    /// or by asking user to link the project folder.
     pub async fn load_project(
         &mut self,
         project_args: &ProjectArgs,
@@ -658,30 +660,37 @@ impl Shuttle {
         trace!("project arguments: {project_args:?}");
 
         self.ctx.load_local_config(project_args)?;
-        // load project id from file if exists
+        // load project id from args if given or from file if exists
         self.ctx.load_local_internal_config(project_args)?;
 
         if let Some(id) = project_args.id.as_ref() {
-            // ensure ULID part is uppercase
-            if let Some(suffix) = id.strip_prefix("proj_") {
-                // Soft (dumb) validation of ULID format in the id (ULIDs are 26 chars)
-                if suffix.len() == 26 {
-                    let proj_id_uppercase = format!("proj_{}", suffix.to_ascii_uppercase());
-                    if *id != proj_id_uppercase {
-                        eprintln!("INFO: Converted project id to '{}'", proj_id_uppercase);
-                        self.ctx.set_project_id(proj_id_uppercase);
-                    }
+            // Validate format of explicitly given project id and change the ULID to uppercase if it is lowercase
+            if let Some(proj_id_uppercase) = id.strip_prefix("proj_").and_then(|suffix| {
+                // Soft (dumb) validation of ULID format (ULIDs are 26 chars)
+                (suffix.len() == 26).then_some(format!("proj_{}", suffix.to_ascii_uppercase()))
+            }) {
+                if *id != proj_id_uppercase {
+                    eprintln!("INFO: Converted project id to '{}'", proj_id_uppercase);
+                    self.ctx.set_project_id(proj_id_uppercase);
                 }
+            } else {
+                // TODO: eprintln a warning?
+                warn!("project id with bad format detected: '{id}'");
             }
-            // if linking, save and return
+
+            // if linking, save config
             if do_linking {
                 eprintln!("Linking to project {}", self.ctx.project_id());
                 self.ctx.save_local_internal()?;
-                return Ok(());
             }
         }
+        if self.ctx.project_id_found() {
+            // --id takes prio over --name, and at this point we know the id, so we're done
+            return Ok(());
+        }
+
+        // translate project name to project id if a name was given
         if let Some(name) = project_args.name.as_ref() {
-            // translate project name to project id if a name was given
             let client = self.client.as_ref().unwrap();
             trace!(%name, "looking up project id from project name");
             if let Some(proj) = client
@@ -704,16 +713,33 @@ impl Shuttle {
                     self.ctx.set_project_id(proj.id);
                 }
             }
-            // if linking and project id known at this point, save and return
-            if do_linking && self.ctx.project_id_found() {
+        }
+
+        match (self.ctx.project_id_found(), do_linking) {
+            // if project id is known and we are linking, save config
+            (true, true) => {
                 eprintln!("Linking to project {}", self.ctx.project_id());
                 self.ctx.save_local_internal()?;
-                return Ok(());
             }
-        }
-        // if project id is still not known or an explicit linking is wanted, start the linking prompt
-        if !self.ctx.project_id_found() || do_linking {
-            self.project_link_interactive().await?;
+            // if project id is known, we are done and nothing more to do
+            (true, false) => (),
+            // we still don't know the project id but want to link
+            (false, true) => {
+                self.project_link_interactive().await?;
+            }
+            // we still don't know the project id
+            (false, false) => {
+                // if a name was given but no project was found, (incorrectly) set the id to the name so that an api error will be encountered
+                // TODO: return an error here instead of letting an api error happen?
+                if let Some(name) = project_args.name.as_ref() {
+                    warn!("using project name as the id");
+                    self.ctx.set_project_id(name.clone());
+                } else {
+                    // otherwise, we have to do an explicit linking
+                    trace!("no project id found");
+                    self.project_link_interactive().await?;
+                }
+            }
         }
 
         Ok(())

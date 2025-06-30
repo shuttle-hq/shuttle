@@ -220,6 +220,7 @@ impl RequestContext {
                 config.name = Some(project_args.project_name()?);
             }
         };
+        // now, `config.name` is always Some
 
         Ok(project)
     }

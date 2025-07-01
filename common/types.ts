@@ -156,6 +156,7 @@ export enum ComputeTier {
 
 export interface InfraRequest {
 	instance_size?: ComputeTier;
+	replicas?: number;
 }
 
 export interface DeploymentRequestBuildArchive {

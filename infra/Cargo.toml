@@ -8,12 +8,7 @@ description = "Infra from Code parser for the Shuttle platform (shuttle.dev)"
 homepage = "https://www.shuttle.dev"
 
 [dependencies]
-proc-macro2 = { workspace = true }
-serde_json = { workspace = true }
-syn = { workspace = true, features = ["full", "extra-traits"] }
+shuttle-common = { workspace = true, features = ["models"] }
 
-# [dev-dependencies]
-# pretty_assertions = { workspace = true }
-# serde = { workspace = true }
-# trybuild = { workspace = true }
-# tokio = { workspace = true, features = ["full"] }
+proc-macro2 = { workspace = true }
+syn = { workspace = true, features = ["full", "extra-traits"] }

@@ -49,7 +49,7 @@ use shuttle_common::{
     },
     tables::{deployments_table, get_certificates_table, get_projects_table, get_resource_tables},
 };
-use shuttle_infra::parse_infra;
+use shuttle_infra::parse_infra_from_code;
 use strum::{EnumMessage, VariantArray};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::time::{sleep, Duration};
@@ -1818,13 +1818,11 @@ impl Shuttle {
         // TODO: de-dupe metadata call
         let metadata = async_cargo_metadata(manifest_path.as_path()).await?;
         let (_package, target) = find_first_shuttle_package(&metadata)?;
-        deployment_req.infra = Some(
-            parse_infra(
-                &fs::read_to_string(target.src_path.as_path())
-                    .context("reading target file when extracting infra annotations")?,
-            )
-            .context("parsing infra annotations")?,
-        );
+        deployment_req.infra = parse_infra_from_code(
+            &fs::read_to_string(target.src_path.as_path())
+                .context("reading target file when extracting infra annotations")?,
+        )
+        .context("parsing infra annotations")?;
 
         if let Ok(repo) = Repository::discover(project_directory) {
             let repo_path = repo

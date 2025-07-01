@@ -145,6 +145,19 @@ export interface DeploymentListResponse {
 export type BuildArgs = 
 	| { type: "Rust", content: BuildArgsRust };
 
+export enum ComputeTier {
+	XS = "xs",
+	S = "s",
+	M = "m",
+	L = "l",
+	XL = "xl",
+	XXL = "xxl",
+}
+
+export interface InfraRequest {
+	instance_size?: ComputeTier;
+}
+
 export interface DeploymentRequestBuildArchive {
 	/** The S3 object version ID of the archive to use */
 	archive_version_id: string;
@@ -155,7 +168,7 @@ export interface DeploymentRequestBuildArchive {
 	 */
 	secrets?: Record<string, string>;
 	build_meta?: BuildMeta;
-	infra?: any;
+	infra?: InfraRequest;
 }
 
 export interface DeploymentRequestImage {
@@ -188,15 +201,6 @@ export interface LogsResponse {
 
 export interface ProjectCreateRequest {
 	name: string;
-}
-
-export enum ComputeTier {
-	XS = "xs",
-	S = "s",
-	M = "m",
-	L = "l",
-	XL = "xl",
-	XXL = "xxl",
 }
 
 export interface ProjectResponse {

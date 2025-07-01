@@ -1,11 +1,11 @@
 use proc_macro::TokenStream;
-use proc_macro2::Span;
 use proc_macro_error2::emit_error;
 use quote::{quote, ToTokens};
+use shuttle_infra::InfraAttrParser;
 use syn::{
-    parse::Parse, parse_macro_input, parse_quote, punctuated::Punctuated, spanned::Spanned,
-    Attribute, Expr, ExprLit, FnArg, Ident, ItemFn, Lit, Pat, PatIdent, Path, ReturnType,
-    Signature, Stmt, Token, Type, TypePath,
+    meta::parser, parse::Parse, parse_macro_input, parse_quote, punctuated::Punctuated,
+    spanned::Spanned, Attribute, Expr, ExprLit, FnArg, Ident, ItemFn, Lit, Pat, PatIdent, Path,
+    ReturnType, Signature, Stmt, Token, Type, TypePath,
 };
 
 /// Entrypoint for the `#[shuttle_runtime::main]` attribute macro.
@@ -28,14 +28,14 @@ use syn::{
 /// * `attr` - The TokenStream representing the attribute arguments
 /// * `item` - The TokenStream representing the annotated function
 ///
-pub(crate) fn tokens(_attr: TokenStream, item: TokenStream) -> TokenStream {
+pub(crate) fn tokens(attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut user_main_fn = parse_macro_input!(item as ItemFn);
     let loader_runner = LoaderAndRunner::from_item_fn(&mut user_main_fn);
 
-    // take away the #[shuttle_infra(...)] attribute since it is not used by runtime
-    user_main_fn
-        .attrs
-        .retain(|attr| !attr.path().is_ident("shuttle_infra"));
+    // parse infra in main attribute
+    let mut infra_parser = InfraAttrParser::default();
+    let meta_parser = parser(|meta| infra_parser.parse_nested_meta(meta));
+    parse_macro_input!(attr with meta_parser);
 
     Into::into(quote! {
         fn main() {
@@ -126,9 +126,10 @@ impl LoaderAndRunner {
         // prefix the function name to allow any name, such as 'main'
         item_fn.sig.ident = Ident::new(
             &format!("__shuttle_{}", item_fn.sig.ident),
-            Span::call_site(),
+            item_fn.sig.ident.span(),
         );
 
+        // parse builders from function arguments
         let inputs: Vec<_> = item_fn
             .sig
             .inputs

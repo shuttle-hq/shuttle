@@ -403,6 +403,7 @@ workflows:
               crate:
                 - shuttle-codegen
                 - shuttle-common
+                - shuttle-infra
       - test-workspace-member-with-integration:
           name: << matrix.crate >>
           matrix:
@@ -495,7 +496,6 @@ workflows:
           matrix:
             parameters:
               path:
-                - codegen
                 - common
           name: publish-<< matrix.path >>
           requires:
@@ -510,10 +510,24 @@ workflows:
             parameters:
               path:
                 - api-client
+                - infra
                 - service
           name: publish-<< matrix.path >>
           requires:
             - publish-common
+          filters:
+            branches:
+              ignore: /.*/
+            tags:
+              only: /v[\d\.]+/
+      - publish-crate:
+          matrix:
+            parameters:
+              path:
+                - codegen
+          name: publish-<< matrix.path >>
+          requires:
+            - publish-infra
           filters:
             branches:
               ignore: /.*/
@@ -546,6 +560,7 @@ workflows:
           name: publish-<< matrix.path >>
           requires:
             - publish-api-client
+            - publish-codegen
             - publish-service
           filters:
             branches:

@@ -9,8 +9,6 @@ pub struct DeployParams {
 pub struct DeploymentListParams {
     pub page: Option<u32>,
     pub limit: Option<u32>,
-    pub name: Option<String>,
-    pub id: Option<String>,
 }
 
 pub struct DeploymentStatusParams {
@@ -50,16 +48,6 @@ pub async fn deployment_list(cwd: String, params: DeploymentListParams) -> Resul
     if let Some(limit) = params.limit {
         args.push("--limit".to_string());
         args.push(limit.to_string());
-    }
-
-    if let Some(name) = params.name {
-        args.push("--name".to_string());
-        args.push(name);
-    }
-
-    if let Some(id) = params.id {
-        args.push("--id".to_string());
-        args.push(id);
     }
 
     execute_command("shuttle", args, &cwd).await

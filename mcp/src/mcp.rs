@@ -42,26 +42,9 @@ impl ShuttleMcpServer {
         #[tool(param)]
         #[schemars(description = "How many deployments per page to display")]
         limit: Option<u32>,
-        #[tool(param)]
-        #[schemars(description = "Specify the name of the project")]
-        name: Option<String>,
-        #[tool(param)]
-        #[schemars(description = "Specify the id of the project")]
-        id: Option<String>,
     ) -> Result<String, String> {
-        run_tool(|| async {
-            deployment_list(
-                cwd,
-                DeploymentListParams {
-                    page,
-                    limit,
-                    name,
-                    id,
-                },
-            )
+        run_tool(|| async { deployment_list(cwd, DeploymentListParams { page, limit }).await })
             .await
-        })
-        .await
     }
 
     #[tool(description = "View status of a deployment")]

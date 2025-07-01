@@ -161,7 +161,15 @@ pub enum Command {
         #[arg(long)]
         preview: bool,
     },
-    Mcp,
+    /// Commands for the Shuttle MCP server
+    #[command(subcommand)]
+    Mcp(McpCommand),
+}
+
+#[derive(Subcommand)]
+pub enum McpCommand {
+    /// Start the Shuttle MCP server
+    Start,
 }
 
 #[derive(Subcommand)]

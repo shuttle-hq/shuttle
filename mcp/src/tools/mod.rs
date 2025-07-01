@@ -1,10 +1,4 @@
-pub mod account;
-pub mod certificate;
 pub mod deployment;
 pub mod docs;
-pub mod feedback;
-pub mod generate;
 pub mod logs;
 pub mod project;
-pub mod resource;
-pub mod upgrade;

@@ -3,12 +3,14 @@ use crate::utils::execute_command;
 pub struct DeployParams {
     pub secrets: Option<String>,
     pub name: Option<String>,
+    pub id: Option<String>,
 }
 
 pub struct DeploymentListParams {
     pub page: Option<u32>,
     pub limit: Option<u32>,
     pub name: Option<String>,
+    pub id: Option<String>,
 }
 
 pub struct DeploymentStatusParams {
@@ -27,6 +29,11 @@ pub async fn deploy(cwd: String, params: DeployParams) -> Result<String, String>
     if let Some(name) = params.name {
         args.push("--name".to_string());
         args.push(name);
+    }
+
+    if let Some(id) = params.id {
+        args.push("--id".to_string());
+        args.push(id);
     }
 
     execute_command("shuttle", args, &cwd).await
@@ -48,6 +55,11 @@ pub async fn deployment_list(cwd: String, params: DeploymentListParams) -> Resul
     if let Some(name) = params.name {
         args.push("--name".to_string());
         args.push(name);
+    }
+
+    if let Some(id) = params.id {
+        args.push("--id".to_string());
+        args.push(id);
     }
 
     execute_command("shuttle", args, &cwd).await

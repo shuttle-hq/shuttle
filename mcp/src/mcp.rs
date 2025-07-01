@@ -21,10 +21,13 @@ impl ShuttleMcpServer {
         #[schemars(description = "Use this secrets file instead")]
         secrets: Option<String>,
         #[tool(param)]
-        #[schemars(description = "Specify the name or id of the project")]
+        #[schemars(description = "Specify the name of the project")]
         name: Option<String>,
+        #[tool(param)]
+        #[schemars(description = "Specify the id of the project")]
+        id: Option<String>,
     ) -> Result<String, String> {
-        run_tool(|| async { deploy(cwd, DeployParams { secrets, name }).await }).await
+        run_tool(|| async { deploy(cwd, DeployParams { secrets, name, id }).await }).await
     }
 
     #[tool(description = "List the deployments for a service")]
@@ -40,11 +43,23 @@ impl ShuttleMcpServer {
         #[schemars(description = "How many deployments per page to display")]
         limit: Option<u32>,
         #[tool(param)]
-        #[schemars(description = "Specify the name or id of the project")]
+        #[schemars(description = "Specify the name of the project")]
         name: Option<String>,
+        #[tool(param)]
+        #[schemars(description = "Specify the id of the project")]
+        id: Option<String>,
     ) -> Result<String, String> {
         run_tool(|| async {
-            deployment_list(cwd, DeploymentListParams { page, limit, name }).await
+            deployment_list(
+                cwd,
+                DeploymentListParams {
+                    page,
+                    limit,
+                    name,
+                    id,
+                },
+            )
+            .await
         })
         .await
     }
@@ -94,10 +109,13 @@ impl ShuttleMcpServer {
         #[schemars(description = "Specify the working directory")]
         cwd: String,
         #[tool(param)]
-        #[schemars(description = "Specify the name or id of the project")]
+        #[schemars(description = "Specify the name of the project")]
         name: Option<String>,
+        #[tool(param)]
+        #[schemars(description = "Specify the id of the project")]
+        id: Option<String>,
     ) -> Result<String, String> {
-        run_tool(|| async { project_status(cwd, ProjectStatusParams { name }).await }).await
+        run_tool(|| async { project_status(cwd, ProjectStatusParams { name, id }).await }).await
     }
 
     #[tool(description = "List all projects you have access to")]
@@ -106,11 +124,8 @@ impl ShuttleMcpServer {
         #[tool(param)]
         #[schemars(description = "Specify the working directory")]
         cwd: String,
-        #[tool(param)]
-        #[schemars(description = "Specify the name or id of the project")]
-        name: Option<String>,
     ) -> Result<String, String> {
-        run_tool(|| async { project_list(cwd, ProjectListParams { name }).await }).await
+        run_tool(|| async { project_list(cwd, ProjectListParams {}).await }).await
     }
 
     #[tool(description = "Search Shuttle documentation")]

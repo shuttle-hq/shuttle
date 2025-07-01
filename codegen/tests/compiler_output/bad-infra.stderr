@@ -1,0 +1,13 @@
+error: Invalid macro attribute key: 'something'
+ --> tests/compiler_output/bad-infra.rs:1:1
+  |
+1 | #[shuttle_codegen::main(something = "not right")]
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: this error originates in the attribute macro `shuttle_codegen::main` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0601]: `main` function not found in crate `$CRATE`
+ --> tests/compiler_output/bad-infra.rs:2:41
+  |
+2 | async fn bad_infra() -> ShuttleRocket {}
+  |                                         ^ consider adding a `main` function to `$DIR/tests/compiler_output/bad-infra.rs`

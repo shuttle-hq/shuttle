@@ -11,6 +11,8 @@ homepage = "https://www.shuttle.dev"
 proc-macro = true
 
 [dependencies]
+shuttle-infra = { workspace = true }
+
 proc-macro-error2 = { workspace = true }
 proc-macro2 = { workspace = true }
 quote = { workspace = true }

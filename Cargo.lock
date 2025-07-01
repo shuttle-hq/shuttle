@@ -3813,6 +3813,7 @@ dependencies = [
  "proc-macro-error2",
  "proc-macro2",
  "quote",
+ "shuttle-infra",
  "syn",
  "trybuild",
 ]
@@ -3845,7 +3846,7 @@ name = "shuttle-infra"
 version = "0.55.0"
 dependencies = [
  "proc-macro2",
- "serde_json",
+ "shuttle-common",
  "syn",
 ]
 

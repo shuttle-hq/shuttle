@@ -7,5 +7,5 @@ use super::project::ComputeTier;
 #[typeshare::typeshare]
 pub struct InfraRequest {
     pub instance_size: Option<ComputeTier>,
-    // pub replicas: Option<u8>,
+    pub replicas: Option<u8>,
 }

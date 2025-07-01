@@ -112,7 +112,8 @@ mod tests {
         assert_eq!(
             parse_infra_from_meta(&attr.meta).unwrap().unwrap(),
             InfraRequest {
-                instance_size: Some(ComputeTier::M)
+                instance_size: Some(ComputeTier::M),
+                ..Default::default()
             }
         );
 
@@ -192,6 +193,7 @@ mod tests {
             parse_infra_from_code(rust).unwrap().unwrap(),
             InfraRequest {
                 instance_size: Some(ComputeTier::M),
+                ..Default::default()
             }
         );
 

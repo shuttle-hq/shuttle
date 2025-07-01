@@ -5,7 +5,7 @@ use std::process::Stdio;
 use anyhow::{bail, Context, Result};
 use cargo_metadata::{Metadata, Package, Target};
 use shuttle_common::constants::RUNTIME_NAME;
-use shuttle_infra::find_user_main_fn;
+use shuttle_infra::find_runtime_main_fn;
 use tokio::io::AsyncBufReadExt;
 use tracing::{error, trace};
 
@@ -117,7 +117,7 @@ fn find_shuttle_packages(metadata: &Metadata) -> Result<Vec<(Package, Target)>> 
         let mut target = None;
         for t in member.targets.iter() {
             if t.is_bin()
-                && find_user_main_fn(
+                && find_runtime_main_fn(
                     &fs::read_to_string(t.src_path.as_std_path())
                         .context("reading to check for shuttle macro")?,
                 )

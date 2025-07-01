@@ -1624,7 +1624,7 @@ impl Shuttle {
         // TODO: have all of the above be configurable in CLI and Shuttle.toml
 
         deployment_req.infra = parse_infra_from_code(
-            &fs::read_to_string(target.src_path.as_path())
+            &read_to_string(target.src_path.as_path())
                 .context("reading target file when extracting infra annotations")?,
         )
         .context("parsing infra annotations")?;

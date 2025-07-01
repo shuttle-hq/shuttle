@@ -15,8 +15,7 @@ pub fn parse_infra_from_code(rust_source_code: &str) -> Result<Option<InfraReque
         return Err(syn::Error::new(
             Span::call_site(),
             "No function using #[shuttle_runtime::main] found",
-        )
-        .into());
+        ));
     };
 
     // TODO: also parse function argument attributes (resources) and add to IR (re-use parsing code from codegen)

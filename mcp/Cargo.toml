@@ -6,9 +6,9 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-rmcp = { workspace = true, features = ["server", "transport-io"] }
-tokio = { workspace = true, features = ["full"] }
-serde = { workspace = true }
-reqwest = { workspace = true, features = ["json"] }
-urlencoding = { workspace = true }
 anyhow = { workspace = true }
+reqwest = { workspace = true, features = ["json"] }
+rmcp = { workspace = true, features = ["server", "transport-io"] }
+serde = { workspace = true }
+tokio = { workspace = true, features = ["full"] }
+urlencoding = { workspace = true }

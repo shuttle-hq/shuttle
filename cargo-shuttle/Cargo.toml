@@ -11,6 +11,7 @@ default-run = "shuttle"
 [dependencies]
 shuttle-api-client = { workspace = true, default-features = true }
 shuttle-common = { workspace = true, features = ["models", "tables", "config"] }
+shuttle-mcp = { workspace = true }
 
 anyhow = { workspace = true }
 async-trait = { workspace = true }
@@ -65,7 +66,6 @@ url = { workspace = true }
 walkdir = { workspace = true }
 webbrowser = { workspace = true }
 zip = { workspace = true }
-shuttle-mcp = { workspace = true }
 
 [dev-dependencies]
 assert_cmd = { workspace = true }

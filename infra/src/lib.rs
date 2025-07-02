@@ -197,6 +197,30 @@ mod tests {
         );
 
         let rust = r#"
+        #[shuttle_runtime::main { instance_size = "xxl" }      ]
+        async fn main() -> ShuttleAxum {}
+        "#;
+        assert_eq!(
+            parse_infra_from_code(rust).unwrap().unwrap(),
+            InfraRequest {
+                instance_size: Some(ComputeTier::XXL),
+                ..Default::default()
+            }
+        );
+
+        let rust = r#"
+        #[shuttle_runtime::main[instance_size = "xs"]]
+        async fn main() -> ShuttleAxum {}
+        "#;
+        assert_eq!(
+            parse_infra_from_code(rust).unwrap().unwrap(),
+            InfraRequest {
+                instance_size: Some(ComputeTier::XS),
+                ..Default::default()
+            }
+        );
+
+        let rust = r#"
         #[shuttle_runtime::main(instance_size = 500000)]
         async fn main() -> ShuttleAxum {}
         "#;

@@ -247,23 +247,15 @@ async fn gc(
     let mut any_error = false;
     for pid in project_ids {
         println!("{pid}");
-        let call = if send_email {
-            client
-                .stop_gc_inactive_project(&pid)
-                .await
-                .map(|r| r.into_inner())
-        } else {
-            client
-                .inner
-                .stop_service(&pid)
-                .await
-                .map(|r| r.into_inner())
-        };
         println!(
             "  {:?}",
-            call.inspect_err(|_| {
-                any_error = true;
-            })
+            client
+                .stop_gc_inactive_project(&pid, send_email)
+                .await
+                .map(|r| r.into_inner())
+                .inspect_err(|_| {
+                    any_error = true;
+                })
         );
         // prevent api rate limiting
         tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;

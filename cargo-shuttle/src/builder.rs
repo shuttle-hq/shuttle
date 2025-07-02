@@ -4,7 +4,7 @@ use std::process::Stdio;
 
 use anyhow::{bail, Context, Result};
 use cargo_metadata::{Metadata, Package, Target};
-use shuttle_common::constants::RUNTIME_NAME;
+use shuttle_ifc::find_runtime_main_fn;
 use tokio::io::AsyncBufReadExt;
 use tracing::{error, trace};
 
@@ -56,7 +56,7 @@ pub async fn build_workspace(
     notification.abort();
 
     let metadata = async_cargo_metadata(manifest_path.as_path()).await?;
-    let (package, target) = find_first_shuttle_package(&metadata)?;
+    let (package, target, _) = find_first_shuttle_package(&metadata)?;
 
     let service = cargo_build(
         package,
@@ -100,26 +100,34 @@ pub async fn async_cargo_metadata(manifest_path: &Path) -> Result<Metadata> {
 }
 
 /// Find crates with a runtime dependency and main macro
-fn find_shuttle_packages(metadata: &Metadata) -> Result<Vec<(Package, Target)>> {
+fn find_shuttle_packages(metadata: &Metadata) -> Result<Vec<(Package, Target, Option<String>)>> {
     let mut packages = Vec::new();
     trace!("Finding Shuttle-related packages");
     for member in metadata.workspace_packages() {
-        let has_runtime_dep = member
+        let runtime_dep = member
             .dependencies
             .iter()
-            .any(|dependency| dependency.name == RUNTIME_NAME);
-        if !has_runtime_dep {
+            .find(|dependency| dependency.name == "shuttle-runtime");
+        let Some(runtime_dep) = runtime_dep else {
             trace!("Skipping {}, no shuttle-runtime dependency", member.name);
             continue;
-        }
+        };
+        let runtime_version = runtime_dep
+            .req
+            .comparators
+            .first()
+            // is "^0.X.0" when `shuttle-runtime = "0.X.0"` is in Cargo.toml, so strip the caret
+            .and_then(|c| c.to_string().strip_prefix('^').map(ToOwned::to_owned));
 
         let mut target = None;
         for t in member.targets.iter() {
             if t.is_bin()
-                && fs::read_to_string(t.src_path.as_std_path())
-                    .context("reading to check for shuttle macro")?
-                    // don't look for the last ] so that we also find instances of `#[shuttle_runtime::main(...)]`
-                    .contains("#[shuttle_runtime::main")
+                && find_runtime_main_fn(
+                    &fs::read_to_string(t.src_path.as_std_path())
+                        .context("reading to check for shuttle macro")?,
+                )
+                .context("parsing rust file when checking for shuttle macro")?
+                .is_some()
             {
                 target = Some(t);
                 break;
@@ -134,13 +142,16 @@ fn find_shuttle_packages(metadata: &Metadata) -> Result<Vec<(Package, Target)>> 
         };
 
         trace!("Found {}", member.name);
-        packages.push((member.to_owned(), target.to_owned()));
+        packages.push((member.to_owned(), target.to_owned(), runtime_version));
     }
 
     Ok(packages)
 }
 
-pub fn find_first_shuttle_package(metadata: &Metadata) -> Result<(Package, Target)> {
+/// Find first crate in workspace with a runtime dependency and main macro
+pub fn find_first_shuttle_package(
+    metadata: &Metadata,
+) -> Result<(Package, Target, Option<String>)> {
     find_shuttle_packages(metadata)?.into_iter().next().context(
         "Expected at least one target that Shuttle can build. \
         Make sure your crate has a binary target that uses a fully qualified `#[shuttle_runtime::main]`.",

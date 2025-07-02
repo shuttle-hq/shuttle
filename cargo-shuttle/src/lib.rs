@@ -30,8 +30,8 @@ use reqwest::header::HeaderMap;
 use shuttle_api_client::ShuttleApiClient;
 use shuttle_common::{
     constants::{
-        headers::X_CARGO_SHUTTLE_VERSION, other_env_api_url, EXAMPLES_REPO, RUNTIME_NAME,
-        SHUTTLE_API_URL, SHUTTLE_CONSOLE_URL, STORAGE_DIRNAME, TEMPLATES_SCHEMA_VERSION,
+        headers::X_CARGO_SHUTTLE_VERSION, other_env_api_url, EXAMPLES_REPO, SHUTTLE_API_URL,
+        SHUTTLE_CONSOLE_URL, TEMPLATES_SCHEMA_VERSION,
     },
     models::{
         auth::{KeyMessage, TokenMessage},
@@ -47,6 +47,7 @@ use shuttle_common::{
     },
     tables::{deployments_table, get_certificates_table, get_projects_table, get_resource_tables},
 };
+use shuttle_ifc::parse_infra_from_code;
 use strum::{EnumMessage, VariantArray};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::time::{sleep, Duration};
@@ -1635,9 +1636,10 @@ impl Shuttle {
 
         let metadata = async_cargo_metadata(manifest_path.as_path()).await?;
         // TODO: support overriding this
-        let (package, target) = find_first_shuttle_package(&metadata)?;
+        let (package, target, runtime_version) = find_first_shuttle_package(&metadata)?;
         rust_build_args.package_name = Some(package.name.clone());
         rust_build_args.binary_name = Some(target.name.clone());
+        rust_build_args.shuttle_runtime_version = runtime_version;
 
         // activate shuttle feature if present
         let (no_default_features, features) = if package.features.contains_key("shuttle") {
@@ -1648,30 +1650,17 @@ impl Shuttle {
         rust_build_args.no_default_features = no_default_features;
         rust_build_args.features = features.map(|v| v.join(","));
 
-        // Look for a build manifest file at .shuttle/build_manifest.json which specifies resources
-        // that need to be provisioned for the application
-        let default_manifest = Path::new(".shuttle").join("build_manifest.json");
-        if std::fs::exists(project_directory.join(&default_manifest)).is_ok() {
-            rust_build_args.provision_manifest =
-                default_manifest.into_os_string().into_string().ok();
-        }
-
-        rust_build_args.shuttle_runtime_version = package
-            .dependencies
-            .iter()
-            .find(|dependency| dependency.name == RUNTIME_NAME)
-            .expect("shuttle package to have runtime dependency")
-            .req
-            .comparators
-            .first()
-            // is "^0.X.0" when `shuttle-runtime = "0.X.0"` is in Cargo.toml
-            .and_then(|c| c.to_string().strip_prefix('^').map(ToOwned::to_owned));
-
         // TODO: determine which (one) binary to build
 
         deployment_req.build_args = Some(BuildArgs::Rust(rust_build_args));
 
         // TODO: have all of the above be configurable in CLI and Shuttle.toml
+
+        deployment_req.infra = parse_infra_from_code(
+            &fs::read_to_string(target.src_path.as_path())
+                .context("reading target file when extracting infra annotations")?,
+        )
+        .context("parsing infra annotations")?;
 
         if let Ok(repo) = Repository::discover(project_directory) {
             let repo_path = repo
@@ -1982,8 +1971,6 @@ impl Shuttle {
             .context("adding override `!.git/`")?
             .add("!target/")
             .context("adding override `!target/`")?
-            .add(&format!("!{STORAGE_DIRNAME}/"))
-            .context(format!("adding override `!{STORAGE_DIRNAME}/`"))?
             .build()
             .context("building archive override rules")?;
         for r in WalkBuilder::new(project_directory)

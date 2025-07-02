@@ -7,6 +7,8 @@ use strum::{Display, EnumString};
 #[cfg(feature = "display")]
 use crossterm::style::Stylize;
 
+use super::infra::InfraRequest;
+
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Display, Serialize, EnumString)]
 #[serde(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
@@ -148,6 +150,7 @@ pub struct DeploymentRequestBuildArchive {
     /// TODO: Remove this in favour of a separate secrets uploading action.
     pub secrets: Option<HashMap<String, String>>,
     pub build_meta: Option<BuildMeta>,
+    pub infra: Option<InfraRequest>,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -180,9 +183,6 @@ pub struct BuildArgsRust {
     pub no_default_features: bool,
     /// Use the mold linker
     pub mold: bool,
-    /// Path to the provision manifest file that defines the resources to be provisioned
-    /// for the application.
-    pub provision_manifest: Option<String>,
 }
 
 impl Default for BuildArgsRust {
@@ -196,7 +196,6 @@ impl Default for BuildArgsRust {
             features: Default::default(),
             no_default_features: Default::default(),
             mold: Default::default(),
-            provision_manifest: Default::default(),
         }
     }
 }
@@ -245,7 +244,7 @@ pub struct DeploymentRequestImage {
 pub struct DeploymentMetadata {
     pub env: Environment,
     pub project_name: String,
-    /// Path to a folder that persists between deployments
+    /// Path to a recommended folder for disk storage during local runs
     pub storage_path: PathBuf,
 }
 

@@ -7,7 +7,43 @@ See [conventional commits](https://www.conventionalcommits.org/) for commit guid
 
 **For proper release notes with more details such as upgrading guidelines, check out the [releases page](https://github.com/shuttle-hq/shuttle/releases).**
 
-## [0.55.0](https://github.com/shuttle-hq/shuttle/compare/v0.54.0..0.55.0) - 2025-05-21
+## [0.56.0](https://github.com/shuttle-hq/shuttle/compare/v0.55.0..0.56.0) - 2025-07-02
+
+### Features
+
+- *(admin)* Explicit notify on gc endpoint ([#2067](https://github.com/shuttle-hq/shuttle/issues/2067)) - ([aa7e6f8](https://github.com/shuttle-hq/shuttle/commit/aa7e6f8435590c0a01ab966bbb94092b300583ce))
+- *(admin)* Fail error in looped jobs, notify gc'ed community projects ([#2063](https://github.com/shuttle-hq/shuttle/issues/2063)) - ([09831fa](https://github.com/shuttle-hq/shuttle/commit/09831fa819629d6f8c30204f97f70fbc001856ee))
+- *(admin)* Log retention policies ([#2053](https://github.com/shuttle-hq/shuttle/issues/2053)) - ([086a3ef](https://github.com/shuttle-hq/shuttle/commit/086a3eff8ff23c53599b44f1abbb3fb65da16e68))
+- *(api-client)* Always catch 4xx and 5xx errors regardless of body type ([#2052](https://github.com/shuttle-hq/shuttle/issues/2052)) - ([30bb74a](https://github.com/shuttle-hq/shuttle/commit/30bb74a3a3c4e3f5af3641330d2d3dc3906eab6f))
+- *(api-client, cargo-shuttle)* Json output mode ([#2064](https://github.com/shuttle-hq/shuttle/issues/2064)) - ([875d934](https://github.com/shuttle-hq/shuttle/commit/875d934c347caf5937eaa5cbdd504b1945ad99ae))
+- *(cargo-shuttle)* Separate --id and --name. support 'init --id' with immediate linking ([#2069](https://github.com/shuttle-hq/shuttle/issues/2069)) - ([c9d93ea](https://github.com/shuttle-hq/shuttle/commit/c9d93ea77b941dbf009c66a097322a296ccf6bfe))
+- *(cargo-shuttle)* Warn about lowercase shuttle.toml ([#2060](https://github.com/shuttle-hq/shuttle/issues/2060)) - ([133ef80](https://github.com/shuttle-hq/shuttle/commit/133ef80b19d80294fcde27d28dcc380da3e1ef70))
+- *(ifc, cargo-shuttle)* Extract infra macro annotation parser to separate crate ([#2072](https://github.com/shuttle-hq/shuttle/issues/2072)) - ([03fa327](https://github.com/shuttle-hq/shuttle/commit/03fa32755b4cf598f00a61049a5a8770ef327ea2))
+- *(mcp, cargo-shuttle)* The Shuttle MCP Server ([#2074](https://github.com/shuttle-hq/shuttle/issues/2074)) - ([bf24b71](https://github.com/shuttle-hq/shuttle/commit/bf24b71eae122e46e8bd72fc1fb4e1e9cf7db59e))
+- Added updated user usage structs ([#2057](https://github.com/shuttle-hq/shuttle/issues/2057)) - ([b4ad54f](https://github.com/shuttle-hq/shuttle/commit/b4ad54f6f474cf25919c2bdcbceb61ac0f7a3561))
+- Make billing cycle optional in usage response ([#2054](https://github.com/shuttle-hq/shuttle/issues/2054)) - ([cc20391](https://github.com/shuttle-hq/shuttle/commit/cc203911df0075730c16263d7834baa1486f57fb))
+
+### Bug Fixes
+
+- *(admin)* New config uris ([#2065](https://github.com/shuttle-hq/shuttle/issues/2065)) - ([201b61a](https://github.com/shuttle-hq/shuttle/commit/201b61ade5f6b7a7722d79d0e9ad9004f0ab373c))
+- *(cargo-shuttle)* Full json output coverage ([#2071](https://github.com/shuttle-hq/shuttle/issues/2071)) - ([502513e](https://github.com/shuttle-hq/shuttle/commit/502513ef5cbb923981985b4a30a362059d359249))
+- Make explicit --name error when no matching project found ([#2075](https://github.com/shuttle-hq/shuttle/issues/2075)) - ([cfa9a0f](https://github.com/shuttle-hq/shuttle/commit/cfa9a0ff663f956d4bae61c576e7c5e71cef3cb9))
+- Don't care about Secrets*.toml or --secrets when building or deploying ([#2070](https://github.com/shuttle-hq/shuttle/issues/2070)) - ([d3d92f1](https://github.com/shuttle-hq/shuttle/commit/d3d92f1797bc2f60966737a18f9ce8a1bce81b47))
+- Rename usage response vcpu reserved field to reserved_hours ([#2056](https://github.com/shuttle-hq/shuttle/issues/2056)) - ([e719915](https://github.com/shuttle-hq/shuttle/commit/e719915b4d6f2810a34c49619f7e3c134ee12461))
+
+### Miscellaneous Tasks
+
+- V0.56.0 - ([0d20d44](https://github.com/shuttle-hq/shuttle/commit/0d20d44e2e902b1b950060d8248714761e336c8a))
+- Clean up legacy constants & related code ([#2073](https://github.com/shuttle-hq/shuttle/issues/2073)) - ([de40cb7](https://github.com/shuttle-hq/shuttle/commit/de40cb7ccde33c8e56f7d0954a103fc7037e27b4))
+- Add build_manifest to main macro output ([#2062](https://github.com/shuttle-hq/shuttle/issues/2062)) - ([8c3c1ea](https://github.com/shuttle-hq/shuttle/commit/8c3c1ea102bd754c14f728e24e86636d1ec73d81))
+
+### Miscellaneous
+
+- *(cargo-shuttle)* Find binary target based on macro in source ([#2059](https://github.com/shuttle-hq/shuttle/issues/2059)) - ([03e25b6](https://github.com/shuttle-hq/shuttle/commit/03e25b6ec9c0e703e1d0a59eaa83d5ddca7e223a))
+- Audit - ([6da0151](https://github.com/shuttle-hq/shuttle/commit/6da0151a336050d9ad3922aba8c9d3ee45789ad8))
+- Bump examples - ([4d23e02](https://github.com/shuttle-hq/shuttle/commit/4d23e024a4bb8cd50b1ad035900bb662900f6a44))
+
+## [0.55.0](https://github.com/shuttle-hq/shuttle/compare/v0.54.0..v0.55.0) - 2025-05-21
 
 ### Features
 
@@ -32,6 +68,7 @@ See [conventional commits](https://www.conventionalcommits.org/) for commit guid
 
 ### Miscellaneous
 
+- Changelog ([#2051](https://github.com/shuttle-hq/shuttle/issues/2051)) - ([855dd82](https://github.com/shuttle-hq/shuttle/commit/855dd822933a28c878a762c11272c90ce1f88267))
 - Revert "chore: remove logs --all-deployments ([#2040](https://github.com/shuttle-hq/shuttle/issues/2040))" + hide it instead ([#2047](https://github.com/shuttle-hq/shuttle/issues/2047)) - ([01dbd3a](https://github.com/shuttle-hq/shuttle/commit/01dbd3a4bc2883644ee87c2f29ec11dfd269f641))
 - Move env config logic to common, add to admin ([#2039](https://github.com/shuttle-hq/shuttle/issues/2039)) - ([752ea29](https://github.com/shuttle-hq/shuttle/commit/752ea2903ec5cee64aa72e9da19107f5742ed084))
 

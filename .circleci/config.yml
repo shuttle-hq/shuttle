@@ -562,6 +562,8 @@ workflows:
           requires:
             - publish-api-client
             - publish-codegen
+            - publish-ifc
+            - publish-mcp
             - publish-service
           filters:
             branches:

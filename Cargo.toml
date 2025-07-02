@@ -6,6 +6,7 @@ members = [
   "cargo-shuttle",
   "codegen",
   "common",
+  "ifc",
   "runtime",
   "service",
 ]
@@ -21,6 +22,7 @@ repository = "https://github.com/shuttle-hq/shuttle"
 shuttle-api-client = { path = "api-client", version = "0.55.0", default-features = false }
 shuttle-codegen = { path = "codegen", version = "0.55.0" }
 shuttle-common = { path = "common", version = "0.55.0" }
+shuttle-ifc = { path = "ifc", version = "0.55.0" }
 shuttle-service = { path = "service", version = "0.55.0" }
 
 anyhow = "1.0.66"

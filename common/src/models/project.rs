@@ -1,6 +1,6 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use strum::{Display, EnumString};
+use strum::EnumString;
 
 #[cfg(feature = "display")]
 use crossterm::style::Stylize;
@@ -64,7 +64,12 @@ impl ProjectResponse {
 
         // Display compute tier information if configured
         if let Some(compute_tier) = &self.compute_tier {
-            writeln!(&mut s, "  Instance size: {}", compute_tier).unwrap_or_default();
+            writeln!(
+                &mut s,
+                "  Instance size: {}",
+                compute_tier.to_fancy_string()
+            )
+            .unwrap_or_default();
         }
 
         s
@@ -98,24 +103,18 @@ pub struct ProjectUpdateRequest {
     pub config: Option<serde_json::Value>,
 }
 
-#[derive(Debug, Default, Clone, PartialEq, Eq, Display, Serialize, Deserialize, EnumString)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize, EnumString)]
 #[serde(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub enum ComputeTier {
     #[default]
-    #[strum(to_string = "Basic (0.25 vCPU / 0.5 GB)")]
     XS,
-    #[strum(to_string = "Small (0.5 vCPU / 1 GB)")]
     S,
-    #[strum(to_string = "Medium (1 vCPU / 2 GB)")]
     M,
-    #[strum(to_string = "Large (2 vCPU / 4 GB)")]
     L,
-    #[strum(to_string = "X Large (4 vCPU / 8 GB)")]
     XL,
-    #[strum(to_string = "XX Large (8 vCPU / 16 GB)")]
     XXL,
 
     /// Forward compatibility
@@ -123,8 +122,22 @@ pub enum ComputeTier {
     #[doc(hidden)]
     #[typeshare(skip)]
     #[serde(untagged, skip_serializing)]
-    #[strum(default, to_string = "Unknown: {0}")]
+    #[strum(default)]
     Unknown(String),
+}
+impl ComputeTier {
+    pub fn to_fancy_string(&self) -> String {
+        match self {
+            Self::XS => "Basic (0.25 vCPU, 0.5 GB RAM)".to_owned(),
+            Self::S => "Small (0.5 vCPU, 1 GB RAM)".to_owned(),
+            Self::M => "Medium (1 vCPU, 2 GB RAM)".to_owned(),
+            Self::L => "Large (2 vCPU, 4 GB RAM)".to_owned(),
+            Self::XL => "X Large (4 vCPU, 8 GB RAM)".to_owned(),
+            Self::XXL => "XX Large (8 vCPU, 16 GB RAM)".to_owned(),
+            #[cfg(feature = "unknown-variants")]
+            Self::Unknown(s) => format!("Unknown: {s}"),
+        }
+    }
 }
 
 /// Sub-Response for the /user/me/usage backend endpoint

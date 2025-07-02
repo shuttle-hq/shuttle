@@ -422,6 +422,7 @@ dependencies = [
  "serde_json",
  "shuttle-api-client",
  "shuttle-common",
+ "shuttle-ifc",
  "strum",
  "tempfile",
  "tokio",
@@ -3812,11 +3813,8 @@ dependencies = [
  "proc-macro-error2",
  "proc-macro2",
  "quote",
- "serde",
- "serde_json",
- "shuttle-common",
+ "shuttle-ifc",
  "syn",
- "tokio",
  "trybuild",
 ]
 
@@ -3841,6 +3839,15 @@ dependencies = [
  "typeshare",
  "utoipa",
  "zeroize",
+]
+
+[[package]]
+name = "shuttle-ifc"
+version = "0.55.0"
+dependencies = [
+ "proc-macro2",
+ "shuttle-common",
+ "syn",
 ]
 
 [[package]]

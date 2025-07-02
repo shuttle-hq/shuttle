@@ -53,11 +53,6 @@ export interface BuildArgsRust {
 	no_default_features: boolean;
 	/** Use the mold linker */
 	mold: boolean;
-	/**
-	 * Path to the provision manifest file that defines the resources to be provisioned
-	 * for the application.
-	 */
-	provision_manifest?: string;
 }
 
 export interface BuildMeta {
@@ -150,6 +145,20 @@ export interface DeploymentListResponse {
 export type BuildArgs = 
 	| { type: "Rust", content: BuildArgsRust };
 
+export enum ComputeTier {
+	XS = "xs",
+	S = "s",
+	M = "m",
+	L = "l",
+	XL = "xl",
+	XXL = "xxl",
+}
+
+export interface InfraRequest {
+	instance_size?: ComputeTier;
+	replicas?: number;
+}
+
 export interface DeploymentRequestBuildArchive {
 	/** The S3 object version ID of the archive to use */
 	archive_version_id: string;
@@ -160,6 +169,7 @@ export interface DeploymentRequestBuildArchive {
 	 */
 	secrets?: Record<string, string>;
 	build_meta?: BuildMeta;
+	infra?: InfraRequest;
 }
 
 export interface DeploymentRequestImage {
@@ -192,15 +202,6 @@ export interface LogsResponse {
 
 export interface ProjectCreateRequest {
 	name: string;
-}
-
-export enum ComputeTier {
-	XS = "xs",
-	S = "s",
-	M = "m",
-	L = "l",
-	XL = "xl",
-	XXL = "xxl",
 }
 
 export interface ProjectResponse {

@@ -497,6 +497,7 @@ workflows:
             parameters:
               path:
                 - common
+                - mcp
           name: publish-<< matrix.path >>
           requires:
             - approve-publish-crates

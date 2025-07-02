@@ -58,7 +58,7 @@ use zip::write::FileOptions;
 
 use crate::args::{
     CertificateCommand, ConfirmationArgs, DeployArgs, DeploymentCommand, GenerateCommand, InitArgs,
-    LoginArgs, LogoutArgs, LogsArgs, OutputMode, ProjectCommand, ProjectUpdateCommand,
+    LoginArgs, LogoutArgs, LogsArgs, McpCommand, OutputMode, ProjectCommand, ProjectUpdateCommand,
     ResourceCommand, SecretsArgs, TableArgs, TemplateLocation,
 };
 pub use crate::args::{Command, ProjectArgs, RunArgs, ShuttleArgs};
@@ -301,6 +301,9 @@ impl Shuttle {
                 ProjectCommand::Link => Ok(()), // logic is done in `load_project` in previous step
             },
             Command::Upgrade { preview } => update_cargo_shuttle(preview).await,
+            Command::Mcp(cmd) => match cmd {
+                McpCommand::Start => shuttle_mcp::run_mcp_server().await,
+            },
         }
     }
 

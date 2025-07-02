@@ -4,7 +4,7 @@ use std::process::Stdio;
 
 use anyhow::{bail, Context, Result};
 use cargo_metadata::{Metadata, Package, Target};
-use shuttle_infra::find_runtime_main_fn;
+use shuttle_ifc::find_runtime_main_fn;
 use tokio::io::AsyncBufReadExt;
 use tracing::{error, trace};
 

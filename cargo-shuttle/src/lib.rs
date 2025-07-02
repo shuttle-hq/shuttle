@@ -47,7 +47,7 @@ use shuttle_common::{
     },
     tables::{deployments_table, get_certificates_table, get_projects_table, get_resource_tables},
 };
-use shuttle_infra::parse_infra_from_code;
+use shuttle_ifc::parse_infra_from_code;
 use strum::{EnumMessage, VariantArray};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::time::{sleep, Duration};

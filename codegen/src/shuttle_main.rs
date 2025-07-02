@@ -1,7 +1,7 @@
 use proc_macro::TokenStream;
 use proc_macro_error2::emit_error;
 use quote::{quote, ToTokens};
-use shuttle_infra::InfraAttrParser;
+use shuttle_ifc::InfraAttrParser;
 use syn::{
     meta::parser, parse::Parse, parse_macro_input, parse_quote, punctuated::Punctuated,
     spanned::Spanned, Attribute, Expr, ExprLit, FnArg, Ident, ItemFn, Lit, Pat, PatIdent, Path,

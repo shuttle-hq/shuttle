@@ -11,7 +11,7 @@ default-run = "shuttle"
 [dependencies]
 shuttle-api-client = { workspace = true, default-features = true }
 shuttle-common = { workspace = true, features = ["models", "tables", "config"] }
-shuttle-infra = { workspace = true }
+shuttle-ifc = { workspace = true }
 
 anyhow = { workspace = true }
 async-trait = { workspace = true }

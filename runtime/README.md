@@ -33,8 +33,8 @@ be a binary crate with a few dependencies including `shuttle-runtime` and `shutt
 
 ```toml
 axum = "0.8.1"
-shuttle-axum = "0.55.0"
-shuttle-runtime = "0.55.0"
+shuttle-axum = "0.56.0"
+shuttle-runtime = "0.56.0"
 tokio = "1.28.2"
 ```
 

@@ -2,7 +2,7 @@ use crate::utils::execute_command;
 
 pub struct ProjectStatusParams {
     pub name: Option<String>,
-    pub id: Option<String>,
+    pub project_id: Option<String>,
 }
 
 pub struct ProjectListParams {}
@@ -15,7 +15,7 @@ pub async fn project_status(cwd: String, params: ProjectStatusParams) -> Result<
         args.push(name);
     }
 
-    if let Some(id) = params.id {
+    if let Some(id) = params.project_id {
         args.push("--id".to_string());
         args.push(id);
     }

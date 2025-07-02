@@ -56,14 +56,12 @@ pub async fn execute_command(
     }
 }
 
-pub async fn run_tool<T, F>(tool: T) -> Result<String, String>
+pub async fn run_tool<F>(tool: F) -> Result<String, String>
 where
-    T: FnOnce() -> F,
     F: Future<Output = Result<String, String>>,
 {
-    // Run checks (if any) before running the tool
-    // Used to do version checks but now removed.
-    tool().await
+    // Placeholder for running logic before/after every tool
+    tool.await
 }
 
 pub fn build_client() -> Result<reqwest::Client, String> {

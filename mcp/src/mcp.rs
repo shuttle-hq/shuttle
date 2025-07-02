@@ -1,10 +1,10 @@
-use crate::tools::{deployment::*, docs::*, logs::*, project::*};
-
-use crate::utils::run_tool;
 use rmcp::{
     model::{ServerCapabilities, ServerInfo},
     tool, ServerHandler,
 };
+
+use crate::tools::{deployment::*, docs::*, logs::*, project::*};
+use crate::utils::run_tool;
 
 #[derive(Clone)]
 pub struct ShuttleMcpServer;
@@ -19,15 +19,23 @@ impl ShuttleMcpServer {
         cwd: String,
         #[tool(param)]
         #[schemars(description = "Use this secrets file instead")]
-        secrets: Option<String>,
+        secrets_file: Option<String>,
         #[tool(param)]
         #[schemars(description = "Specify the name of the project")]
         name: Option<String>,
         #[tool(param)]
         #[schemars(description = "Specify the id of the project")]
-        id: Option<String>,
+        project_id: Option<String>,
     ) -> Result<String, String> {
-        run_tool(|| async { deploy(cwd, DeployParams { secrets, name, id }).await }).await
+        run_tool(deploy(
+            cwd,
+            DeployParams {
+                secrets_file,
+                name,
+                project_id,
+            },
+        ))
+        .await
     }
 
     #[tool(description = "List the deployments for a service")]
@@ -42,9 +50,23 @@ impl ShuttleMcpServer {
         #[tool(param)]
         #[schemars(description = "How many deployments per page to display")]
         limit: Option<u32>,
+        #[tool(param)]
+        #[schemars(description = "Specify the name of the project")]
+        name: Option<String>,
+        #[tool(param)]
+        #[schemars(description = "Specify the id of the project")]
+        project_id: Option<String>,
     ) -> Result<String, String> {
-        run_tool(|| async { deployment_list(cwd, DeploymentListParams { page, limit }).await })
-            .await
+        run_tool(deployment_list(
+            cwd,
+            DeploymentListParams {
+                page,
+                limit,
+                name,
+                project_id,
+            },
+        ))
+        .await
     }
 
     #[tool(description = "View status of a deployment")]
@@ -55,13 +77,23 @@ impl ShuttleMcpServer {
         cwd: String,
         #[tool(param)]
         #[schemars(description = "ID of deployment to get status for")]
-        id: Option<String>,
+        deployment_id: Option<String>,
         #[tool(param)]
-        #[schemars(description = "Specify the name or id of the project")]
+        #[schemars(description = "Specify the name of the project")]
         name: Option<String>,
+        #[tool(param)]
+        #[schemars(description = "Specify the id of the project")]
+        project_id: Option<String>,
     ) -> Result<String, String> {
-        run_tool(|| async { deployment_status(cwd, DeploymentStatusParams { id, name }).await })
-            .await
+        run_tool(deployment_status(
+            cwd,
+            DeploymentStatusParams {
+                deployment_id,
+                name,
+                project_id,
+            },
+        ))
+        .await
     }
 
     #[tool(description = "View build and deployment logs")]
@@ -74,15 +106,27 @@ impl ShuttleMcpServer {
         #[schemars(
             description = "Deployment ID to get logs for. Defaults to the current deployment"
         )]
-        id: Option<String>,
+        deployment_id: Option<String>,
         #[tool(param)]
         #[schemars(description = "View logs from the most recent deployment")]
         latest: Option<bool>,
         #[tool(param)]
-        #[schemars(description = "Specify the name or id of the project")]
+        #[schemars(description = "Specify the name of the project")]
         name: Option<String>,
+        #[tool(param)]
+        #[schemars(description = "Specify the id of the project")]
+        project_id: Option<String>,
     ) -> Result<String, String> {
-        run_tool(|| async { logs(cwd, LogsParams { id, latest, name }).await }).await
+        run_tool(logs(
+            cwd,
+            LogsParams {
+                deployment_id,
+                latest,
+                name,
+                project_id,
+            },
+        ))
+        .await
     }
 
     #[tool(description = "Get the status of this project on Shuttle")]
@@ -96,9 +140,13 @@ impl ShuttleMcpServer {
         name: Option<String>,
         #[tool(param)]
         #[schemars(description = "Specify the id of the project")]
-        id: Option<String>,
+        project_id: Option<String>,
     ) -> Result<String, String> {
-        run_tool(|| async { project_status(cwd, ProjectStatusParams { name, id }).await }).await
+        run_tool(project_status(
+            cwd,
+            ProjectStatusParams { name, project_id },
+        ))
+        .await
     }
 
     #[tool(description = "List all projects you have access to")]
@@ -108,7 +156,7 @@ impl ShuttleMcpServer {
         #[schemars(description = "Specify the working directory")]
         cwd: String,
     ) -> Result<String, String> {
-        run_tool(|| async { project_list(cwd, ProjectListParams {}).await }).await
+        run_tool(project_list(cwd, ProjectListParams {})).await
     }
 
     #[tool(description = "Search Shuttle documentation")]
@@ -118,7 +166,7 @@ impl ShuttleMcpServer {
         #[schemars(description = "Search query for documentation")]
         query: String,
     ) -> Result<String, String> {
-        run_tool(|| async { search_docs(query).await }).await
+        run_tool(search_docs(query)).await
     }
 }
 
@@ -127,7 +175,7 @@ impl ServerHandler for ShuttleMcpServer {
     fn get_info(&self) -> ServerInfo {
         ServerInfo {
             instructions: Some(
-                "Shuttle MCP server providing CLI deployment and project management tools".into(),
+                "Shuttle MCP server providing docs search, CLI deployment and project management tools".into(),
             ),
             capabilities: ServerCapabilities::builder().enable_tools().build(),
             ..Default::default()

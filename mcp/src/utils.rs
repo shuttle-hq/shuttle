@@ -2,6 +2,7 @@ use std::future::Future;
 
 use reqwest::header::{HeaderMap, ORIGIN, USER_AGENT};
 use tokio::process::Command;
+use tracing::debug;
 
 pub async fn execute_command(
     command: &str,
@@ -33,7 +34,7 @@ pub async fn run_tool<F>(tool: F) -> Result<String, String>
 where
     F: Future<Output = Result<String, String>>,
 {
-    // Placeholder for running logic before/after every tool
+    debug!("Running tool"); // Instument span wraps the event to display the tool name
     tool.await
 }
 

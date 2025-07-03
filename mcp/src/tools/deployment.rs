@@ -1,6 +1,6 @@
 use crate::utils::execute_command;
 
-#[derive(serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
+#[derive(Debug, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
 pub struct DeployArgs {
     #[schemars(description = "Specify the working directory")]
     cwd: String,
@@ -12,7 +12,7 @@ pub struct DeployArgs {
     project_id: Option<String>,
 }
 
-#[derive(serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
+#[derive(Debug, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
 pub struct DeploymentListArgs {
     #[schemars(description = "Specify the working directory")]
     cwd: String,
@@ -26,7 +26,7 @@ pub struct DeploymentListArgs {
     project_id: Option<String>,
 }
 
-#[derive(serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
+#[derive(Debug, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
 pub struct DeploymentStatusArgs {
     #[schemars(description = "Specify the working directory")]
     cwd: String,

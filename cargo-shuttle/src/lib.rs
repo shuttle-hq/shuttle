@@ -104,7 +104,7 @@ pub fn parse_args() -> (ShuttleArgs, bool) {
 
 pub fn setup_tracing(debug: bool) {
     registry()
-        .with(fmt::layer())
+        .with(fmt::layer().with_writer(std::io::stderr))
         .with(
             // let user set RUST_LOG if they want to
             EnvFilter::try_from_default_env().unwrap_or_else(|_| {

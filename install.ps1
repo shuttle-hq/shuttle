@@ -158,12 +158,16 @@ Please open an issue if you encounter any problems!
         if (!$?) { return Exit-Failure "temp-folder" }
         tar.exe -xzf "$TempDir\cargo-shuttle.tar.gz" -C "$TempDir\cargo-shuttle"
         if (!$?) { return Exit-Failure "tar-extract-binary" }
-        $CargoHome = if ($null -ne $Env:CARGO_HOME) { $Env:CARGO_HOME } else { "$HOME\.cargo" }
-        Write-Host "Installing to $CargoHome\bin\cargo-shuttle.exe"
-        Move-Item -Force "$TempDir\cargo-shuttle\cargo-shuttle-x86_64-pc-windows-msvc-$LatestRelease\cargo-shuttle.exe" "$CargoHome\bin\cargo-shuttle.exe"
+        $CargoDir = if ($null -ne $Env:CARGO_HOME) { $Env:CARGO_HOME } else { "$HOME\.cargo" }
+        $CargoInstallDir = if ($null -ne $Env:CARGO_INSTALL_ROOT) { $Env:CARGO_INSTALL_ROOT } else { "$CargoDir" }
+        $CargoInstallBinDir = "$CargoInstallDir\bin"
+        New-Item -ItemType Directory -Force "$CargoInstallBinDir" | Out-Null
+        if (!$?) { return Exit-Failure "binary-folder" }
+        Write-Host "Installing to $CargoInstallBinDir\cargo-shuttle.exe"
+        Move-Item -Force "$TempDir\cargo-shuttle\cargo-shuttle-x86_64-pc-windows-msvc-$LatestRelease\cargo-shuttle.exe" "$CargoInstallBinDir\cargo-shuttle.exe"
         if (!$?) { return Exit-Failure "move-binary" }
-        Write-Host "Installing to $CargoHome\bin\shuttle.exe"
-        Move-Item -Force "$TempDir\cargo-shuttle\cargo-shuttle-x86_64-pc-windows-msvc-$LatestRelease\shuttle.exe" "$CargoHome\bin\shuttle.exe"
+        Write-Host "Installing to $CargoInstallBinDir\shuttle.exe"
+        Move-Item -Force "$TempDir\cargo-shuttle\cargo-shuttle-x86_64-pc-windows-msvc-$LatestRelease\shuttle.exe" "$CargoInstallBinDir\shuttle.exe"
         if (!$?) { return Exit-Failure "move-binary" }
         Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "$TempDir\cargo-shuttle.tar.gz", "$TempDir\cargo-shuttle"
         return Exit-Success

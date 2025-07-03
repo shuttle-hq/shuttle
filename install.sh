@@ -272,7 +272,9 @@ _install_binary() {
     _exit_failure "tar-not-found"
   fi
   tar -xzf "cargo-shuttle-$LATEST_VERSION-$target.tar.gz" || _exit_failure "tar-extract-binary"
-  mkdir -p "$CARGO_INSTALL_BIN_DIR"
+  if [[ ! -d "$CARGO_INSTALL_BIN_DIR" ]]; then
+    mkdir -p "$CARGO_INSTALL_BIN_DIR"
+  fi
   echo "Installing to $CARGO_INSTALL_BIN_DIR/cargo-shuttle"
   mv "cargo-shuttle-$target-$LATEST_VERSION/cargo-shuttle" "$CARGO_INSTALL_BIN_DIR/" || _exit_failure "move-binary"
   echo "Installing to $CARGO_INSTALL_BIN_DIR/shuttle"

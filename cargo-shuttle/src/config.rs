@@ -184,9 +184,14 @@ impl RequestContext {
             .unwrap_or(project_args.working_directory.clone());
 
         trace!("looking for Shuttle.toml in {}", workspace_path.display());
-        if workspace_path.join("shuttle.toml").exists() {
+
+        // check that the uppercase file does not exist so a false warning is not printed on case-insensitive file systems
+        if !workspace_path.join("Shuttle.toml").exists()
+            && workspace_path.join("shuttle.toml").exists()
+        {
             eprintln!("WARN: Lowercase 'shuttle.toml' detected, please use 'Shuttle.toml'")
         }
+
         let local_manager = LocalConfigManager::new(workspace_path, "Shuttle.toml".to_string());
         let mut project = Config::new(local_manager);
         if !project.exists() {

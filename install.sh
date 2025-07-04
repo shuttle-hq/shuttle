@@ -69,6 +69,9 @@ echo "==================================================="
 echo
 
 INSTALLED_RUST=""
+CARGO_DIR="${CARGO_HOME:-$HOME/.cargo}"
+CARGO_INSTALL_DIR="${CARGO_INSTALL_ROOT:-$CARGO_DIR}"
+CARGO_INSTALL_BIN_DIR="$CARGO_INSTALL_DIR/bin"
 
 _send_telemetry() {
   if [[ "$TELEMETRY" = "1" ]]; then
@@ -106,7 +109,7 @@ _exit_success() {
   if [[ "$INSTALLED_RUST" = "yes" ]]; then
     echo
     [[ "$SUPPORTS_COLOR" = "1" ]] && echo -en "\e[33m" # yellow
-    echo "Remember to 'source \"$HOME/.cargo/env\"' or restart your shell to run cargo and shuttle commands!"
+    echo "Remember to 'source \"$CARGO_DIR/env\"' or restart your shell to run cargo and shuttle commands!"
     [[ "$SUPPORTS_COLOR" = "1" ]] && echo -en "\e[0m"
   fi
   exit 0
@@ -269,13 +272,14 @@ _install_binary() {
     _exit_failure "tar-not-found"
   fi
   tar -xzf "cargo-shuttle-$LATEST_VERSION-$target.tar.gz" || _exit_failure "tar-extract-binary"
-  echo "Installing to $HOME/.cargo/bin/cargo-shuttle"
-  mv "cargo-shuttle-$target-$LATEST_VERSION/cargo-shuttle" "$HOME/.cargo/bin/" || _exit_failure "move-binary"
-  echo "Installing to $HOME/.cargo/bin/shuttle"
-  mv "cargo-shuttle-$target-$LATEST_VERSION/shuttle" "$HOME/.cargo/bin/" || _exit_failure "move-binary"
+  mkdir -p "$CARGO_INSTALL_BIN_DIR"
+  echo "Installing to $CARGO_INSTALL_BIN_DIR/cargo-shuttle"
+  mv "cargo-shuttle-$target-$LATEST_VERSION/cargo-shuttle" "$CARGO_INSTALL_BIN_DIR/" || _exit_failure "move-binary"
+  echo "Installing to $CARGO_INSTALL_BIN_DIR/shuttle"
+  mv "cargo-shuttle-$target-$LATEST_VERSION/shuttle" "$CARGO_INSTALL_BIN_DIR/" || _exit_failure "move-binary"
   popd >/dev/null || _exit_failure "popd"
-  if [[ ":$PATH:" != *":$HOME/.cargo/bin:"* ]]; then
-    echo "Add $HOME/.cargo/bin to PATH to access the 'shuttle' command"
+  if [[ ":$PATH:" != *":$CARGO_INSTALL_BIN_DIR:"* ]]; then
+    echo "Add $CARGO_INSTALL_BIN_DIR to PATH to access the 'shuttle' command"
   fi
 }
 
@@ -286,7 +290,9 @@ _install_rust_and_cargo() {
     case $yn in
     [Yy]*|"")
       curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y || _exit_failure "install-rust"
-      source "$HOME/.cargo/env" # (this only affects this script's env, user has to source or restart shell to apply to their shell)
+      # this only affects this script's env,
+      # user has to source or restart shell to apply to their shell
+      source "$CARGO_DIR/env"
       break
       ;;
     [Nn]*)

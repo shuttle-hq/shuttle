@@ -1,6 +1,6 @@
 [package]
 name = "shuttle-codegen"
-version = "0.55.0"
+version = "0.56.0"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -11,6 +11,8 @@ homepage = "https://www.shuttle.dev"
 proc-macro = true
 
 [dependencies]
+shuttle-ifc = { workspace = true }
+
 proc-macro-error2 = { workspace = true }
 proc-macro2 = { workspace = true }
 quote = { workspace = true }
@@ -18,7 +20,4 @@ syn = { workspace = true, features = ["full", "extra-traits"] }
 
 [dev-dependencies]
 pretty_assertions = { workspace = true }
-serde = { workspace = true }
-serde_json = { workspace = true }
 trybuild = { workspace = true }
-tokio = { workspace = true, features = ["full"] }

@@ -32,8 +32,8 @@ use crate::middleware::LoggingMiddleware;
 #[cfg(feature = "tracing")]
 use tracing::{debug, error};
 
-mod util;
-use util::ToJson;
+pub mod util;
+use util::{ParsedJson, ToBodyContent};
 
 #[derive(Clone)]
 pub struct ShuttleApiClient {
@@ -84,7 +84,7 @@ impl ShuttleApiClient {
             .with_context(|| "failed to connect to auth endpoint")
     }
 
-    pub async fn check_project_name(&self, project_name: &str) -> Result<bool> {
+    pub async fn check_project_name(&self, project_name: &str) -> Result<ParsedJson<bool>> {
         let url = format!("{}/projects/{project_name}/name", self.api_url);
 
         self.client
@@ -97,7 +97,7 @@ impl ShuttleApiClient {
             .context("parsing name check response")
     }
 
-    pub async fn get_current_user(&self) -> Result<UserResponse> {
+    pub async fn get_current_user(&self) -> Result<ParsedJson<UserResponse>> {
         self.get_json("/users/me").await
     }
 
@@ -105,7 +105,7 @@ impl ShuttleApiClient {
         &self,
         project: &str,
         deployment_req: DeploymentRequest,
-    ) -> Result<DeploymentResponse> {
+    ) -> Result<ParsedJson<DeploymentResponse>> {
         let path = format!("/projects/{project}/deployments");
         self.post_json(path, Some(deployment_req)).await
     }
@@ -114,7 +114,7 @@ impl ShuttleApiClient {
         &self,
         project: &str,
         data: Vec<u8>,
-    ) -> Result<UploadArchiveResponse> {
+    ) -> Result<ParsedJson<UploadArchiveResponse>> {
         let path = format!("/projects/{project}/archives");
 
         let url = format!("{}{}", self.api_url, path);
@@ -130,19 +130,26 @@ impl ShuttleApiClient {
             .await
     }
 
-    pub async fn redeploy(&self, project: &str, deployment_id: &str) -> Result<DeploymentResponse> {
+    pub async fn redeploy(
+        &self,
+        project: &str,
+        deployment_id: &str,
+    ) -> Result<ParsedJson<DeploymentResponse>> {
         let path = format!("/projects/{project}/deployments/{deployment_id}/redeploy");
 
         self.post_json(path, Option::<()>::None).await
     }
 
-    pub async fn stop_service(&self, project: &str) -> Result<String> {
+    pub async fn stop_service(&self, project: &str) -> Result<ParsedJson<String>> {
         let path = format!("/projects/{project}/deployments");
 
         self.delete_json(path).await
     }
 
-    pub async fn get_service_resources(&self, project: &str) -> Result<ResourceListResponse> {
+    pub async fn get_service_resources(
+        &self,
+        project: &str,
+    ) -> Result<ParsedJson<ResourceListResponse>> {
         self.get_json(format!("/projects/{project}/resources"))
             .await
     }
@@ -155,7 +162,7 @@ impl ShuttleApiClient {
         let r#type = resource_type.to_string();
         let r#type = utf8_percent_encode(&r#type, percent_encoding::NON_ALPHANUMERIC).to_owned();
 
-        let res = self
+        let bytes = self
             .get(
                 format!(
                     "/projects/{project}/services/{project}/resources/{}/dump",
@@ -163,18 +170,19 @@ impl ShuttleApiClient {
                 ),
                 Option::<()>::None,
             )
-            .await?;
+            .await?
+            .to_bytes()
+            .await?
+            .to_vec();
 
-        let bytes = res.bytes().await?;
-
-        Ok(bytes.to_vec())
+        Ok(bytes)
     }
 
     pub async fn delete_service_resource(
         &self,
         project: &str,
         resource_type: &ResourceType,
-    ) -> Result<String> {
+    ) -> Result<ParsedJson<String>> {
         let r#type = resource_type.to_string();
         let r#type = utf8_percent_encode(&r#type, percent_encoding::NON_ALPHANUMERIC).to_owned();
 
@@ -185,16 +193,19 @@ impl ShuttleApiClient {
         &self,
         project: &str,
         req: ProvisionResourceRequest,
-    ) -> Result<ResourceResponse> {
+    ) -> Result<ParsedJson<ResourceResponse>> {
         self.post_json(format!("/projects/{project}/resources"), Some(req))
             .await
     }
-    pub async fn get_secrets(&self, project: &str) -> Result<ResourceResponse> {
+    pub async fn get_secrets(&self, project: &str) -> Result<ParsedJson<ResourceResponse>> {
         self.get_json(format!("/projects/{project}/resources/secrets"))
             .await
     }
 
-    pub async fn list_certificates(&self, project: &str) -> Result<CertificateListResponse> {
+    pub async fn list_certificates(
+        &self,
+        project: &str,
+    ) -> Result<ParsedJson<CertificateListResponse>> {
         self.get_json(format!("/projects/{project}/certificates"))
             .await
     }
@@ -202,14 +213,18 @@ impl ShuttleApiClient {
         &self,
         project: &str,
         subject: String,
-    ) -> Result<CertificateResponse> {
+    ) -> Result<ParsedJson<CertificateResponse>> {
         self.post_json(
             format!("/projects/{project}/certificates"),
             Some(AddCertificateRequest { subject }),
         )
         .await
     }
-    pub async fn delete_certificate(&self, project: &str, subject: String) -> Result<String> {
+    pub async fn delete_certificate(
+        &self,
+        project: &str,
+        subject: String,
+    ) -> Result<ParsedJson<String>> {
         self.delete_json_with_body(
             format!("/projects/{project}/certificates"),
             DeleteCertificateRequest { subject },
@@ -217,7 +232,7 @@ impl ShuttleApiClient {
         .await
     }
 
-    pub async fn create_project(&self, name: &str) -> Result<ProjectResponse> {
+    pub async fn create_project(&self, name: &str) -> Result<ParsedJson<ProjectResponse>> {
         self.post_json(
             "/projects",
             Some(ProjectCreateRequest {
@@ -227,11 +242,11 @@ impl ShuttleApiClient {
         .await
     }
 
-    pub async fn get_project(&self, project: &str) -> Result<ProjectResponse> {
+    pub async fn get_project(&self, project: &str) -> Result<ParsedJson<ProjectResponse>> {
         self.get_json(format!("/projects/{project}")).await
     }
 
-    pub async fn get_projects_list(&self) -> Result<ProjectListResponse> {
+    pub async fn get_projects_list(&self) -> Result<ParsedJson<ProjectListResponse>> {
         self.get_json("/projects".to_owned()).await
     }
 
@@ -239,17 +254,17 @@ impl ShuttleApiClient {
         &self,
         project: &str,
         req: ProjectUpdateRequest,
-    ) -> Result<ProjectResponse> {
+    ) -> Result<ParsedJson<ProjectResponse>> {
         self.put_json(format!("/projects/{project}"), Some(req))
             .await
     }
 
-    pub async fn delete_project(&self, project: &str) -> Result<String> {
+    pub async fn delete_project(&self, project: &str) -> Result<ParsedJson<String>> {
         self.delete_json(format!("/projects/{project}")).await
     }
 
     #[allow(unused)]
-    async fn get_teams_list(&self) -> Result<TeamListResponse> {
+    async fn get_teams_list(&self) -> Result<ParsedJson<TeamListResponse>> {
         self.get_json("/teams").await
     }
 
@@ -257,12 +272,12 @@ impl ShuttleApiClient {
         &self,
         project: &str,
         deployment_id: &str,
-    ) -> Result<LogsResponse> {
+    ) -> Result<ParsedJson<LogsResponse>> {
         let path = format!("/projects/{project}/deployments/{deployment_id}/logs");
 
         self.get_json(path).await
     }
-    pub async fn get_project_logs(&self, project: &str) -> Result<LogsResponse> {
+    pub async fn get_project_logs(&self, project: &str) -> Result<ParsedJson<LogsResponse>> {
         let path = format!("/projects/{project}/logs");
 
         self.get_json(path).await
@@ -273,7 +288,7 @@ impl ShuttleApiClient {
         project: &str,
         page: i32,
         per_page: i32,
-    ) -> Result<DeploymentListResponse> {
+    ) -> Result<ParsedJson<DeploymentListResponse>> {
         let path = format!(
             "/projects/{project}/deployments?page={}&per_page={}",
             page.saturating_sub(1).max(0),
@@ -285,7 +300,7 @@ impl ShuttleApiClient {
     pub async fn get_current_deployment(
         &self,
         project: &str,
-    ) -> Result<Option<DeploymentResponse>> {
+    ) -> Result<ParsedJson<Option<DeploymentResponse>>> {
         let path = format!("/projects/{project}/deployments/current");
 
         self.get_json(path).await
@@ -295,21 +310,28 @@ impl ShuttleApiClient {
         &self,
         project: &str,
         deployment_id: &str,
-    ) -> Result<DeploymentResponse> {
+    ) -> Result<ParsedJson<DeploymentResponse>> {
         let path = format!("/projects/{project}/deployments/{deployment_id}");
 
         self.get_json(path).await
     }
 
-    pub async fn reset_api_key(&self) -> Result<Response> {
-        self.put("/users/reset-api-key", Option::<()>::None).await
+    pub async fn reset_api_key(&self) -> Result<()> {
+        self.put("/users/reset-api-key", Option::<()>::None)
+            .await?
+            .to_empty()
+            .await
     }
 
     pub async fn ws_get(
         &self,
         path: impl AsRef<str>,
     ) -> Result<WebSocketStream<MaybeTlsStream<TcpStream>>> {
-        let ws_url = self.api_url.clone().replace("http", "ws");
+        let ws_url = self
+            .api_url
+            .clone()
+            .replacen("http://", "ws://", 1)
+            .replacen("https://", "wss://", 1);
         let url = format!("{ws_url}{}", path.as_ref());
         let mut req = url.into_client_request()?;
 
@@ -351,7 +373,7 @@ impl ShuttleApiClient {
         Ok(builder.send().await?)
     }
 
-    pub async fn get_json<R>(&self, path: impl AsRef<str>) -> Result<R>
+    pub async fn get_json<R>(&self, path: impl AsRef<str>) -> Result<ParsedJson<R>>
     where
         R: for<'de> Deserialize<'de>,
     {
@@ -362,7 +384,7 @@ impl ShuttleApiClient {
         &self,
         path: impl AsRef<str>,
         body: T,
-    ) -> Result<R>
+    ) -> Result<ParsedJson<R>>
     where
         R: for<'de> Deserialize<'de>,
     {
@@ -394,7 +416,7 @@ impl ShuttleApiClient {
         &self,
         path: impl AsRef<str>,
         body: Option<T>,
-    ) -> Result<R>
+    ) -> Result<ParsedJson<R>>
     where
         R: for<'de> Deserialize<'de>,
     {
@@ -426,7 +448,7 @@ impl ShuttleApiClient {
         &self,
         path: impl AsRef<str>,
         body: Option<T>,
-    ) -> Result<R>
+    ) -> Result<ParsedJson<R>>
     where
         R: for<'de> Deserialize<'de>,
     {
@@ -454,7 +476,7 @@ impl ShuttleApiClient {
         Ok(builder.send().await?)
     }
 
-    pub async fn delete_json<R>(&self, path: impl AsRef<str>) -> Result<R>
+    pub async fn delete_json<R>(&self, path: impl AsRef<str>) -> Result<ParsedJson<R>>
     where
         R: for<'de> Deserialize<'de>,
     {
@@ -465,7 +487,7 @@ impl ShuttleApiClient {
         &self,
         path: impl AsRef<str>,
         body: T,
-    ) -> Result<R>
+    ) -> Result<ParsedJson<R>>
     where
         R: for<'de> Deserialize<'de>,
     {

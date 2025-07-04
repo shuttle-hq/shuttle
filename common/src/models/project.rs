@@ -1,6 +1,6 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use strum::{Display, EnumString};
+use strum::EnumString;
 
 #[cfg(feature = "display")]
 use crossterm::style::Stylize;
@@ -62,6 +62,16 @@ impl ProjectResponse {
             writeln!(&mut s, "    - {uri}").unwrap();
         }
 
+        // Display compute tier information if configured
+        if let Some(compute_tier) = &self.compute_tier {
+            writeln!(
+                &mut s,
+                "  Instance size: {}",
+                compute_tier.to_fancy_string()
+            )
+            .unwrap_or_default();
+        }
+
         s
     }
 }
@@ -93,7 +103,7 @@ pub struct ProjectUpdateRequest {
     pub config: Option<serde_json::Value>,
 }
 
-#[derive(Debug, Default, Clone, PartialEq, Eq, Display, Serialize, Deserialize, EnumString)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize, EnumString)]
 #[serde(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
@@ -112,12 +122,26 @@ pub enum ComputeTier {
     #[doc(hidden)]
     #[typeshare(skip)]
     #[serde(untagged, skip_serializing)]
-    #[strum(default, to_string = "Unknown: {0}")]
+    #[strum(default)]
     Unknown(String),
+}
+impl ComputeTier {
+    pub fn to_fancy_string(&self) -> String {
+        match self {
+            Self::XS => "Basic (0.25 vCPU, 0.5 GB RAM)".to_owned(),
+            Self::S => "Small (0.5 vCPU, 1 GB RAM)".to_owned(),
+            Self::M => "Medium (1 vCPU, 2 GB RAM)".to_owned(),
+            Self::L => "Large (2 vCPU, 4 GB RAM)".to_owned(),
+            Self::XL => "X Large (4 vCPU, 8 GB RAM)".to_owned(),
+            Self::XXL => "XX Large (8 vCPU, 16 GB RAM)".to_owned(),
+            #[cfg(feature = "unknown-variants")]
+            Self::Unknown(s) => format!("Unknown: {s}"),
+        }
+    }
 }
 
 /// Sub-Response for the /user/me/usage backend endpoint
-#[derive(Debug, Default, Deserialize, Serialize, Clone)]
+#[derive(Debug, Default, Deserialize, Serialize, Clone, PartialEq)]
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub struct ProjectUsageResponse {
@@ -126,10 +150,13 @@ pub struct ProjectUsageResponse {
 
     /// Show the VCPU used by this project on the container platform.
     pub vcpu: ProjectUsageVCPU,
+
+    /// Daily usage breakdown for this project
+    pub daily: Vec<ProjectUsageDaily>,
 }
 
 /// Build Minutes subquery for the [`ProjectUsageResponse`] struct
-#[derive(Debug, Default, Deserialize, Serialize, Clone)]
+#[derive(Debug, Default, Deserialize, Serialize, Clone, Eq, PartialEq)]
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub struct ProjectUsageBuild {
@@ -141,13 +168,31 @@ pub struct ProjectUsageBuild {
 }
 
 /// VCPU subquery for the [`ProjectUsageResponse`] struct
-#[derive(Debug, Default, Deserialize, Serialize, Clone)]
+#[derive(Debug, Default, Deserialize, Serialize, Clone, PartialEq)]
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub struct ProjectUsageVCPU {
-    /// The VCPU reserved for this project
-    pub reserved: f32,
+    /// Used reserved VCPU hours for a project.
+    pub reserved_hours: f32,
 
-    /// Cost accrued from VCPU usage for this project
+    /// Used VCPU hours beyond the included reserved VCPU hours for a project.
     pub billable_hours: f32,
+}
+
+// Add this new struct for daily usage data
+#[derive(Debug, Default, Serialize, Deserialize, Clone, PartialEq)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[typeshare::typeshare]
+pub struct ProjectUsageDaily {
+    pub avg_cpu_utilised: f32,
+    pub avg_mem_utilised: f32,
+    pub billable_vcpu_hours: f32,
+    pub build_minutes: u32,
+    pub isodate: chrono::NaiveDate,
+    pub max_cpu_reserved: f32,
+    pub max_mem_reserved: f32,
+    pub min_cpu_reserved: f32,
+    pub min_mem_reserved: f32,
+    pub reserved_vcpu_hours: f32,
+    pub runtime_minutes: u32,
 }

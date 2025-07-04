@@ -18,7 +18,7 @@ body:
     attributes:
       label: Version
       description: What version of Shuttle CLI are you running (`shuttle --version`)?
-      placeholder: "v0.55.0"
+      placeholder: "v0.56.0"
     validations:
       required: true
   - type: dropdown

@@ -145,6 +145,20 @@ export interface DeploymentListResponse {
 export type BuildArgs = 
 	| { type: "Rust", content: BuildArgsRust };
 
+export enum ComputeTier {
+	XS = "xs",
+	S = "s",
+	M = "m",
+	L = "l",
+	XL = "xl",
+	XXL = "xxl",
+}
+
+export interface InfraRequest {
+	instance_size?: ComputeTier;
+	replicas?: number;
+}
+
 export interface DeploymentRequestBuildArchive {
 	/** The S3 object version ID of the archive to use */
 	archive_version_id: string;
@@ -155,6 +169,7 @@ export interface DeploymentRequestBuildArchive {
 	 */
 	secrets?: Record<string, string>;
 	build_meta?: BuildMeta;
+	infra?: InfraRequest;
 }
 
 export interface DeploymentRequestImage {
@@ -187,15 +202,6 @@ export interface LogsResponse {
 
 export interface ProjectCreateRequest {
 	name: string;
-}
-
-export enum ComputeTier {
-	XS = "xs",
-	S = "s",
-	M = "m",
-	L = "l",
-	XL = "xl",
-	XXL = "xxl",
 }
 
 export interface ProjectResponse {
@@ -240,11 +246,25 @@ export interface ProjectUsageBuild {
 	limit: number;
 }
 
+export interface ProjectUsageDaily {
+	avg_cpu_utilised: number;
+	avg_mem_utilised: number;
+	billable_vcpu_hours: number;
+	build_minutes: number;
+	isodate: string;
+	max_cpu_reserved: number;
+	max_mem_reserved: number;
+	min_cpu_reserved: number;
+	min_mem_reserved: number;
+	reserved_vcpu_hours: number;
+	runtime_minutes: number;
+}
+
 /** VCPU subquery for the [`ProjectUsageResponse`] struct */
 export interface ProjectUsageVCPU {
-	/** The VCPU reserved for this project */
-	reserved: number;
-	/** Cost accrued from VCPU usage for this project */
+	/** Used reserved VCPU hours for a project. */
+	reserved_hours: number;
+	/** Used VCPU hours beyond the included reserved VCPU hours for a project. */
 	billable_hours: number;
 }
 
@@ -254,6 +274,8 @@ export interface ProjectUsageResponse {
 	build_minutes: ProjectUsageBuild;
 	/** Show the VCPU used by this project on the container platform. */
 	vcpu: ProjectUsageVCPU;
+	/** Daily usage breakdown for this project */
+	daily: ProjectUsageDaily[];
 }
 
 export enum ResourceType {
@@ -379,6 +401,41 @@ export interface UploadArchiveResponse {
 	archive_version_id: string;
 }
 
+/** Sub-Response for the /user/me/usage backend endpoint */
+export interface UserBillingCycle {
+	/**
+	 * Billing cycle start, or monthly from user creation
+	 * depending on the account tier
+	 */
+	start: string;
+	/**
+	 * Billing cycle end, or end of month from user creation
+	 * depending on the account tier
+	 */
+	end: string;
+}
+
+export interface UserUsageCustomDomains {
+	used: number;
+	limit: number;
+}
+
+export interface UserUsageProjects {
+	used: number;
+	limit: number;
+}
+
+export interface UserUsageTeamMembers {
+	used: number;
+	limit: number;
+}
+
+export interface UserOverviewResponse {
+	custom_domains: UserUsageCustomDomains;
+	projects: UserUsageProjects;
+	team_members?: UserUsageTeamMembers;
+}
+
 export interface UserResponse {
 	id: string;
 	/** Auth0 id */
@@ -392,19 +449,13 @@ export interface UserResponse {
 
 /** Response for the /user/me/usage backend endpoint */
 export interface UserUsageResponse {
+	/** Billing cycle for user, will be None if no usage data exists for user. */
+	billing_cycle?: UserBillingCycle;
+	/** User overview information including project and domain counts */
+	user?: UserOverviewResponse;
 	/**
-	 * Billing cycle start, or monthly from user creation
-	 * depending on the account tier
-	 */
-	start: string;
-	/**
-	 * Billing cycle end, or end of month from user creation
-	 * depending on the account tier
-	 */
-	end: string;
-	/**
-	 * HashMap of project related metrics for this cycle
-	 * keyed by project_id
+	 * HashMap of project related metrics for this cycle keyed by project_id. Will be empty
+	 * if no project usage data exists for user.
 	 */
 	projects: Record<string, ProjectUsageResponse>;
 }

@@ -7,6 +7,8 @@ use strum::{Display, EnumString};
 #[cfg(feature = "display")]
 use crossterm::style::Stylize;
 
+use super::infra::InfraRequest;
+
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Display, Serialize, EnumString)]
 #[serde(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
@@ -129,7 +131,7 @@ pub struct UploadArchiveResponse {
 #[typeshare::typeshare]
 pub enum DeploymentRequest {
     /// Build an image from the source code in an attached zip archive
-    BuildArchive(DeploymentRequestBuildArchive),
+    BuildArchive(Box<DeploymentRequestBuildArchive>),
     // TODO?: Add GitRepo(DeploymentRequestGitRepo)
     /// Use this image directly. Can be used to skip the build step.
     Image(DeploymentRequestImage),
@@ -148,6 +150,7 @@ pub struct DeploymentRequestBuildArchive {
     /// TODO: Remove this in favour of a separate secrets uploading action.
     pub secrets: Option<HashMap<String, String>>,
     pub build_meta: Option<BuildMeta>,
+    pub infra: Option<InfraRequest>,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -241,7 +244,7 @@ pub struct DeploymentRequestImage {
 pub struct DeploymentMetadata {
     pub env: Environment,
     pub project_name: String,
-    /// Path to a folder that persists between deployments
+    /// Path to a recommended folder for disk storage during local runs
     pub storage_path: PathBuf,
 }
 

@@ -1,0 +1,10 @@
+[package]
+name = "not-full-macro"
+version = "0.1.0"
+edition = "2021"
+
+[workspace]
+
+[dependencies]
+shuttle-axum = { path = "../../../../services/shuttle-axum" }
+shuttle-runtime = { path = "../../../../runtime" }

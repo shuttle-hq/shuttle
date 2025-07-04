@@ -12,10 +12,14 @@
 
 ## Usage
 
-Start by installing the Shuttle CLI by running the following in a terminal:
+Start by installing the [Shuttle CLI](https://crates.io/crates/cargo-shuttle) by running the following in a terminal ([more installation options](https://docs.shuttle.dev/getting-started/installation)):
 
 ```bash
-cargo install cargo-shuttle
+# Linux / macOS
+curl -sSfL https://www.shuttle.dev/install | bash
+
+# Windows (Powershell)
+iwr https://www.shuttle.dev/install-win | iex
 ```
 
 Now that Shuttle is installed, you can initialize a project with Axum boilerplate:
@@ -29,8 +33,8 @@ be a binary crate with a few dependencies including `shuttle-runtime` and `shutt
 
 ```toml
 axum = "0.8.1"
-shuttle-axum = "0.55.0"
-shuttle-runtime = "0.55.0"
+shuttle-axum = "0.56.0"
+shuttle-runtime = "0.56.0"
 tokio = "1.28.2"
 ```
 

@@ -1,8 +1,5 @@
 //! Shared constants used across Shuttle crates
 
-/// Used by plugins for local file storage.
-pub const STORAGE_DIRNAME: &str = ".shuttle-storage";
-
 // URLs
 pub const SHUTTLE_API_URL: &str = "https://api.shuttle.dev";
 pub const SHUTTLE_CONSOLE_URL: &str = "https://console.shuttle.dev";
@@ -20,9 +17,6 @@ pub const EXAMPLES_README: &str =
     "https://github.com/shuttle-hq/shuttle-examples#how-to-clone-run-and-deploy-an-example";
 pub const EXAMPLES_TEMPLATES_TOML: &str =
     "https://raw.githubusercontent.com/shuttle-hq/shuttle-examples/main/templates.toml";
-
-/// Crate name for checking cargo metadata
-pub const RUNTIME_NAME: &str = "shuttle-runtime";
 
 /// Current version field in `examples/templates.toml`
 pub const TEMPLATES_SCHEMA_VERSION: u32 = 1;

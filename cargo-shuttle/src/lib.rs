@@ -652,57 +652,34 @@ impl Shuttle {
         trace!("project arguments: {project_args:?}");
 
         self.ctx.load_local_config(project_args)?;
-        // load project id from args if given or from file if exists
+        // load project id from args if given or from internal config file if present
         self.ctx.load_local_internal_config(project_args)?;
 
-        if let Some(id) = project_args.id.as_ref() {
-            // Validate format of explicitly given project id and change the ULID to uppercase if it is lowercase
-            if let Some(proj_id_uppercase) = id.strip_prefix("proj_").and_then(|suffix| {
-                // Soft (dumb) validation of ULID format (ULIDs are 26 chars)
-                (suffix.len() == 26).then_some(format!("proj_{}", suffix.to_ascii_uppercase()))
-            }) {
-                if *id != proj_id_uppercase {
-                    eprintln!("INFO: Converted project id to '{}'", proj_id_uppercase);
-                    self.ctx.set_project_id(proj_id_uppercase);
-                }
-            } else {
-                // TODO: eprintln a warning?
-                warn!("project id with bad format detected: '{id}'");
-            }
-
-            // if linking, save config
-            if do_linking {
-                eprintln!("Linking to project {}", self.ctx.project_id());
-                self.ctx.save_local_internal()?;
-            }
-        }
-        if self.ctx.project_id_found() {
-            // --id takes prio over --name, and at this point we know the id, so we're done
-            return Ok(());
-        }
-
-        // translate project name to project id if a name was given
-        if let Some(name) = project_args.name.as_ref() {
-            let client = self.client.as_ref().unwrap();
-            trace!(%name, "looking up project id from project name");
-            if let Some(proj) = client
-                .get_projects_list()
-                .await?
-                .into_inner()
-                .projects
-                .into_iter()
-                .find(|p| p.name == *name)
-            {
-                trace!("found project by name");
-                self.ctx.set_project_id(proj.id);
-            } else {
-                trace!("did not find project by name");
-                if create_missing_project {
-                    trace!("creating project since it was not found");
-                    // This is a side effect (non-primary output), so OutputMode::Json is not considered
-                    let proj = client.create_project(name).await?.into_inner();
-                    eprintln!("Created project '{}' with id {}", proj.name, proj.id);
+        // If project id was not given via arg but a name was, try to translate the project name to a project id.
+        // (A --name from args takes precedence over an id from internal config.)
+        if project_args.id.is_none() {
+            if let Some(name) = project_args.name.as_ref() {
+                let client = self.client.as_ref().unwrap();
+                trace!(%name, "looking up project id from project name");
+                if let Some(proj) = client
+                    .get_projects_list()
+                    .await?
+                    .into_inner()
+                    .projects
+                    .into_iter()
+                    .find(|p| p.name == *name)
+                {
+                    trace!("found project by name");
                     self.ctx.set_project_id(proj.id);
+                } else {
+                    trace!("did not find project by name");
+                    if create_missing_project {
+                        trace!("creating project since it was not found");
+                        // This is a side effect (non-primary output), so OutputMode::Json is not considered
+                        let proj = client.create_project(name).await?.into_inner();
+                        eprintln!("Created project '{}' with id {}", proj.name, proj.id);
+                        self.ctx.set_project_id(proj.id);
+                    }
                 }
             }
         }
@@ -715,19 +692,20 @@ impl Shuttle {
             }
             // if project id is known, we are done and nothing more to do
             (true, false) => (),
-            // we still don't know the project id but want to link
+            // we still don't know the project id but want to link, so ask the user interactively
             (false, true) => {
                 self.project_link_interactive().await?;
             }
             // we still don't know the project id
             (false, false) => {
-                // if a name was given but no project was found, (incorrectly) set the id to the name so that an api error will be encountered
-                // TODO: return an error here instead of letting an api error happen?
+                // If a name was given but no project was found, error out
                 if let Some(name) = project_args.name.as_ref() {
-                    warn!("using project name as the id");
-                    self.ctx.set_project_id(name.clone());
+                    bail!(
+                        "Project with name '{}' not found in your project list. Please link the project to this directory or create it.",
+                        name
+                    );
                 } else {
-                    // otherwise, we have to do an explicit linking
+                    // we didn't find a project id and no name was given, so ask the user interactively
                     trace!("no project id found");
                     self.project_link_interactive().await?;
                 }
@@ -1049,16 +1027,17 @@ impl Shuttle {
     }
 
     async fn deployments_list(&self, page: u32, limit: u32, table_args: TableArgs) -> Result<()> {
-        let client = self.client.as_ref().unwrap();
         if limit == 0 {
+            warn!("Limit is set to 0, no deployments will be listed.");
             return Ok(());
         }
-        let proj_name = self.ctx.project_name();
+        let client = self.client.as_ref().unwrap();
+        let pid = self.ctx.project_id();
 
         // fetch one additional to know if there is another page available
         let limit = limit + 1;
         let (deployments, raw_json) = client
-            .get_deployments(self.ctx.project_id(), page as i32, limit as i32)
+            .get_deployments(pid, page as i32, limit as i32)
             .await?
             .into_parts();
         let mut deployments = deployments.deployments;
@@ -1072,10 +1051,7 @@ impl Shuttle {
         match self.output_mode {
             OutputMode::Normal => {
                 let table = deployments_table(&deployments, table_args.raw);
-                println!(
-                    "{}",
-                    format!("Deployments in project '{}'", proj_name).bold()
-                );
+                println!("{}", format!("Deployments in project '{}'", pid).bold());
                 println!("{table}");
                 if page_hint {
                     println!("View the next page using `--page {}`", page + 1);

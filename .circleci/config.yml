@@ -465,12 +465,7 @@ workflows:
               ignore: /.*/
             tags:
               only: /v[\d\.]+/
-      - build-binaries-mac:
-          filters:
-            branches:
-              ignore: /.*/
-            tags:
-              only: /v[\d\.]+/
+      - build-binaries-mac
       - publish-github-release-draft:
           requires:
             - build-binaries-x86_64-gnu

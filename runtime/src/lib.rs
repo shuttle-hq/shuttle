@@ -10,8 +10,8 @@ mod plugins;
 mod rt;
 mod start;
 
-#[cfg(feature = "setup-otel-exporter")]
-mod telemetry;
+#[cfg(feature = "otel-exporter")]
+pub mod telemetry;
 
 // Public API
 // Useful re-exports

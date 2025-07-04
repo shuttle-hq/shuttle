@@ -321,7 +321,8 @@ jobs:
     steps:
       - checkout
       - when:
-          condition: << parameters.target >> == "x86_64-apple-darwin"
+          condition:
+            equal: [<< parameters.target >>, "x86_64-apple-darwin"]
           steps:
             # Necessary to build for x86 targets on apple silicon
             - macos/install-rosetta

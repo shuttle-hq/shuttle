@@ -275,7 +275,7 @@ jobs:
       - run: sudo apt update && sudo DEBIAN_FRONTEND=noninteractive apt install -y libssl-dev musl-tools clang
       - run:
           name: Install Rust
-          # Note: Let binary build use latest
+          # Note: Let binary build use latest stable Rust
           command: curl --proto '=https' --tlsv1.3 https://sh.rustup.rs -sSf | bash -s -- -y --target << parameters.target >>
       - run:
           name: Build
@@ -296,7 +296,7 @@ jobs:
       - checkout
       - run:
           name: Install Rust
-          # Note: Let binary build use latest
+          # Note: Let binary build use latest stable Rust
           command: |
             choco uninstall rust # The one coming from choco interferes with the one coming from rustup
             wget -OutFile "C:\rustup-init.exe" https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-msvc/rustup-init.exe
@@ -312,22 +312,29 @@ jobs:
           suffix: ".exe"
   build-binaries-mac:
     macos:
-      xcode: 15.3.0
+      xcode: 16.4.0
     resource_class: m4pro.medium
+    parameters:
+      target:
+        description: "Macos target to build for"
+        type: string
     steps:
       - checkout
-      # Necessary to build for Intel targets on m1.
-      - macos/install-rosetta
+      - when:
+          condition: << parameters.target >> == "x86_64-apple-darwin"
+          steps:
+            # Necessary to build for x86 targets on apple silicon
+            - macos/install-rosetta
       - run:
           name: Install Rust
-          # Note: Let binary build use latest
-          command: curl --proto '=https' https://sh.rustup.rs -sSf | bash -s -- -y --target x86_64-apple-darwin
+          # Note: Let binary build use latest stable Rust
+          command: curl --proto '=https' https://sh.rustup.rs -sSf | bash -s -- -y --target << parameters.target >>
       - run:
           name: Build
           command: |
-            cargo build --release --package cargo-shuttle --target x86_64-apple-darwin
+            cargo build --release --package cargo-shuttle --target << parameters.target >>
       - make-artifact:
-          target: x86_64-apple-darwin
+          target: << parameters.target >>
   publish-github-release-draft:
     docker:
       - image: cimg/go:1.19.3
@@ -465,14 +472,20 @@ workflows:
               ignore: /.*/
             tags:
               only: /v[\d\.]+/
-      - build-binaries-mac
+      - build-binaries-mac:
+          name: build-binaries-mac-x86_64
+          target: x86_64-apple-darwin
+      - build-binaries-mac:
+          name: build-binaries-mac-aarch64
+          target: aarch64-apple-darwin
       - publish-github-release-draft:
           requires:
             - build-binaries-x86_64-gnu
             - build-binaries-x86_64-musl
             - build-binaries-aarch64
             - build-binaries-windows
-            - build-binaries-mac
+            - build-binaries-mac-x86_64
+            - build-binaries-mac-aarch64
           filters:
             branches:
               ignore: /.*/

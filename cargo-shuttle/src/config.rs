@@ -38,6 +38,7 @@ impl ConfigManager for LocalConfigManager {
 #[derive(Deserialize, Serialize, Default)]
 pub struct ProjectConfig {
     // unused on new platform, but still used for project names in local runs
+    // TODO: remove and use the crate/workspace name instead
     pub name: Option<String>,
     /// Deprecated, now [`ProjectDeployConfig::include`]
     pub assets: Option<Vec<String>>,
@@ -125,7 +126,29 @@ impl RequestContext {
             // Command-line id parameter trumps everything
             (Some(id_from_args), _) => {
                 trace!("using command-line project id");
-                config.id = Some(id_from_args.clone());
+
+                // Validate format of explicitly given project id and change the ULID to uppercase if it is lowercase
+                let id_to_use = if let Some(proj_id_uppercase) =
+                    id_from_args.strip_prefix("proj_").and_then(|suffix| {
+                        // Soft (dumb) validation of ULID format (ULIDs are 26 chars)
+                        (suffix.len() == 26)
+                            .then_some(format!("proj_{}", suffix.to_ascii_uppercase()))
+                    }) {
+                    if *id_from_args != proj_id_uppercase {
+                        eprintln!("INFO: Converted project id to '{}'", proj_id_uppercase);
+
+                        proj_id_uppercase
+                    } else {
+                        id_from_args.clone()
+                    }
+                } else {
+                    // TODO: eprintln a warning?
+                    tracing::warn!("project id with bad format detected: '{id_from_args}'");
+
+                    id_from_args.clone()
+                };
+
+                config.id = Some(id_to_use);
             }
             // If key exists in config then keep it as it is
             (None, Some(_)) => {
@@ -147,9 +170,7 @@ impl RequestContext {
     }
 
     pub fn save_local_internal(&mut self) -> Result<()> {
-        // if self.project_internal.is_some() {
         self.project_internal.as_ref().unwrap().save()?;
-        // }
 
         // write updated gitignore file to root of workspace
         // TODO: assumes git is used
@@ -169,9 +190,7 @@ impl RequestContext {
 
     /// Load the Shuttle.toml project configuration at the given `working_directory`
     pub fn load_local_config(&mut self, project_args: &ProjectArgs) -> Result<()> {
-        let project = Self::get_local_config(project_args)?;
-
-        self.project = Some(project);
+        self.project = Some(Self::get_local_config(project_args)?);
 
         Ok(())
     }

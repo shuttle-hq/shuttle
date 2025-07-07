@@ -679,36 +679,38 @@ impl Shuttle {
                         let proj = client.create_project(name).await?.into_inner();
                         eprintln!("Created project '{}' with id {}", proj.name, proj.id);
                         self.ctx.set_project_id(proj.id);
+                    } else if do_linking {
+                        self.project_link_interactive().await?;
+                        return Ok(());
+                    } else {
+                        bail!(
+                            "Project with name '{}' not found in your project list. \
+                            Use 'shuttle project link' to create it or link an existing project.",
+                            name
+                        );
                     }
                 }
             }
         }
 
         match (self.ctx.project_id_found(), do_linking) {
-            // if project id is known and we are linking, save config
             (true, true) => {
-                eprintln!("Linking to project {}", self.ctx.project_id());
-                self.ctx.save_local_internal()?;
+                let arg_given = project_args.id.is_some() || project_args.name.is_some();
+                if arg_given {
+                    // project id was found via explicitly given arg, save config
+                    eprintln!("Linking to project {}", self.ctx.project_id());
+                    self.ctx.save_local_internal()?;
+                } else {
+                    // project id was found but not given via arg, ask the user interactively
+                    self.project_link_interactive().await?;
+                }
             }
             // if project id is known, we are done and nothing more to do
             (true, false) => (),
-            // we still don't know the project id but want to link, so ask the user interactively
-            (false, true) => {
+            // we still don't know the project id, so ask the user interactively
+            (false, _) => {
+                trace!("no project id found");
                 self.project_link_interactive().await?;
-            }
-            // we still don't know the project id
-            (false, false) => {
-                // If a name was given but no project was found, error out
-                if let Some(name) = project_args.name.as_ref() {
-                    bail!(
-                        "Project with name '{}' not found in your project list. Please link the project to this directory or create it.",
-                        name
-                    );
-                } else {
-                    // we didn't find a project id and no name was given, so ask the user interactively
-                    trace!("no project id found");
-                    self.project_link_interactive().await?;
-                }
             }
         }
 

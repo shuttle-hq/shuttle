@@ -3939,6 +3939,7 @@ dependencies = [
  "rmcp",
  "serde",
  "tokio",
+ "tracing",
  "urlencoding",
 ]
 

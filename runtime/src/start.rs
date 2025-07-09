@@ -58,13 +58,19 @@ pub async fn start(
                 }),
             )
             .init();
+        tracing::warn!(
+            "Default tracing subscriber initialized (https://docs.shuttle.dev/docs/logs)"
+        );
     }
 
     #[cfg(feature = "setup-otel-exporter")]
-    let _guard = crate::telemetry::init_tracing_subscriber(crate_name, package_version);
-
-    #[cfg(any(feature = "setup-tracing", feature = "setup-otel-exporter"))]
-    tracing::warn!("Default tracing subscriber initialized (https://docs.shuttle.dev/docs/logs)");
+    let _guard = {
+        let guard = crate::telemetry::init_tracing_subscriber(crate_name, package_version);
+        tracing::warn!(
+            "Default tracing subscriber with otel exporter initialized (https://docs.shuttle.dev/docs/telemetry)"
+        );
+        guard
+    };
 
     rt::start(loader, runner).await
 }

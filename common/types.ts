@@ -178,6 +178,15 @@ export interface DeploymentRequestImage {
 	secrets?: Record<string, string>;
 }
 
+export interface GenericOtelConfig {
+	endpoint: string;
+	bearer_token: string;
+	grpc: boolean;
+	logs: boolean;
+	traces: boolean;
+	metrics: boolean;
+}
+
 export interface GrafanaCloudConfig {
 	token: string;
 	endpoint: string;
@@ -390,6 +399,7 @@ export interface TelemetryConfigResponse {
 	datadog?: TelemetrySinkStatus;
 	grafana_cloud?: TelemetrySinkStatus;
 	logfire?: TelemetrySinkStatus;
+	generic?: TelemetrySinkStatus;
 }
 
 export interface UpdateAccountTierRequest {
@@ -475,5 +485,7 @@ export type TelemetrySinkConfig =
 	/** [Grafana Cloud](https://grafana.com/docs/grafana-cloud/send-data/otlp/) */
 	| { type: "grafana_cloud", content: GrafanaCloudConfig }
 	/** [Logfire](https://logfire.pydantic.dev/docs/how-to-guides/alternative-clients/) */
-	| { type: "logfire", content: LogfireConfig };
+	| { type: "logfire", content: LogfireConfig }
+	/** Generic config for Otel sinks that only need a host and Bearer token */
+	| { type: "generic_otel", content: GenericOtelConfig };
 

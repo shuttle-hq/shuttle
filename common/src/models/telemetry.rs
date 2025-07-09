@@ -28,6 +28,7 @@ pub struct TelemetryConfigResponse {
     datadog: Option<TelemetrySinkStatus>,
     grafana_cloud: Option<TelemetrySinkStatus>,
     logfire: Option<TelemetrySinkStatus>,
+    generic: Option<TelemetrySinkStatus>,
 }
 
 impl From<Vec<TelemetrySinkConfig>> for TelemetryConfigResponse {
@@ -47,6 +48,9 @@ impl From<Vec<TelemetrySinkConfig>> for TelemetryConfigResponse {
                 }
                 TelemetrySinkConfig::Logfire(_) => {
                     instance.logfire = Some(TelemetrySinkStatus { enabled: true })
+                }
+                TelemetrySinkConfig::GenericOtel(_) => {
+                    instance.generic = Some(TelemetrySinkStatus { enabled: true })
                 }
                 TelemetrySinkConfig::Debug(_) => {}
             }
@@ -94,6 +98,9 @@ pub enum TelemetrySinkConfig {
 
     /// [Logfire](https://logfire.pydantic.dev/docs/how-to-guides/alternative-clients/)
     Logfire(LogfireConfig),
+
+    /// Generic config for Otel sinks that only need a host and Bearer token
+    GenericOtel(GenericOtelConfig),
 
     /// Internal Debugging
     #[doc(hidden)]
@@ -204,6 +211,33 @@ impl Default for LogfireConfig {
     }
 }
 
+#[derive(Eq, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "integration-tests", derive(Debug))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[typeshare::typeshare]
+pub struct GenericOtelConfig {
+    pub endpoint: String,
+    pub bearer_token: String,
+    pub grpc: bool,
+    pub logs: bool,
+    pub traces: bool,
+    pub metrics: bool,
+}
+
+#[cfg(any(test, feature = "integration-tests"))]
+impl Default for GenericOtelConfig {
+    fn default() -> Self {
+        Self {
+            endpoint: "https://host.host/".into(),
+            bearer_token: "bearer".into(),
+            grpc: true,
+            logs: true,
+            traces: true,
+            metrics: true,
+        }
+    }
+}
+
 #[cfg(feature = "integration-tests")]
 impl From<BetterstackConfig> for TelemetrySinkConfig {
     fn from(value: BetterstackConfig) -> Self {
@@ -229,6 +263,13 @@ impl From<GrafanaCloudConfig> for TelemetrySinkConfig {
 impl From<LogfireConfig> for TelemetrySinkConfig {
     fn from(value: LogfireConfig) -> Self {
         TelemetrySinkConfig::Logfire(value)
+    }
+}
+
+#[cfg(feature = "integration-tests")]
+impl From<GenericOtelConfig> for TelemetrySinkConfig {
+    fn from(value: GenericOtelConfig) -> Self {
+        TelemetrySinkConfig::GenericOtel(value)
     }
 }
 
@@ -273,6 +314,15 @@ impl std::str::FromStr for TelemetrySinkConfig {
                         "cannot deserialize config as valid Logfire configuration",
                     )
                 }))
+            .or(serde_json::from_str::<GenericOtelConfig>(config)
+                .map(Self::from)
+                .inspect_err(|error| {
+                    tracing::debug!(
+                        %config,
+                        %error,
+                        "cannot deserialize config as valid Generic configuration",
+                    )
+                }))
             .map_err(|_| {
                 <serde_json::Error as serde::de::Error>::custom(format!(
                     "configuration does not match any known external telemetry sink: {}",
@@ -309,6 +359,13 @@ mod tests {
                     assert_eq!("logfire", sink.as_ref());
                     assert_eq!("project::telemetry::logfire::config", sink.as_db_type());
                 }
+                sink @ TelemetrySinkConfig::GenericOtel(_) => {
+                    assert_eq!("generic_otel", sink.as_ref());
+                    assert_eq!(
+                        "project::telemetry::generic_otel::config",
+                        sink.as_db_type()
+                    );
+                }
                 sink @ TelemetrySinkConfig::Debug(_) => {
                     assert_eq!("debug", sink.as_ref());
                     assert_eq!("project::telemetry::debug::config", sink.as_db_type());
@@ -343,6 +400,13 @@ mod tests {
                     assert_eq!("logfire", discriminant.as_ref());
                     assert_eq!(
                         r#""logfire""#,
+                        serde_json::to_string(&discriminant).unwrap()
+                    );
+                }
+                discriminant @ TelemetrySinkConfigDiscriminants::GenericOtel => {
+                    assert_eq!("generic_otel", discriminant.as_ref());
+                    assert_eq!(
+                        r#""generic_otel""#,
                         serde_json::to_string(&discriminant).unwrap()
                     );
                 }

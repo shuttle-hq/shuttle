@@ -180,7 +180,9 @@ export interface DeploymentRequestImage {
 
 export interface GenericOtelConfig {
 	endpoint: string;
-	bearer_token: string;
+	authorization?: string;
+	bearer_token?: string;
+	compression?: string;
 	grpc: boolean;
 	logs: boolean;
 	traces: boolean;

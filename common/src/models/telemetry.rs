@@ -216,11 +216,21 @@ impl Default for LogfireConfig {
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub struct GenericOtelConfig {
+    /// Endpoint for the exporter to target
     pub endpoint: String,
-    pub bearer_token: String,
+    /// Set either the full authorization header or just the bearer token
+    pub authorization: Option<String>,
+    /// Set either the full authorization header or just the bearer token
+    pub bearer_token: Option<String>,
+    /// Add http/grpc compression to exporter. Example: gzip
+    pub compression: Option<String>,
+    /// true: otlp, false: otlphttp
     pub grpc: bool,
+    /// Enable logs pipeline (if included in tier)
     pub logs: bool,
+    /// Enable traces pipeline (if included in tier)
     pub traces: bool,
+    /// Enable metrics pipeline
     pub metrics: bool,
 }
 
@@ -229,7 +239,9 @@ impl Default for GenericOtelConfig {
     fn default() -> Self {
         Self {
             endpoint: "https://host.host/".into(),
-            bearer_token: "bearer".into(),
+            authorization: None,
+            bearer_token: Some("bearer".into()),
+            compression: Some("gzip".into()),
             grpc: true,
             logs: true,
             traces: true,

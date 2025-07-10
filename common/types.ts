@@ -179,13 +179,21 @@ export interface DeploymentRequestImage {
 }
 
 export interface GenericOtelConfig {
+	/** Endpoint for the exporter to target */
 	endpoint: string;
+	/** Set either the full authorization header or just the bearer token */
 	authorization?: string;
+	/** Set either the full authorization header or just the bearer token */
 	bearer_token?: string;
+	/** Add http/grpc compression to exporter. Example: gzip */
 	compression?: string;
+	/** true: otlp, false: otlphttp */
 	grpc: boolean;
+	/** Enable logs pipeline (if included in tier) */
 	logs: boolean;
+	/** Enable traces pipeline (if included in tier) */
 	traces: boolean;
+	/** Enable metrics pipeline */
 	metrics: boolean;
 }
 

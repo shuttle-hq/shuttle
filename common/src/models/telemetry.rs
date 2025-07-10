@@ -217,7 +217,9 @@ impl Default for LogfireConfig {
 #[typeshare::typeshare]
 pub struct GenericOtelConfig {
     pub endpoint: String,
-    pub bearer_token: String,
+    pub authorization: Option<String>,
+    pub bearer_token: Option<String>,
+    pub compression: Option<String>,
     pub grpc: bool,
     pub logs: bool,
     pub traces: bool,
@@ -229,7 +231,9 @@ impl Default for GenericOtelConfig {
     fn default() -> Self {
         Self {
             endpoint: "https://host.host/".into(),
-            bearer_token: "bearer".into(),
+            authorization: None,
+            bearer_token: Some("bearer".into()),
+            compression: Some("gzip".into()),
             grpc: true,
             logs: true,
             traces: true,

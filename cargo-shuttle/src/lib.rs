@@ -265,10 +265,13 @@ impl Shuttle {
                 DeploymentCommand::List { page, limit, table } => {
                     self.deployments_list(page, limit, table).await
                 }
-                DeploymentCommand::Status { id } => self.deployment_get(id).await,
-                DeploymentCommand::Redeploy { id, tracking_args } => {
-                    self.deployment_redeploy(id, tracking_args).await
+                DeploymentCommand::Status { deployment_id } => {
+                    self.deployment_get(deployment_id).await
                 }
+                DeploymentCommand::Redeploy {
+                    deployment_id,
+                    tracking_args,
+                } => self.deployment_redeploy(deployment_id, tracking_args).await,
                 DeploymentCommand::Stop { tracking_args } => self.stop(tracking_args).await,
             },
             Command::Resource(cmd) => match cmd {
@@ -997,7 +1000,7 @@ impl Shuttle {
                 };
                 eprintln!("Getting logs from: {}", most_recent.id);
                 most_recent.id
-            } else if let Some(id) = args.id {
+            } else if let Some(id) = args.deployment_id {
                 id
             } else {
                 let Some(current) = client.get_current_deployment(pid).await?.into_inner() else {

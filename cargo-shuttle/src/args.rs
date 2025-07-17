@@ -214,12 +214,12 @@ pub enum DeploymentCommand {
     #[command(visible_alias = "stat")]
     Status {
         /// ID of deployment to get status for
-        id: Option<String>,
+        deployment_id: Option<String>,
     },
     /// Redeploy a previous deployment (if possible)
     Redeploy {
         /// ID of deployment to redeploy
-        id: Option<String>,
+        deployment_id: Option<String>,
 
         #[command(flatten)]
         tracking_args: DeploymentTrackingArgs,
@@ -516,7 +516,7 @@ impl InitTemplateArg {
 #[derive(Args, Clone, Debug, Default)]
 pub struct LogsArgs {
     /// Deployment ID to get logs for. Defaults to the current deployment
-    pub id: Option<String>,
+    pub deployment_id: Option<String>,
     #[arg(short, long)]
     /// View logs from the most recent deployment (which is not always the running one)
     pub latest: bool,

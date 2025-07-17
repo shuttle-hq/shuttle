@@ -164,10 +164,7 @@ impl ShuttleApiClient {
 
         let bytes = self
             .get(
-                format!(
-                    "/projects/{project}/services/{project}/resources/{}/dump",
-                    r#type
-                ),
+                format!("/projects/{project}/resources/{type}/dump"),
                 Option::<()>::None,
             )
             .await?

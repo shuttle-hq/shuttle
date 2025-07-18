@@ -3,8 +3,7 @@ use std::time::Duration;
 use anyhow::{Context, Result};
 use headers::{Authorization, HeaderMapExt};
 use percent_encoding::utf8_percent_encode;
-use reqwest::header::HeaderMap;
-use reqwest::Response;
+use reqwest::{header::HeaderMap, Response};
 use reqwest_middleware::{ClientWithMiddleware, RequestBuilder};
 use serde::{Deserialize, Serialize};
 use shuttle_common::models::{
@@ -22,15 +21,17 @@ use shuttle_common::models::{
     user::UserResponse,
 };
 use tokio::net::TcpStream;
-use tokio_tungstenite::tungstenite::client::IntoClientRequest;
-use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
+use tokio_tungstenite::{
+    connect_async, tungstenite::client::IntoClientRequest, MaybeTlsStream, WebSocketStream,
+};
 
 #[cfg(feature = "tracing")]
 mod middleware;
 #[cfg(feature = "tracing")]
-use crate::middleware::LoggingMiddleware;
-#[cfg(feature = "tracing")]
 use tracing::{debug, error};
+
+#[cfg(feature = "tracing")]
+use crate::middleware::LoggingMiddleware;
 
 pub mod util;
 use util::{ParsedJson, ToBodyContent};
@@ -50,17 +51,35 @@ impl ShuttleApiClient {
         timeout: Option<u64>,
     ) -> Self {
         let mut builder = reqwest::Client::builder();
-        if let Some(h) = headers {
-            builder = builder.default_headers(h);
+
+        if let Ok(proxy) = std::env::var("HTTP_PROXY") {
+            builder = builder.proxy(reqwest::Proxy::http(proxy).unwrap());
         }
+
+        if let Ok(proxy) = std::env::var("HTTPS_PROXY") {
+            builder = builder.proxy(reqwest::Proxy::https(proxy).unwrap());
+        }
+
+        if std::env::var("SHUTTLE_TLS_INSECURE_SKIP_VERIFY")
+            .is_ok_and(|value| value == "1" || value == "true")
+        {
+            builder = builder.danger_accept_invalid_certs(true);
+        }
+
+        if let Some(headers) = headers {
+            builder = builder.default_headers(headers);
+        }
+
         let client = builder
             .timeout(Duration::from_secs(timeout.unwrap_or(60)))
             .build()
             .unwrap();
 
         let builder = reqwest_middleware::ClientBuilder::new(client);
+
         #[cfg(feature = "tracing")]
         let builder = builder.with(LoggingMiddleware);
+
         let client = builder.build();
 
         Self {

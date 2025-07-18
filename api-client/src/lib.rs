@@ -51,29 +51,17 @@ impl ShuttleApiClient {
         timeout: Option<u64>,
     ) -> Self {
         let mut builder = reqwest::Client::builder();
-
-        if let Ok(proxy) = std::env::var("HTTP_PROXY") {
-            builder = builder.proxy(reqwest::Proxy::http(proxy).unwrap());
+        if let Some(h) = headers {
+            builder = builder.default_headers(h);
         }
-
-        if let Ok(proxy) = std::env::var("HTTPS_PROXY") {
-            builder = builder.proxy(reqwest::Proxy::https(proxy).unwrap());
-        }
-
-        if let Some(headers) = headers {
-            builder = builder.default_headers(headers);
-        }
-
         let client = builder
             .timeout(Duration::from_secs(timeout.unwrap_or(60)))
             .build()
             .unwrap();
 
         let builder = reqwest_middleware::ClientBuilder::new(client);
-
         #[cfg(feature = "tracing")]
         let builder = builder.with(LoggingMiddleware);
-
         let client = builder.build();
 
         Self {

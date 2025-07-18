@@ -60,12 +60,6 @@ impl ShuttleApiClient {
             builder = builder.proxy(reqwest::Proxy::https(proxy).unwrap());
         }
 
-        if std::env::var("SHUTTLE_TLS_INSECURE_SKIP_VERIFY")
-            .is_ok_and(|value| value == "1" || value == "true")
-        {
-            builder = builder.danger_accept_invalid_certs(true);
-        }
-
         if let Some(headers) = headers {
             builder = builder.default_headers(headers);
         }

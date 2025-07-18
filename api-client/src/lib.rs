@@ -3,8 +3,7 @@ use std::time::Duration;
 use anyhow::{Context, Result};
 use headers::{Authorization, HeaderMapExt};
 use percent_encoding::utf8_percent_encode;
-use reqwest::header::HeaderMap;
-use reqwest::Response;
+use reqwest::{header::HeaderMap, Response};
 use reqwest_middleware::{ClientWithMiddleware, RequestBuilder};
 use serde::{Deserialize, Serialize};
 use shuttle_common::models::{
@@ -22,15 +21,17 @@ use shuttle_common::models::{
     user::UserResponse,
 };
 use tokio::net::TcpStream;
-use tokio_tungstenite::tungstenite::client::IntoClientRequest;
-use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
+use tokio_tungstenite::{
+    connect_async, tungstenite::client::IntoClientRequest, MaybeTlsStream, WebSocketStream,
+};
 
 #[cfg(feature = "tracing")]
 mod middleware;
 #[cfg(feature = "tracing")]
-use crate::middleware::LoggingMiddleware;
-#[cfg(feature = "tracing")]
 use tracing::{debug, error};
+
+#[cfg(feature = "tracing")]
+use crate::middleware::LoggingMiddleware;
 
 pub mod util;
 use util::{ParsedJson, ToBodyContent};

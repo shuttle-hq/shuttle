@@ -2,6 +2,7 @@ use rmcp::{
     model::{ServerCapabilities, ServerInfo},
     tool, ServerHandler,
 };
+use tracing::instrument;
 
 use crate::tools::{deployment::*, docs::*, logs::*, project::*};
 use crate::utils::run_tool;
@@ -11,6 +12,7 @@ pub struct ShuttleMcpServer;
 
 #[tool(tool_box)]
 impl ShuttleMcpServer {
+    #[instrument(skip(self))]
     #[tool(description = "Deploy a project")]
     async fn deploy(
         &self,
@@ -38,6 +40,7 @@ impl ShuttleMcpServer {
         .await
     }
 
+    #[instrument(skip(self))]
     #[tool(description = "List the deployments for a service")]
     async fn deployment_list(
         &self,
@@ -69,6 +72,7 @@ impl ShuttleMcpServer {
         .await
     }
 
+    #[instrument(skip(self))]
     #[tool(description = "View status of a deployment")]
     async fn deployment_status(
         &self,
@@ -96,6 +100,7 @@ impl ShuttleMcpServer {
         .await
     }
 
+    #[instrument(skip(self))]
     #[tool(description = "View build and deployment logs")]
     async fn logs(
         &self,
@@ -129,6 +134,7 @@ impl ShuttleMcpServer {
         .await
     }
 
+    #[instrument(skip(self))]
     #[tool(description = "Get the status of this project on Shuttle")]
     async fn project_status(
         &self,
@@ -149,16 +155,13 @@ impl ShuttleMcpServer {
         .await
     }
 
+    #[instrument(skip(self))]
     #[tool(description = "List all projects you have access to")]
-    async fn project_list(
-        &self,
-        #[tool(param)]
-        #[schemars(description = "Specify the working directory")]
-        cwd: String,
-    ) -> Result<String, String> {
-        run_tool(project_list(cwd, ProjectListParams {})).await
+    async fn project_list(&self) -> Result<String, String> {
+        run_tool(project_list()).await
     }
 
+    #[instrument(skip(self))]
     #[tool(description = "Search Shuttle documentation")]
     async fn search_docs(
         &self,
@@ -172,6 +175,7 @@ impl ShuttleMcpServer {
 
 #[tool(tool_box)]
 impl ServerHandler for ShuttleMcpServer {
+    #[instrument(skip(self))]
     fn get_info(&self) -> ServerInfo {
         ServerInfo {
             instructions: Some(

@@ -12,4 +12,5 @@ reqwest = { workspace = true, features = ["json"] }
 rmcp = { workspace = true, features = ["server", "transport-io"] }
 serde = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
+tracing = { workspace = true }
 urlencoding = { workspace = true }

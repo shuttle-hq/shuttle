@@ -18,8 +18,8 @@ use shuttle_common::{constants::EXAMPLES_REPO, models::resource::ResourceType};
 #[command(
     version,
     next_help_heading = "Global options",
-    // Cargo passes in the subcommand name to the invoked executable. Use a
-    // hidden, optional positional argument to deal with it.
+    // When running 'cargo shuttle', Cargo passes in the subcommand name to the invoked executable.
+    // Use a hidden, optional positional argument to deal with it.
     arg(clap::Arg::new("dummy")
         .value_parser([PossibleValue::new("shuttle")])
         .required(false)

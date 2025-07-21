@@ -153,10 +153,6 @@ impl Shuttle {
     }
 
     pub async fn run(mut self, args: ShuttleArgs, provided_path_to_init: bool) -> Result<()> {
-        if matches!(args.cmd, Command::Resource(ResourceCommand::Dump { .. })) {
-            bail!("This command is not yet supported on the NEW platform (shuttle.dev).");
-        }
-
         self.output_mode = args.output_mode;
 
         // Set up the API client for all commands that call the API
@@ -1208,12 +1204,17 @@ impl Shuttle {
         Ok(())
     }
 
-    async fn resource_dump(&self, _resource_type: &ResourceType) -> Result<()> {
-        unimplemented!();
-        // let client = self.client.as_ref().unwrap();
-        // let bytes = client...;
-        // std::io::stdout().write_all(&bytes).unwrap();
-        // Ok(())
+    async fn resource_dump(&self, resource_type: &ResourceType) -> Result<()> {
+        let client = self.client.as_ref().unwrap();
+
+        let bytes = client
+            .dump_service_resource(self.ctx.project_id(), resource_type)
+            .await?;
+        std::io::stdout()
+            .write_all(&bytes)
+            .context("writing output to stdout")?;
+
+        Ok(())
     }
 
     async fn list_certificates(&self, table_args: TableArgs) -> Result<()> {

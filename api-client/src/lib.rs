@@ -173,7 +173,7 @@ impl ShuttleApiClient {
             .await
     }
 
-    async fn _dump_service_resource(
+    pub async fn dump_service_resource(
         &self,
         project: &str,
         resource_type: &ResourceType,
@@ -183,10 +183,7 @@ impl ShuttleApiClient {
 
         let bytes = self
             .get(
-                format!(
-                    "/projects/{project}/services/{project}/resources/{}/dump",
-                    r#type
-                ),
+                format!("/projects/{project}/resources/{type}/dump"),
                 Option::<()>::None,
             )
             .await?

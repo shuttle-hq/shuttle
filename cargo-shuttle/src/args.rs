@@ -382,8 +382,14 @@ pub struct RunArgs {
     #[arg(long)]
     pub external: bool,
     /// Use release mode for building the project
-    #[arg(long, short = 'r')]
+    #[arg(long, short = 'r', conflicts_with = "profile")]
     pub release: bool,
+    /// Build with the specified profile
+    #[arg(long, conflicts_with = "release")]
+    pub profile: Option<String>,
+    /// Space or comma separated list of features to activate
+    #[arg(long)]
+    pub features: Option<String>,
     /// Don't display timestamps and log origin tags
     #[arg(long)]
     pub raw: bool,

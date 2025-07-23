@@ -20,7 +20,7 @@ license = "Apache-2.0"
 repository = "https://github.com/shuttle-hq/shuttle"
 
 [workspace.dependencies]
-shuttle-api-client = { path = "api-client", version = "0.56.0", default-features = false }
+shuttle-api-client = { path = "api-client", version = "0.56.1", default-features = false }
 shuttle-codegen = { path = "codegen", version = "0.56.0" }
 shuttle-common = { path = "common", version = "0.56.0" }
 shuttle-ifc = { path = "ifc", version = "0.56.0" }

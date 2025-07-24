@@ -1,6 +1,6 @@
 [package]
 name = "cargo-shuttle"
-version = "0.56.4"
+version = "0.56.5"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true

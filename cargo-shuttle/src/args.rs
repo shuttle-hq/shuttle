@@ -313,7 +313,7 @@ pub enum ProjectCommand {
 #[derive(Subcommand, Debug)]
 pub enum ProjectUpdateCommand {
     /// Rename the project, including its default subdomain
-    Name { name: String },
+    Name { new_name: String },
 }
 
 #[derive(Args, Debug)]

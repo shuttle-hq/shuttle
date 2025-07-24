@@ -292,7 +292,7 @@ impl Shuttle {
             Command::Project(cmd) => match cmd {
                 ProjectCommand::Create => self.project_create().await,
                 ProjectCommand::Update(cmd) => match cmd {
-                    ProjectUpdateCommand::Name { name } => self.project_rename(name).await,
+                    ProjectUpdateCommand::Name { new_name } => self.project_rename(new_name).await,
                 },
                 ProjectCommand::Status => self.project_status().await,
                 ProjectCommand::List { table, .. } => self.projects_list(table).await,

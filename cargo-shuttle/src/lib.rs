@@ -212,8 +212,8 @@ impl Shuttle {
                 | Command::Certificate(..)
                 | Command::Project(
                     // ProjectCommand::List does not need to know which project we are in
-                    ProjectCommand::Create
-                        | ProjectCommand::Update(..)
+                    // ProjectCommand::Create is handled separately and will always make the POST call
+                    ProjectCommand::Update(..)
                         | ProjectCommand::Status
                         | ProjectCommand::Delete { .. }
                         | ProjectCommand::Link
@@ -224,8 +224,7 @@ impl Shuttle {
             self.load_project(
                 &args.project_args,
                 matches!(args.cmd, Command::Project(ProjectCommand::Link)),
-                // Only the deploy command should create a project if the provided name is not found in the project list.
-                // (ProjectCommand::Create should always make the POST call since it's an upsert operation)
+                // Only 'deploy' should create a project if the provided name is not found in the project list
                 matches!(args.cmd, Command::Deploy(..)),
             )
             .await?;
@@ -290,7 +289,7 @@ impl Shuttle {
                 } => self.delete_certificate(domain, yes).await,
             },
             Command::Project(cmd) => match cmd {
-                ProjectCommand::Create => self.project_create().await,
+                ProjectCommand::Create => self.project_create(args.project_args.name).await,
                 ProjectCommand::Update(cmd) => match cmd {
                     ProjectUpdateCommand::Name { new_name } => self.project_rename(new_name).await,
                 },
@@ -1799,9 +1798,12 @@ impl Shuttle {
         Ok(())
     }
 
-    async fn project_create(&self) -> Result<()> {
+    async fn project_create(&self, name: Option<String>) -> Result<()> {
+        let Some(ref name) = name else {
+            bail!("Provide a project name with '--name <name>'");
+        };
+
         let client = self.client.as_ref().unwrap();
-        let name = self.ctx.project_name();
         let r = client.create_project(name).await?;
 
         match self.output_mode {
@@ -1816,6 +1818,7 @@ impl Shuttle {
 
         Ok(())
     }
+
     async fn project_rename(&self, name: String) -> Result<()> {
         let client = self.client.as_ref().unwrap();
 

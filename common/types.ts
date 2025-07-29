@@ -341,6 +341,10 @@ export interface ResourceListResponse {
 	resources: ResourceResponse[];
 }
 
+export interface SetEnvVarsRequest {
+	vars: Record<string, string>;
+}
+
 export enum SubscriptionType {
 	Pro = "pro",
 	Rds = "rds",

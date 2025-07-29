@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -107,6 +109,13 @@ pub enum ResourceType {
     #[serde(untagged, skip_serializing)]
     #[strum(default, to_string = "Unknown: {0}")]
     Unknown(String),
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[typeshare::typeshare]
+pub struct SetEnvVarsRequest {
+    pub vars: HashMap<String, String>,
 }
 
 #[cfg(test)]

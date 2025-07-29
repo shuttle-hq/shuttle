@@ -115,7 +115,7 @@ pub enum ResourceType {
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub struct SetEnvVarsRequest {
-    vars: HashMap<String, String>,
+    pub vars: HashMap<String, String>,
 }
 
 #[cfg(test)]

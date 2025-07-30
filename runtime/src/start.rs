@@ -72,5 +72,9 @@ pub async fn start(
         guard
     };
 
-    rt::start(loader, runner).await
+    let exit_code = rt::start(loader, runner).await;
+
+    // TODO: drop/shutdown logger guards
+
+    std::process::exit(exit_code)
 }

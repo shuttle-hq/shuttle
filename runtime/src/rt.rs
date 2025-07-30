@@ -68,8 +68,11 @@ impl RuntimeEnvVars {
     }
 }
 
-// uses non-standard exit codes for each scenario to help track down exit reasons
-pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + Send + 'static) {
+// Returns non-standard exit codes for each scenario to help track down exit reasons
+pub async fn start(
+    loader: impl Loader + Send + 'static,
+    runner: impl Runner + Send + 'static,
+) -> i32 {
     debug!("Parsing environment variables");
     let RuntimeEnvVars {
         shuttle,
@@ -94,6 +97,7 @@ pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + S
             // light hyper server
             let Ok(listener) = TcpListener::bind(&addr).await else {
                 eprintln!("ERROR: Failed to bind to health check port");
+                // TODO: figure out if exit() is appropriate to do in this future. Can we exit more smoothly?
                 exit(201);
             };
 
@@ -140,7 +144,7 @@ pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + S
             Ok(s) => s,
             Err(e) => {
                 eprintln!("ERROR: Runtime Secret Loading phase failed: {e}");
-                exit(101);
+                return 101;
             }
         };
 
@@ -153,7 +157,7 @@ pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + S
         Ok(r) => r,
         Err(e) => {
             eprintln!("ERROR: Runtime Loader phase failed: {e}");
-            exit(111);
+            return 111;
         }
     };
 
@@ -168,7 +172,7 @@ pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + S
         Ok(v) => v,
         Err(e) => {
             eprintln!("ERROR: Runtime Provisioning phase failed: {e}");
-            exit(121);
+            return 121;
         }
     };
 
@@ -211,13 +215,13 @@ pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + S
                                 shuttle_resource.r#type,
                                 bad_state
                             );
-                            exit(132);
+                            return 132;
                         }
                     }
                 }
                 Err(e) => {
                     eprintln!("ERROR: Runtime Provisioning phase failed: {e}");
-                    exit(131);
+                    return 131;
                 }
             };
         }
@@ -240,7 +244,7 @@ pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + S
         Ok(s) => s,
         Err(e) => {
             eprintln!("ERROR: Runtime Resource Initialization phase failed: {e}");
-            exit(151);
+            return 151;
         }
     };
 
@@ -263,7 +267,7 @@ pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + S
             res = service_bind => {
                 if let Err(e) = res {
                     tracing::error!("Service encountered an error in `bind`: {e}");
-                    exit(1);
+                    return 1;
                 }
                 tracing::warn!("Service terminated on its own. Shutting down the runtime...");
                 false
@@ -323,6 +327,8 @@ pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + S
     };
 
     if interrupted {
-        exit(10);
+        return 10;
     }
+
+    0
 }

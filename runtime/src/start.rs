@@ -44,6 +44,8 @@ pub async fn start(
         return;
     }
 
+    // TODO: logfire
+
     // this is handled after arg parsing to not interfere with --version above
     #[cfg(all(feature = "setup-tracing", not(feature = "setup-otel-exporter")))]
     {

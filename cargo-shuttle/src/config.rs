@@ -181,7 +181,7 @@ impl RequestContext {
         // TODO: assumes git is used
         create_or_update_ignore_file(
             &self
-                .project
+                .project_internal
                 .as_ref()
                 .unwrap()
                 .manager

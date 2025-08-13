@@ -8,7 +8,7 @@ use crossterm::style::Stylize;
 use serde::{Deserialize, Serialize};
 use strum::{EnumString, IntoStaticStr};
 
-use super::project::ProjectUsageResponse;
+use super::{project::ProjectUsageResponse, telemetry::TelemetryExportTier};
 
 #[derive(Debug, Deserialize, Serialize)]
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
@@ -110,6 +110,19 @@ pub enum AccountTier {
     #[strum(default, to_string = "Unknown: {0}")]
     Unknown(String),
 }
+
+impl From<AccountTier> for TelemetryExportTier {
+    fn from(value: AccountTier) -> Self {
+        match value {
+            AccountTier::Basic => TelemetryExportTier::Basic,
+            #[cfg(feature = "unknown-variants")]
+            AccountTier::Unknown(tier) => TelemetryExportTier::Unknown(tier),
+            AccountTier::Admin | AccountTier::Employee => TelemetryExportTier::Admin,
+            _ => TelemetryExportTier::Standard,
+        }
+    }
+}
+
 impl AccountTier {
     pub fn to_string_fancy(&self) -> String {
         match self {
@@ -125,6 +138,32 @@ impl AccountTier {
             Self::Unknown(_) => self.to_string(),
         }
     }
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[typeshare::typeshare]
+pub struct AccountLimits {
+    /// The number of custom domains a project currently has
+    #[serde(default)]
+    pub domain_count: u32,
+
+    /// The number of custom domains a project may have total
+    #[serde(default)]
+    pub domain_limit: u32,
+
+    /// The number of projects a user has currently
+    #[serde(default)]
+    pub project_count: u32,
+
+    /// The number of projects a user may have total
+    #[serde(default)]
+    pub project_limit: u32,
+
+    /// The "level" of data a project will send to configured
+    /// telemetry sinks when using Shuttle's telemetry feature
+    #[serde(default)]
+    pub telemetry_tier: TelemetryExportTier,
 }
 
 #[derive(Debug, Deserialize, Serialize)]

@@ -10,6 +10,57 @@ const fn default_logfire_host() -> Cow<'static, str> {
     Cow::Borrowed("logfire-api.pydantic.dev")
 }
 
+#[derive(
+    // std
+    Eq,
+    Ord,
+    Clone,
+    Debug,
+    Default,
+    PartialEq,
+    PartialOrd,
+    // serde
+    Serialize,
+    Deserialize,
+    // strum
+    strum::Display,
+    strum::AsRefStr,
+    strum::EnumString,
+)]
+#[serde(rename_all = "lowercase")]
+#[strum(serialize_all = "lowercase")]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[typeshare::typeshare]
+pub enum TelemetryExportTier {
+    #[default]
+    /// Limited to container metrics only.
+    ///
+    /// For the sake of clarity, this means any logs, metrics, or traces
+    /// emitted by the project itself will not be sent to the upstream
+    /// telemetry sink.
+    Basic,
+
+    /// All log, metrics, and trace streams emitted by the project (as
+    /// well as project container metrics) will be sent to the configured
+    /// upstream telemetry sink. Project is allowed to have exactly one
+    /// telemetry sink configured at a time.
+    Standard,
+
+    #[doc(hidden)]
+    /// No limits or restrictions on what will be sent to configured
+    /// telemetry sinks. Additionally, projects can use otherwise
+    /// restricted [`TelemetrySinkConfig`] variants (e.g. `Debug`).
+    Admin,
+
+    /// Forward compatibility
+    #[cfg(feature = "unknown-variants")]
+    #[doc(hidden)]
+    #[typeshare(skip)]
+    #[serde(untagged, skip_serializing)]
+    #[strum(default, to_string = r#"Unknown("{0}")"#)]
+    Unknown(String),
+}
+
 /// Status of a telemetry export configuration for an external sink
 #[derive(Eq, Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]

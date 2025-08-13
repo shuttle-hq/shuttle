@@ -5,6 +5,46 @@
 /** Helper type for typeshare */
 export type SecretStoreT = Record<string, string>;
 
+export enum TelemetryExportTier {
+	/**
+	 * Limited to container metrics only.
+	 * 
+	 * For the sake of clarity, this means any logs, metrics, or traces
+	 * emitted by the project itself will not be sent to the upstream
+	 * telemetry sink.
+	 */
+	Basic = "basic",
+	/**
+	 * All log, metrics, and trace streams emitted by the project (as
+	 * well as project container metrics) will be sent to the configured
+	 * upstream telemetry sink. Project is allowed to have exactly one
+	 * telemetry sink configured at a time.
+	 */
+	Standard = "standard",
+	/**
+	 * No limits or restrictions on what will be sent to configured
+	 * telemetry sinks. Additionally, projects can use otherwise
+	 * restricted [`TelemetrySinkConfig`] variants (e.g. `Debug`).
+	 */
+	Admin = "admin",
+}
+
+export interface AccountLimits {
+	/** The number of custom domains a project currently has */
+	domain_count?: number;
+	/** The number of custom domains a project may have total */
+	domain_limit?: number;
+	/** The number of projects a user has currently */
+	project_count?: number;
+	/** The number of projects a user may have total */
+	project_limit?: number;
+	/**
+	 * The "level" of data a project will send to configured
+	 * telemetry sinks when using Shuttle's telemetry feature
+	 */
+	telemetry_tier?: TelemetryExportTier;
+}
+
 export interface AddCertificateRequest {
 	subject: string;
 }

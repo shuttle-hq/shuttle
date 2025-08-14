@@ -30,19 +30,27 @@ export enum TelemetryExportTier {
 }
 
 export interface AccountLimits {
-	/** The number of custom domains a project currently has */
-	domain_count?: number;
-	/** The number of custom domains a project may have total */
-	domain_limit?: number;
-	/** The number of projects a user has currently */
+	/** The total number of projects a user currently has */
 	project_count?: number;
-	/** The number of projects a user may have total */
-	project_limit?: number;
+	/** The absolute number of projects a user may have total */
+	project_slots?: number;
+	/** The number of active projects a user currently has */
+	active_projects_count?: number;
+	/** The number of projects a user may have active at once */
+	active_projects_limit?: number;
 	/**
 	 * The "level" of data a project will send to configured
 	 * telemetry sinks when using Shuttle's telemetry feature
 	 */
 	telemetry_tier?: TelemetryExportTier;
+	/** The number of custom domains a user currently has */
+	user_domain_count?: number;
+	/** The number of custom domains a user may have total */
+	user_domain_limit?: number;
+	/** The number of custom domains a project currently has */
+	project_domain_count?: number;
+	/** The number of custom domains a project may have total */
+	project_domain_limit?: number;
 }
 
 export interface AddCertificateRequest {

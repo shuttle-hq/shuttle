@@ -111,13 +111,13 @@ pub enum AccountTier {
     Unknown(String),
 }
 
-impl From<AccountTier> for TelemetryExportTier {
-    fn from(value: AccountTier) -> Self {
-        match value {
+impl<T: std::borrow::Borrow<AccountTier>> From<T> for TelemetryExportTier {
+    fn from(value: T) -> Self {
+        match value.borrow() {
             AccountTier::Basic => TelemetryExportTier::Basic,
-            #[cfg(feature = "unknown-variants")]
-            AccountTier::Unknown(tier) => TelemetryExportTier::Unknown(tier),
             AccountTier::Admin | AccountTier::Employee => TelemetryExportTier::Admin,
+            #[cfg(feature = "unknown-variants")]
+            AccountTier::Unknown(tier) => TelemetryExportTier::Unknown(tier.clone()),
             _ => TelemetryExportTier::Standard,
         }
     }

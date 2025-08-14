@@ -150,7 +150,11 @@ pub struct AccountLimits {
 
     /// The number of projects a user may have total
     #[serde(default)]
-    pub project_limit: u32,
+    pub project_slots: u32,
+
+    /// The number of projects a user may "active" at once
+    #[serde(default)]
+    pub active_projects_limit: u32,
 
     /// The "level" of data a project will send to configured
     /// telemetry sinks when using Shuttle's telemetry feature

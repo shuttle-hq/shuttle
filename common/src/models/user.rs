@@ -144,14 +144,6 @@ impl AccountTier {
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub struct AccountLimits {
-    /// The number of custom domains a project currently has
-    #[serde(default)]
-    pub domain_count: u32,
-
-    /// The number of custom domains a project may have total
-    #[serde(default)]
-    pub domain_limit: u32,
-
     /// The number of projects a user has currently
     #[serde(default)]
     pub project_count: u32,
@@ -164,6 +156,22 @@ pub struct AccountLimits {
     /// telemetry sinks when using Shuttle's telemetry feature
     #[serde(default)]
     pub telemetry_tier: TelemetryExportTier,
+
+    /// The number of custom domains a user currently has
+    #[serde(default)]
+    pub user_domain_count: u32,
+
+    /// The number of custom domains a user may have total
+    #[serde(default)]
+    pub user_domain_limit: u32,
+
+    /// The number of custom domains a project currently has
+    #[serde(default)]
+    pub project_domain_count: u32,
+
+    /// The number of custom domains a project may have total
+    #[serde(default)]
+    pub project_domain_limit: u32,
 }
 
 #[derive(Debug, Deserialize, Serialize)]

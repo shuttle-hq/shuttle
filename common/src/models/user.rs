@@ -152,7 +152,11 @@ pub struct AccountLimits {
     #[serde(default)]
     pub project_slots: u32,
 
-    /// The number of projects a user may "active" at once
+    /// The number of active projects a user currently has
+    #[serde(default)]
+    pub active_projects_count: u32,
+
+    /// The number of projects a user may have active at once
     #[serde(default)]
     pub active_projects_limit: u32,
 

@@ -144,11 +144,11 @@ impl AccountTier {
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub struct AccountLimits {
-    /// The number of projects a user has currently
+    /// The total number of projects a user currently has
     #[serde(default)]
     pub project_count: u32,
 
-    /// The number of projects a user may have total
+    /// The absolute number of projects a user may have total
     #[serde(default)]
     pub project_slots: u32,
 

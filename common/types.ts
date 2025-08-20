@@ -5,6 +5,21 @@
 /** Helper type for typeshare */
 export type SecretStoreT = Record<string, string>;
 
+export interface AccountLimitsResponse {
+	/** Number of projects the user currently has */
+	projects_count?: number;
+	/** Number of projects the user may have total */
+	projects_limit?: number;
+	/** Number of active projects the user currently has */
+	active_projects_count?: number;
+	/** Number of projects the user may have active at once */
+	active_projects_limit?: number;
+	/** Number of custom domains the user currently has */
+	certificate_count?: number;
+	/** Number of custom domains the user may have total */
+	certificate_limit?: number;
+}
+
 export interface AddCertificateRequest {
 	subject: string;
 }
@@ -221,6 +236,17 @@ export interface LogsResponse {
 
 export interface ProjectCreateRequest {
 	name: string;
+}
+
+export interface ProjectLimitsResponse {
+	/** Whether this project can be deployed or redeployed */
+	can_deploy?: boolean;
+	/** Whether a custom domain can be added */
+	can_add_certificate?: boolean;
+	/** Whether upgraded telemetry is enabled for new deployments */
+	full_telemetry_enabled?: boolean;
+	/** Highest instance size available for this project */
+	max_compute_tier?: ComputeTier;
 }
 
 export interface ProjectResponse {

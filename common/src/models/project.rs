@@ -196,3 +196,17 @@ pub struct ProjectUsageDaily {
     pub reserved_vcpu_hours: f32,
     pub runtime_minutes: u32,
 }
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[typeshare::typeshare]
+pub struct ProjectLimitsResponse {
+    /// Whether this project can be deployed or redeployed
+    pub can_deploy: Option<bool>,
+    /// Whether a custom domain can be added
+    pub can_add_certificate: Option<bool>,
+    /// Whether upgraded telemetry is enabled for new deployments
+    pub full_telemetry_enabled: Option<bool>,
+    /// Highest instance size available for this project
+    pub max_compute_tier: Option<ComputeTier>,
+}

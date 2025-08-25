@@ -113,4 +113,26 @@ pub trait Service: Send {
     /// The passed [`SocketAddr`] receives proxied HTTP traffic from your Shuttle subdomain (or custom domain).
     /// Binding to the address is only relevant if this service is an HTTP server.
     async fn bind(mut self, addr: SocketAddr) -> Result<(), error::Error>;
+
+    /// Custom health check hook that gets called by the runtime.
+    ///
+    /// This method is called when the runtime receives a health check request.
+    /// The default implementation returns `Ok(())`, but services can override this
+    /// to implement custom health checking logic.
+    ///
+    /// Note: This method takes `&self` to allow shared access during health checks.
+    async fn health_check(&self) -> Result<(), error::Error> {
+        Ok(())
+    }
+
+    /// Custom shutdown hook that gets called during graceful shutdown.
+    ///
+    /// This method is called when the runtime receives a termination signal (SIGTERM/SIGINT).
+    /// The default implementation returns `Ok(())`, but services can override this
+    /// to implement custom cleanup logic.
+    ///
+    /// Note: This method takes `&self` to allow shared access during shutdown.
+    async fn shutdown(&self) -> Result<(), error::Error> {
+        Ok(())
+    }
 }

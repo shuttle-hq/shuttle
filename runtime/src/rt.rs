@@ -3,6 +3,7 @@ use std::{
     iter::FromIterator,
     net::{IpAddr, Ipv4Addr, SocketAddr},
     process::exit,
+    sync::Arc,
 };
 
 use anyhow::Context;
@@ -85,47 +86,6 @@ pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + S
 
     let service_addr = SocketAddr::new(ip, port);
     let client = ShuttleApiClient::new(api_url, api_key, None, None);
-
-    // start a health check server if requested
-    if let Some(healthz_port) = healthz_port {
-        trace!("Starting health check server on port {healthz_port}");
-        let addr = SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), healthz_port);
-        tokio::spawn(async move {
-            // light hyper server
-            let Ok(listener) = TcpListener::bind(&addr).await else {
-                eprintln!("ERROR: Failed to bind to health check port");
-                exit(201);
-            };
-
-            loop {
-                let Ok((stream, _)) = listener.accept().await else {
-                    eprintln!("ERROR: Health check listener error");
-                    exit(202);
-                };
-                let io = TokioIo::new(stream);
-
-                tokio::spawn(async move {
-                    if let Err(err) = http1::Builder::new()
-                        .serve_connection(
-                            io,
-                            service_fn(|_req| async move {
-                                trace!("Received health check");
-                                // TODO: A hook into the `Service` trait can be added here
-                                trace!("Responding to health check");
-                                Result::<Response<Empty<Bytes>>, hyper::Error>::Ok(Response::new(
-                                    Empty::new(),
-                                ))
-                            }),
-                        )
-                        .await
-                    {
-                        eprintln!("ERROR: Health check error: {err}");
-                        exit(200);
-                    }
-                });
-            }
-        });
-    }
 
     //
     // LOADING / PROVISIONING PHASE
@@ -237,12 +197,70 @@ pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + S
     //
 
     let service = match runner.run(resources).await {
-        Ok(s) => s,
+        Ok(s) => Arc::new(s),
         Err(e) => {
             eprintln!("ERROR: Runtime Resource Initialization phase failed: {e}");
             exit(151);
         }
     };
+
+    // Clone the Arc for health checks and shutdown
+    let service_for_health = service.clone();
+    let service_for_shutdown = service.clone();
+
+    // start a health check server if requested
+    if let Some(healthz_port) = healthz_port {
+        trace!("Starting health check server on port {healthz_port}");
+        let addr = SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), healthz_port);
+        tokio::spawn(async move {
+            // light hyper server
+            let Ok(listener) = TcpListener::bind(&addr).await else {
+                eprintln!("ERROR: Failed to bind to health check port");
+                exit(201);
+            };
+
+            loop {
+                let Ok((stream, _)) = listener.accept().await else {
+                    eprintln!("ERROR: Health check listener error");
+                    exit(202);
+                };
+                let io = TokioIo::new(stream);
+                let service_clone = service_for_health.clone();
+
+                tokio::spawn(async move {
+                    if let Err(err) = http1::Builder::new()
+                        .serve_connection(
+                            io,
+                            service_fn(move |_req| {
+                                let service = service_clone.clone();
+                                async move {
+                                    trace!("Received health check");
+                                    match service.health_check().await {
+                                        Ok(()) => {
+                                            trace!("Health check passed");
+                                            Result::<Response<Empty<Bytes>>, hyper::Error>::Ok(Response::new(
+                                                Empty::new(),
+                                            ))
+                                        }
+                                        Err(e) => {
+                                            trace!("Health check failed: {e}");
+                                            let mut response = Response::new(Empty::new());
+                                            *response.status_mut() = hyper::StatusCode::INTERNAL_SERVER_ERROR;
+                                            Result::<Response<Empty<Bytes>>, hyper::Error>::Ok(response)
+                                        }
+                                    }
+                                }
+                            }),
+                        )
+                        .await
+                    {
+                        eprintln!("ERROR: Health check error: {err}");
+                        exit(200);
+                    }
+                });
+            }
+        });
+    }
 
     //
     // RUNNING PHASE
@@ -323,6 +341,11 @@ pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + S
     };
 
     if interrupted {
+        trace!("Calling service shutdown hook");
+        if let Err(e) = service_for_shutdown.shutdown().await {
+            tracing::error!("Service shutdown hook failed: {e}");
+        }
+        trace!("Service shutdown completed");
         exit(10);
     }
 }

@@ -16,7 +16,7 @@ use shuttle_common::{
     secrets::Secret,
 };
 use shuttle_service::{Environment, ResourceFactory, Service};
-use tokio::net::TcpListener;
+use tokio::{net::TcpListener, sync::RwLock};
 use tracing::{debug, info, trace};
 
 use crate::__internals::{Loader, Runner};
@@ -86,6 +86,81 @@ pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + S
 
     let service_addr = SocketAddr::new(ip, port);
     let client = ShuttleApiClient::new(api_url, api_key, None, None);
+
+    // Shared state for the service (will be set after resource initialization)
+    let service_state: Arc<RwLock<Option<Arc<dyn Service>>>> = Arc::new(RwLock::new(None));
+
+    // start a health check server if requested (before provisioning)
+    if let Some(healthz_port) = healthz_port {
+        trace!("Starting health check server on port {healthz_port}");
+        let addr = SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), healthz_port);
+        let service_state_clone = service_state.clone();
+        
+        tokio::spawn(async move {
+            // light hyper server
+            let Ok(listener) = TcpListener::bind(&addr).await else {
+                eprintln!("ERROR: Failed to bind to health check port");
+                exit(201);
+            };
+
+            loop {
+                let Ok((stream, _)) = listener.accept().await else {
+                    eprintln!("ERROR: Health check listener error");
+                    exit(202);
+                };
+                let io = TokioIo::new(stream);
+                let service_state_ref = service_state_clone.clone();
+
+                tokio::spawn(async move {
+                    if let Err(err) = http1::Builder::new()
+                        .serve_connection(
+                            io,
+                            service_fn(move |_req| {
+                                let service_state = service_state_ref.clone();
+                                async move {
+                                    trace!("Received health check");
+                                    
+                                    // Try to get the service and call its health check
+                                    let service_opt = service_state.read().await.clone();
+                                    
+                                    match service_opt {
+                                        Some(service) => {
+                                            // Service is available - call its health check
+                                            match service.health_check().await {
+                                                Ok(()) => {
+                                                    trace!("Service health check passed");
+                                                    Result::<Response<Empty<Bytes>>, hyper::Error>::Ok(
+                                                        Response::new(Empty::new())
+                                                    )
+                                                }
+                                                Err(e) => {
+                                                    trace!("Service health check failed: {e}");
+                                                    let mut response = Response::new(Empty::new());
+                                                    *response.status_mut() = hyper::StatusCode::INTERNAL_SERVER_ERROR;
+                                                    Result::<Response<Empty<Bytes>>, hyper::Error>::Ok(response)
+                                                }
+                                            }
+                                        }
+                                        None => {
+                                            // Service not yet available - return basic health check
+                                            trace!("Service not yet initialized, returning basic health check");
+                                            Result::<Response<Empty<Bytes>>, hyper::Error>::Ok(
+                                                Response::new(Empty::new())
+                                            )
+                                        }
+                                    }
+                                }
+                            }),
+                        )
+                        .await
+                    {
+                        eprintln!("ERROR: Health check error: {err}");
+                        exit(200);
+                    }
+                });
+            }
+        });
+    }
 
     //
     // LOADING / PROVISIONING PHASE
@@ -204,70 +279,29 @@ pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + S
         }
     };
 
-    // Clone the Arc for health checks and shutdown
-    let service_for_health = service.clone();
+    // Update the shared service state for health checks
+    {
+        let mut state = service_state.write().await;
+        *state = Some(service.clone());
+    }
+
+    // Clone for shutdown
     let service_for_shutdown = service.clone();
 
-    // start a health check server if requested
-    if let Some(healthz_port) = healthz_port {
-        trace!("Starting health check server on port {healthz_port}");
-        let addr = SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), healthz_port);
-        tokio::spawn(async move {
-            // light hyper server
-            let Ok(listener) = TcpListener::bind(&addr).await else {
-                eprintln!("ERROR: Failed to bind to health check port");
-                exit(201);
-            };
 
-            loop {
-                let Ok((stream, _)) = listener.accept().await else {
-                    eprintln!("ERROR: Health check listener error");
-                    exit(202);
-                };
-                let io = TokioIo::new(stream);
-                let service_clone = service_for_health.clone();
-
-                tokio::spawn(async move {
-                    if let Err(err) = http1::Builder::new()
-                        .serve_connection(
-                            io,
-                            service_fn(move |_req| {
-                                let service = service_clone.clone();
-                                async move {
-                                    trace!("Received health check");
-                                    match service.health_check().await {
-                                        Ok(()) => {
-                                            trace!("Health check passed");
-                                            Result::<Response<Empty<Bytes>>, hyper::Error>::Ok(Response::new(
-                                                Empty::new(),
-                                            ))
-                                        }
-                                        Err(e) => {
-                                            trace!("Health check failed: {e}");
-                                            let mut response = Response::new(Empty::new());
-                                            *response.status_mut() = hyper::StatusCode::INTERNAL_SERVER_ERROR;
-                                            Result::<Response<Empty<Bytes>>, hyper::Error>::Ok(response)
-                                        }
-                                    }
-                                }
-                            }),
-                        )
-                        .await
-                    {
-                        eprintln!("ERROR: Health check error: {err}");
-                        exit(200);
-                    }
-                });
-            }
-        });
-    }
 
     //
     // RUNNING PHASE
     //
     info!("Starting service");
 
-    let service_bind = service.bind(service_addr);
+    // Extract the service for binding (this consumes the Arc)
+    let service_for_bind = Arc::try_unwrap(service).map_err(|_| {
+        eprintln!("ERROR: Failed to unwrap service Arc for binding");
+        exit(152);
+    }).unwrap_or_else(|_| exit(152));
+    
+    let service_bind = service_for_bind.bind(service_addr);
 
     #[cfg(target_family = "unix")]
     let interrupted = {

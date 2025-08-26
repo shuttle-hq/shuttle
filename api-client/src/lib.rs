@@ -177,21 +177,19 @@ impl ShuttleApiClient {
         &self,
         project: &str,
         resource_type: &ResourceType,
-    ) -> Result<Vec<u8>> {
+    ) -> Result<impl futures_util::Stream<Item = Result<bytes::Bytes, reqwest::Error>>> {
         let r#type = resource_type.to_string();
         let r#type = utf8_percent_encode(&r#type, percent_encoding::NON_ALPHANUMERIC).to_owned();
 
-        let bytes = self
+        let stream = self
             .get(
                 format!("/projects/{project}/resources/{type}/dump"),
                 Option::<()>::None,
             )
             .await?
-            .to_bytes()
-            .await?
-            .to_vec();
+            .bytes_stream();
 
-        Ok(bytes)
+        Ok(stream)
     }
 
     pub async fn delete_service_resource(

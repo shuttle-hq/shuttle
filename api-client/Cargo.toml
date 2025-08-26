@@ -16,7 +16,7 @@ bytes = { workspace = true }
 headers = { workspace = true }
 http = { workspace = true }
 percent-encoding = { workspace = true }
-reqwest = { workspace = true, features = ["json"] }
+reqwest = { workspace = true, features = ["json", "stream"] }
 reqwest-middleware = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
@@ -25,6 +25,7 @@ tokio-tungstenite = { workspace = true }
 url = { workspace = true }
 
 tracing = { workspace = true, features = ["default"], optional = true }
+futures-util = { workspace = true }
 
 [features]
 default = ["tracing"]

@@ -1206,12 +1206,17 @@ impl Shuttle {
     async fn resource_dump(&self, resource_type: &ResourceType) -> Result<()> {
         let client = self.client.as_ref().unwrap();
 
-        let bytes = client
+        let mut stream = client
             .dump_service_resource(self.ctx.project_id(), resource_type)
             .await?;
-        std::io::stdout()
-            .write_all(&bytes)
-            .context("writing output to stdout")?;
+
+        let mut stdout = std::io::stdout();
+        while let Some(chunk) = stream.next().await {
+            stdout
+                .write_all(&chunk?)
+                .context("writing output to stdout")?;
+        }
+        stdout.flush()?;
 
         Ok(())
     }

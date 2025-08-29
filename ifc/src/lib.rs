@@ -88,7 +88,7 @@ impl InfraAttrParser {
             unknown_key => {
                 return Err(syn::Error::new(
                     key.span(),
-                    format!("Invalid macro attribute key: '{}'", unknown_key),
+                    format!("Invalid macro attribute key: '{unknown_key}'"),
                 ))
             }
         }

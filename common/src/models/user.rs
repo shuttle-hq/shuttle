@@ -127,6 +127,37 @@ impl AccountTier {
     }
 }
 
+#[cfg(test)]
+mod account_tier_tests {
+    use super::*;
+    #[test]
+    fn deser() {
+        assert_eq!(
+            serde_json::from_str::<AccountTier>("\"basic\"").unwrap(),
+            AccountTier::Basic
+        );
+    }
+    #[cfg(feature = "unknown-variants")]
+    #[test]
+    fn unknown_deser() {
+        assert_eq!(
+            serde_json::from_str::<AccountTier>("\"\"").unwrap(),
+            AccountTier::Unknown("".to_string())
+        );
+        assert_eq!(
+            serde_json::from_str::<AccountTier>("\"hisshiss\"").unwrap(),
+            AccountTier::Unknown("hisshiss".to_string())
+        );
+        assert!(serde_json::to_string(&AccountTier::Unknown("asdf".to_string())).is_err());
+    }
+    #[cfg(not(feature = "unknown-variants"))]
+    #[test]
+    fn not_unknown_deser() {
+        assert!(serde_json::from_str::<AccountTier>("\"\"").is_err());
+        assert!(serde_json::from_str::<AccountTier>("\"hisshiss\"").is_err());
+    }
+}
+
 #[derive(Debug, Deserialize, Serialize)]
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
@@ -176,37 +207,6 @@ pub enum SubscriptionType {
     #[serde(untagged, skip_serializing)]
     #[strum(default, to_string = "Unknown: {0}")]
     Unknown(String),
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn deser() {
-        assert_eq!(
-            serde_json::from_str::<AccountTier>("\"basic\"").unwrap(),
-            AccountTier::Basic
-        );
-    }
-    #[cfg(feature = "unknown-variants")]
-    #[test]
-    fn unknown_deser() {
-        assert_eq!(
-            serde_json::from_str::<AccountTier>("\"\"").unwrap(),
-            AccountTier::Unknown("".to_string())
-        );
-        assert_eq!(
-            serde_json::from_str::<AccountTier>("\"hisshiss\"").unwrap(),
-            AccountTier::Unknown("hisshiss".to_string())
-        );
-        assert!(serde_json::to_string(&AccountTier::Unknown("asdf".to_string())).is_err());
-    }
-    #[cfg(not(feature = "unknown-variants"))]
-    #[test]
-    fn not_unknown_deser() {
-        assert!(serde_json::from_str::<AccountTier>("\"\"").is_err());
-        assert!(serde_json::from_str::<AccountTier>("\"hisshiss\"").is_err());
-    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
@@ -284,4 +284,22 @@ pub struct UserUsageResponse {
     /// HashMap of project related metrics for this cycle keyed by project_id. Will be empty
     /// if no project usage data exists for user.
     pub projects: HashMap<String, ProjectUsageResponse>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[typeshare::typeshare]
+pub struct AccountLimitsResponse {
+    /// Number of projects the user currently has
+    pub projects_count: Option<u32>,
+    /// Number of projects the user may have total
+    pub projects_limit: Option<u32>,
+    /// Number of active projects the user currently has
+    pub active_projects_count: Option<u32>,
+    /// Number of projects the user may have active at once
+    pub active_projects_limit: Option<u32>,
+    /// Number of custom domains the user currently has
+    pub certificate_count: Option<u32>,
+    /// Number of custom domains the user may have total
+    pub certificate_limit: Option<u32>,
 }

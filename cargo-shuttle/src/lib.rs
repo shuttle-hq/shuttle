@@ -1343,6 +1343,10 @@ impl Shuttle {
 
         let project_directory = self.ctx.project_directory();
 
+        // TODO: use build args in local build
+        let manifest_path = project_directory.join("Cargo.toml");
+        let _rust_build_args = Self::gather_rust_build_args(manifest_path.as_path()).await?;
+
         cargo_green_eprintln("Building", project_directory.display());
 
         build_workspace(project_directory, build_args.release, tx).await
@@ -1640,7 +1644,6 @@ impl Shuttle {
         Ok(())
     }
 
-    // TODO: use this in native local runs as well
     async fn gather_rust_build_args(manifest_path: &Path) -> Result<BuildArgsRust> {
         let mut rust_build_args = BuildArgsRust::default();
 

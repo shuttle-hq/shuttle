@@ -515,7 +515,12 @@ async fn provision(
                 config: serde_json::Value::Null,
                 output: serde_json::to_value(&state.secrets).unwrap(),
             };
-            let table = get_resource_tables(&[response.clone()], "local service", false, true);
+            let table = get_resource_tables(
+                std::slice::from_ref(&response),
+                "local service",
+                false,
+                true,
+            );
             println!("{table}");
             serde_json::to_vec(&response).unwrap()
         }
@@ -567,7 +572,12 @@ async fn provision(
                 ResourceType::Unknown(s) => bail!("request for unknown resource type {s} recieved"),
             };
 
-            let table = get_resource_tables(&[response.clone()], "local service", false, true);
+            let table = get_resource_tables(
+                std::slice::from_ref(&response),
+                "local service",
+                false,
+                true,
+            );
             println!("{table}");
 
             serde_json::to_vec(&response).unwrap()

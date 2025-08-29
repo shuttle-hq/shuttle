@@ -1618,7 +1618,7 @@ impl Shuttle {
         let metadata = async_cargo_metadata(manifest_path.as_path()).await?;
         // TODO: support overriding this
         let (package, target, runtime_version) = find_first_shuttle_package(&metadata)?;
-        rust_build_args.package_name = Some(package.name.clone());
+        rust_build_args.package_name = Some(package.name.to_string());
         rust_build_args.binary_name = Some(target.name.clone());
         rust_build_args.shuttle_runtime_version = runtime_version;
 

@@ -78,7 +78,7 @@ syn = "2"
 tempfile = "3"
 thiserror = "2"
 tokio = "1.40.0"
-tokio-tungstenite = { version = "0.26.1", features = [
+tokio-tungstenite = { version = "0.27", features = [
   "rustls-tls-webpki-roots",
 ] }
 toml = "0.9"

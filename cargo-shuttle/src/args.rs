@@ -103,7 +103,7 @@ impl ProjectArgs {
             .exec()
             .expect("metadata command to succeed in cargo workspace root");
         let package_name = if let Some(root_package) = meta.root_package() {
-            root_package.name.clone()
+            root_package.name.to_string()
         } else {
             workspace_path
                 .file_name()

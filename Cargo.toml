@@ -33,7 +33,7 @@ async-trait = "0.1.58"
 axum = { version = "0.8.1", default-features = false }
 bollard = { version = "0.18.1", features = ["ssl_providerless"] }
 bytes = "1"
-cargo_metadata = "0.19.1"
+cargo_metadata = "0.22"
 chrono = { version = "0.4.34", default-features = false }
 clap = { version = "4.2.7", features = ["derive"] }
 clap_complete = "4.3.1"

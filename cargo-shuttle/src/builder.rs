@@ -4,6 +4,7 @@ use std::process::Stdio;
 
 use anyhow::{bail, Context, Result};
 use cargo_metadata::{Metadata, Package, Target};
+use shuttle_common::models::deployment::BuildArgsRust;
 use shuttle_ifc::find_runtime_main_fn;
 use tokio::io::AsyncBufReadExt;
 use tracing::{error, trace};
@@ -156,6 +157,28 @@ pub fn find_first_shuttle_package(
         "Expected at least one target that Shuttle can build. \
         Make sure your crate has a binary target that uses a fully qualified `#[shuttle_runtime::main]`.",
     )
+}
+
+pub async fn gather_rust_build_args(metadata: &Metadata) -> Result<BuildArgsRust> {
+    let mut rust_build_args = BuildArgsRust::default();
+
+    let (package, target, runtime_version) = find_first_shuttle_package(&metadata)?;
+    rust_build_args.package_name = Some(package.name.to_string());
+    rust_build_args.binary_name = Some(target.name.clone());
+    rust_build_args.shuttle_runtime_version = runtime_version;
+
+    // activate shuttle feature if present
+    let (no_default_features, features) = if package.features.contains_key("shuttle") {
+        (true, Some(vec!["shuttle".to_owned()]))
+    } else {
+        (false, None)
+    };
+    rust_build_args.no_default_features = no_default_features;
+    rust_build_args.features = features.map(|v| v.join(","));
+
+    // TODO: have all of the above be configurable in CLI and Shuttle.toml
+
+    Ok(rust_build_args)
 }
 
 async fn cargo_build(

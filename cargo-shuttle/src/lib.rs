@@ -38,7 +38,7 @@ use shuttle_common::{
     models::{
         auth::{KeyMessage, TokenMessage},
         deployment::{
-            BuildArgs as CommonBuildArgs, BuildArgsRust, BuildMeta, DeploymentRequest,
+            BuildArgs as CommonBuildArgs, BuildMeta, DeploymentRequest,
             DeploymentRequestBuildArchive, DeploymentRequestImage, DeploymentResponse,
             DeploymentState, Environment, GIT_STRINGS_MAX_LENGTH,
         },
@@ -66,7 +66,8 @@ use crate::args::{
     ResourceCommand, SecretsArgs, TableArgs, TemplateLocation,
 };
 use crate::builder::{
-    async_cargo_metadata, build_workspace, find_first_shuttle_package, BuiltService,
+    async_cargo_metadata, build_workspace, find_first_shuttle_package, gather_rust_build_args,
+    BuiltService,
 };
 use crate::config::RequestContext;
 use crate::provisioner_server::{ProvApiState, ProvisionerServer};
@@ -1347,7 +1348,8 @@ impl Shuttle {
 
         // TODO: use build args in local build
         let manifest_path = project_directory.join("Cargo.toml");
-        let _rust_build_args = Self::gather_rust_build_args(manifest_path.as_path()).await?;
+        let metadata = async_cargo_metadata(manifest_path.as_path()).await?;
+        let _rust_build_args = gather_rust_build_args(&metadata).await?;
 
         cargo_green_eprintln("Building", project_directory.display());
 
@@ -1646,35 +1648,13 @@ impl Shuttle {
         Ok(())
     }
 
-    async fn gather_rust_build_args(manifest_path: &Path) -> Result<BuildArgsRust> {
-        let mut rust_build_args = BuildArgsRust::default();
-
-        let metadata = async_cargo_metadata(manifest_path).await?;
-        let (package, target, runtime_version) = find_first_shuttle_package(&metadata)?;
-        rust_build_args.package_name = Some(package.name.to_string());
-        rust_build_args.binary_name = Some(target.name.clone());
-        rust_build_args.shuttle_runtime_version = runtime_version;
-
-        // activate shuttle feature if present
-        let (no_default_features, features) = if package.features.contains_key("shuttle") {
-            (true, Some(vec!["shuttle".to_owned()]))
-        } else {
-            (false, None)
-        };
-        rust_build_args.no_default_features = no_default_features;
-        rust_build_args.features = features.map(|v| v.join(","));
-
-        // TODO: have all of the above be configurable in CLI and Shuttle.toml
-
-        Ok(rust_build_args)
-    }
-
     async fn local_docker_build(&self, build_args: &BuildArgs) -> Result<()> {
         let project_name = self.ctx.project_name().to_owned();
         let project_directory = self.ctx.project_directory();
         let manifest_path = project_directory.join("Cargo.toml");
 
-        let rust_build_args = Self::gather_rust_build_args(manifest_path.as_path()).await?;
+        let metadata = async_cargo_metadata(manifest_path.as_path()).await?;
+        let rust_build_args = gather_rust_build_args(&metadata).await?;
 
         cargo_green_eprintln("Building", format!("{} with docker", project_name));
 
@@ -1781,11 +1761,11 @@ impl Shuttle {
         };
         let mut build_meta = BuildMeta::default();
 
-        let rust_build_args = Self::gather_rust_build_args(manifest_path.as_path()).await?;
+        let metadata = async_cargo_metadata(manifest_path.as_path()).await?;
+
+        let rust_build_args = gather_rust_build_args(&metadata).await?;
         deployment_req.build_args = Some(CommonBuildArgs::Rust(rust_build_args));
 
-        // TODO: de-dupe metadata call
-        let metadata = async_cargo_metadata(manifest_path.as_path()).await?;
         let (_, target, _) = find_first_shuttle_package(&metadata)?;
         deployment_req.infra = parse_infra_from_code(
             &fs::read_to_string(target.src_path.as_path())

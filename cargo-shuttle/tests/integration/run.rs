@@ -46,6 +46,8 @@ async fn shuttle_run(working_directory: &str, external: bool) -> String {
                     port,
                     external,
                     release: false,
+                    profile: None,
+                    features: None,
                     raw: false,
                     bacon: false,
                     secret_args: Default::default(),

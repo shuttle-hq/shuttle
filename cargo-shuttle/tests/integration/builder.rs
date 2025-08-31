@@ -9,7 +9,7 @@ use cargo_shuttle::builder::{build_workspace, BuiltService};
 async fn not_shuttle() {
     let (tx, _) = tokio::sync::mpsc::channel::<String>(256);
     let project_path = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/resources/not-shuttle");
-    build_workspace(Path::new(&project_path), false, tx)
+    build_workspace(Path::new(&project_path), false, None, None, tx)
         .await
         .unwrap();
 }
@@ -21,7 +21,7 @@ async fn not_shuttle() {
 async fn not_bin() {
     let (tx, _) = tokio::sync::mpsc::channel::<String>(256);
     let project_path = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/resources/not-bin");
-    build_workspace(Path::new(&project_path), false, tx)
+    build_workspace(Path::new(&project_path), false, None, None, tx)
         .await
         .unwrap();
 }
@@ -36,7 +36,7 @@ async fn not_full_macro() {
         env!("CARGO_MANIFEST_DIR"),
         "/tests/resources/not-full-macro"
     );
-    build_workspace(Path::new(&project_path), false, tx)
+    build_workspace(Path::new(&project_path), false, None, None, tx)
         .await
         .unwrap();
 }
@@ -47,7 +47,7 @@ async fn is_bin() {
     let project_path = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/resources/is-bin");
 
     assert_eq!(
-        build_workspace(Path::new(&project_path), false, tx)
+        build_workspace(Path::new(&project_path), false, None, None, tx)
             .await
             .unwrap(),
         BuiltService {
@@ -64,7 +64,7 @@ async fn is_bin2() {
     let project_path = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/resources/is-bin2");
 
     assert_eq!(
-        build_workspace(Path::new(&project_path), false, tx)
+        build_workspace(Path::new(&project_path), false, None, None, tx)
             .await
             .unwrap(),
         BuiltService {
@@ -83,7 +83,7 @@ async fn not_found() {
         "{}/tests/resources/non-existing",
         env!("CARGO_MANIFEST_DIR")
     );
-    build_workspace(Path::new(&project_path), false, tx)
+    build_workspace(Path::new(&project_path), false, None, None, tx)
         .await
         .unwrap();
 }
@@ -100,7 +100,7 @@ async fn workspace() {
     let project_path = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/resources/workspace");
 
     assert_eq!(
-        build_workspace(Path::new(&project_path), false, tx)
+        build_workspace(Path::new(&project_path), false, None, None, tx)
             .await
             .unwrap(),
         BuiltService {

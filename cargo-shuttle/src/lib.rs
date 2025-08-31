@@ -1340,7 +1340,14 @@ impl Shuttle {
             project_directory.display()
         );
 
-        build_workspace(project_directory, run_args.release, tx).await
+        build_workspace(
+            project_directory,
+            run_args.release,
+            run_args.profile.as_deref(),
+            run_args.features.as_deref(),
+            tx,
+        )
+        .await
     }
 
     fn find_available_port(run_args: &mut RunArgs) {

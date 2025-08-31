@@ -20,6 +20,8 @@ pub struct BuiltService {
 pub async fn build_workspace(
     project_path: &Path,
     release_mode: bool,
+    profile: Option<&str>,
+    features: Option<&str>,
     tx: tokio::sync::mpsc::Sender<String>,
 ) -> Result<BuiltService> {
     let project_path = project_path.to_owned();
@@ -62,6 +64,8 @@ pub async fn build_workspace(
         package,
         target,
         release_mode,
+        profile,
+        features,
         project_path.clone(),
         metadata.target_directory.clone(),
         tx.clone(),
@@ -162,6 +166,8 @@ async fn cargo_build(
     package: Package,
     target: Target,
     release_mode: bool,
+    profile: Option<&str>,
+    features: Option<&str>,
     project_path: PathBuf,
     target_path: impl Into<PathBuf>,
     tx: tokio::sync::mpsc::Sender<String>,
@@ -182,12 +188,22 @@ async fn cargo_build(
         .current_dir(project_path.as_path());
 
     if package.features.contains_key("shuttle") {
-        cmd.arg("--no-default-features").arg("--features=shuttle");
+        cmd.arg("--no-default-features");
+        if let Some(features) = features {
+            cmd.arg("--features").arg(format!("shuttle,{}", features));
+        } else {
+            cmd.arg("--features=shuttle");
+        }
+    } else if let Some(features) = features {
+        cmd.arg("--features").arg(features);
     }
     cmd.arg("--package").arg(package.name.as_str());
     cmd.arg("--bin").arg(target.name.as_str());
 
-    let profile = if release_mode {
+    let profile = if let Some(profile_name) = profile {
+        cmd.arg("--profile").arg(profile_name);
+        profile_name
+    } else if release_mode {
         cmd.arg("--release");
         "release"
     } else {

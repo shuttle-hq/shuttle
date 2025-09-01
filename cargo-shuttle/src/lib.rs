@@ -1334,11 +1334,13 @@ impl Shuttle {
 
         let project_directory = self.ctx.project_directory();
 
-        println!(
-            "{} {}",
-            "    Building".bold().green(),
-            project_directory.display()
-        );
+        if !run_args.quiet {
+            println!(
+                "{} {}",
+                "    Building".bold().green(),
+                project_directory.display()
+            );
+        }
 
         build_workspace(project_directory, run_args.release, tx).await
     }
@@ -1403,13 +1405,15 @@ impl Shuttle {
         });
         tokio::spawn(async move { ProvisionerServer::run(state, &api_addr).await });
 
-        println!(
-            "\n    {} {} on http://{}:{}\n",
-            "Starting".bold().green(),
-            service.target_name,
-            ip,
-            run_args.port,
-        );
+        if !run_args.quiet {
+            println!(
+                "\n    {} {} on http://{}:{}\n",
+                "Starting".bold().green(),
+                service.target_name,
+                ip,
+                run_args.port,
+            );
+        }
 
         let mut envs = vec![
             ("SHUTTLE_BETA", "true".to_owned()),
@@ -1424,6 +1428,8 @@ impl Shuttle {
         // Use a nice debugging tracing level if user does not provide their own
         if debug && std::env::var("RUST_LOG").is_err() {
             envs.push(("RUST_LOG", "info,shuttle=trace,reqwest=debug".to_owned()));
+        } else if run_args.quiet && std::env::var("RUST_LOG").is_err() {
+            envs.push(("RUST_LOG", "info,shuttle=error".to_owned()));
         }
 
         info!(

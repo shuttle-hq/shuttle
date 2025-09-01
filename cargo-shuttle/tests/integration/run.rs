@@ -48,6 +48,7 @@ async fn shuttle_run(working_directory: &str, external: bool) -> String {
                     release: false,
                     raw: false,
                     bacon: false,
+                    quiet: false,
                     secret_args: Default::default(),
                 }),
             },

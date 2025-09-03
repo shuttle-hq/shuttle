@@ -162,7 +162,7 @@ pub fn find_first_shuttle_package(
 pub async fn gather_rust_build_args(metadata: &Metadata) -> Result<BuildArgsRust> {
     let mut rust_build_args = BuildArgsRust::default();
 
-    let (package, target, runtime_version) = find_first_shuttle_package(&metadata)?;
+    let (package, target, runtime_version) = find_first_shuttle_package(metadata)?;
     rust_build_args.package_name = Some(package.name.to_string());
     rust_build_args.binary_name = Some(target.name.clone());
     rust_build_args.shuttle_runtime_version = runtime_version;

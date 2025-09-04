@@ -8,7 +8,7 @@ mod tools;
 mod utils;
 
 pub async fn run_mcp_server() -> Result<(), anyhow::Error> {
-    let service = ShuttleMcpServer.serve(stdio()).await?;
+    let service = ShuttleMcpServer::new().serve(stdio()).await?;
     service.waiting().await?;
     Ok(())
 }

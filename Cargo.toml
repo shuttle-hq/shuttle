@@ -27,6 +27,8 @@ shuttle-ifc = { path = "ifc", version = "0.56.0" }
 shuttle-mcp = { path = "mcp", version = "0.56.0" }
 shuttle-service = { path = "service", version = "0.56.0" }
 
+schemars = "1"
+
 anyhow = "1.0.66"
 assert_cmd = "2.0.6"
 async-trait = "0.1.58"
@@ -68,7 +70,7 @@ reqwest = { version = "0.12.14", default-features = false, features = [
 ] }
 reqwest-middleware = "0.4.0"
 rexpect = "0.6.0"
-rmcp = { version = "0.1.5", features = ["server", "transport-io"] }
+rmcp = { version = "0.6.1", features = ["server", "transport-io", "macros"] }
 semver = { version = "1.0.17", features = ["serde"] }
 serde = { version = "1.0.148", default-features = false }
 serde_json = "1.0.89"

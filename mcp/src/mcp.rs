@@ -9,78 +9,76 @@ use crate::utils::run_tool;
 
 #[derive(serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
 struct DeployArgs {
-	#[schemars(description = "Specify the working directory")]
-	cwd: String,
-	#[schemars(description = "Use this secrets file instead")]
-	secrets_file: Option<String>,
-	#[schemars(description = "Specify the name of the project")]
-	name: Option<String>,
-	#[schemars(description = "Specify the id of the project")]
-	project_id: Option<String>,
+    #[schemars(description = "Specify the working directory")]
+    cwd: String,
+    #[schemars(description = "Use this secrets file instead")]
+    secrets_file: Option<String>,
+    #[schemars(description = "Specify the name of the project")]
+    name: Option<String>,
+    #[schemars(description = "Specify the id of the project")]
+    project_id: Option<String>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
 struct DeploymentListArgs {
-	#[schemars(description = "Specify the working directory")]
-	cwd: String,
-	#[schemars(description = "Which page to display")]
-	page: Option<u32>,
-	#[schemars(description = "How many deployments per page to display")]
-	limit: Option<u32>,
-	#[schemars(description = "Specify the name of the project")]
-	name: Option<String>,
-	#[schemars(description = "Specify the id of the project")]
-	project_id: Option<String>,
+    #[schemars(description = "Specify the working directory")]
+    cwd: String,
+    #[schemars(description = "Which page to display")]
+    page: Option<u32>,
+    #[schemars(description = "How many deployments per page to display")]
+    limit: Option<u32>,
+    #[schemars(description = "Specify the name of the project")]
+    name: Option<String>,
+    #[schemars(description = "Specify the id of the project")]
+    project_id: Option<String>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
 struct DeploymentStatusArgs {
-	#[schemars(description = "Specify the working directory")]
-	cwd: String,
-	#[schemars(description = "ID of deployment to get status for")]
-	deployment_id: Option<String>,
-	#[schemars(description = "Specify the name of the project")]
-	name: Option<String>,
-	#[schemars(description = "Specify the id of the project")]
-	project_id: Option<String>,
+    #[schemars(description = "Specify the working directory")]
+    cwd: String,
+    #[schemars(description = "ID of deployment to get status for")]
+    deployment_id: Option<String>,
+    #[schemars(description = "Specify the name of the project")]
+    name: Option<String>,
+    #[schemars(description = "Specify the id of the project")]
+    project_id: Option<String>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
 struct LogsArgs {
-	#[schemars(description = "Specify the working directory")]
-	cwd: String,
-	#[schemars(
-		description = "Deployment ID to get logs for. Defaults to the current deployment"
-	)]
-	deployment_id: Option<String>,
-	#[schemars(description = "View logs from the most recent deployment")]
-	latest: Option<bool>,
-	#[schemars(description = "Specify the name of the project")]
-	name: Option<String>,
-	#[schemars(description = "Specify the id of the project")]
-	project_id: Option<String>,
+    #[schemars(description = "Specify the working directory")]
+    cwd: String,
+    #[schemars(description = "Deployment ID to get logs for. Defaults to the current deployment")]
+    deployment_id: Option<String>,
+    #[schemars(description = "View logs from the most recent deployment")]
+    latest: Option<bool>,
+    #[schemars(description = "Specify the name of the project")]
+    name: Option<String>,
+    #[schemars(description = "Specify the id of the project")]
+    project_id: Option<String>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
 struct ProjectStatusArgs {
-	#[schemars(description = "Specify the working directory")]
-	cwd: String,
-	#[schemars(description = "Specify the name of the project")]
-	name: Option<String>,
-	#[schemars(description = "Specify the id of the project")]
-	project_id: Option<String>,
+    #[schemars(description = "Specify the working directory")]
+    cwd: String,
+    #[schemars(description = "Specify the name of the project")]
+    name: Option<String>,
+    #[schemars(description = "Specify the id of the project")]
+    project_id: Option<String>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
 struct ProjectListArgs {
-	#[schemars(description = "Specify the working directory")]
-	cwd: String,
+    #[schemars(description = "Specify the working directory")]
+    cwd: String,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
 struct SearchDocsArgs {
-	#[schemars(description = "Search query for documentation")]
-	query: String,
+    #[schemars(description = "Search query for documentation")]
+    query: String,
 }
 
 #[derive(Clone)]
@@ -174,12 +172,18 @@ impl ShuttleMcpServer {
     }
 
     #[tool(description = "List all projects you have access to")]
-    async fn project_list(&self, Parameters(args): Parameters<ProjectListArgs>) -> Result<String, String> {
+    async fn project_list(
+        &self,
+        Parameters(args): Parameters<ProjectListArgs>,
+    ) -> Result<String, String> {
         run_tool(project_list(args.cwd, ProjectListParams {})).await
     }
 
     #[tool(description = "Search Shuttle documentation")]
-    async fn search_docs(&self, Parameters(args): Parameters<SearchDocsArgs>) -> Result<String, String> {
+    async fn search_docs(
+        &self,
+        Parameters(args): Parameters<SearchDocsArgs>,
+    ) -> Result<String, String> {
         run_tool(search_docs(args.query)).await
     }
 }

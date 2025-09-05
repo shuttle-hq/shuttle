@@ -68,13 +68,12 @@ pub enum OutputMode {
 /// Global project-related options
 #[derive(Args, Clone, Debug)]
 pub struct ProjectArgs {
-    /// Specify the working directory
     #[arg(global = true, long, visible_alias = "wd", default_value = ".", value_parser = OsStringValueParser::new().try_map(parse_path))]
     pub working_directory: PathBuf,
-    /// Specify the name of the project to target or create
+    /// The name of the project to target or create
     #[arg(global = true, long)]
     pub name: Option<String>,
-    /// Specify the id of the project to target
+    /// The id of the project to target
     #[arg(global = true, long)]
     pub id: Option<String>,
 }
@@ -130,7 +129,7 @@ pub enum Command {
     #[command(visible_alias = "r")]
     Run(RunArgs),
     /// Build a project
-    #[command(visible_alias = "b")]
+    #[command(visible_alias = "b", hide = true)]
     Build(BuildArgs),
     /// Deploy a project
     #[command(visible_alias = "d")]
@@ -379,7 +378,7 @@ pub struct DeploymentTrackingArgs {
     pub raw: bool,
 }
 
-#[derive(Args, Debug)]
+#[derive(Args, Debug, Default)]
 pub struct RunArgs {
     /// Port to start service on
     #[arg(long, short = 'p', env, default_value = "8000")]
@@ -394,27 +393,34 @@ pub struct RunArgs {
     #[command(flatten)]
     pub secret_args: SecretsArgs,
     #[command(flatten)]
-    pub build_args: BuildArgs,
+    pub build_args: BuildArgsShared,
 }
 
-#[derive(Args, Debug)]
+#[derive(Args, Debug, Default)]
 pub struct BuildArgs {
-    /// Use release mode for building the project
-    #[arg(long, short = 'r')]
-    pub release: bool,
-    /// Uses bacon crate to run the project in watch mode
-    #[arg(long)]
-    pub bacon: bool,
     /// Output the build archive to a file instead of building
     #[arg(long)]
     pub output_archive: Option<PathBuf>,
+    #[command(flatten)]
+    pub inner: BuildArgsShared,
+}
+
+/// Arguments shared by build and run commands
+#[derive(Args, Debug, Default)]
+pub struct BuildArgsShared {
+    /// Use release mode for building the project
+    #[arg(long, short = 'r')]
+    pub release: bool,
+    /// Uses bacon crate to build/run the project in watch mode
+    #[arg(long)]
+    pub bacon: bool,
 
     // Docker-related args
     /// Build/Run with docker instead of natively
-    #[arg(long, short = 'd')]
+    #[arg(long, hide = true)]
     pub docker: bool,
     /// Additional tag for the docker image
-    #[arg(long, short = 't')]
+    #[arg(long, short = 't', requires = "docker", hide = true)]
     pub tag: Option<String>,
 }
 

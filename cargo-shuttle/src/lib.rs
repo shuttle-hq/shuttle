@@ -59,12 +59,13 @@ use tracing_subscriber::{fmt, prelude::*, registry, EnvFilter};
 use util::cargo_green_eprintln;
 use zip::write::FileOptions;
 
-pub use crate::args::{BuildArgs, Command, ProjectArgs, RunArgs, ShuttleArgs};
 use crate::args::{
-    CertificateCommand, ConfirmationArgs, DeployArgs, DeploymentCommand, GenerateCommand, InitArgs,
-    LoginArgs, LogoutArgs, LogsArgs, McpCommand, OutputMode, ProjectCommand, ProjectUpdateCommand,
-    ResourceCommand, SecretsArgs, TableArgs, TemplateLocation,
+    BuildArgs, CertificateCommand, ConfirmationArgs, DeployArgs, DeploymentCommand,
+    GenerateCommand, InitArgs, LoginArgs, LogoutArgs, LogsArgs, McpCommand, OutputMode,
+    ProjectCommand, ProjectUpdateCommand, ResourceCommand, SecretsArgs, TableArgs,
+    TemplateLocation,
 };
+pub use crate::args::{BuildArgsShared, Command, ProjectArgs, RunArgs, ShuttleArgs};
 use crate::builder::{
     async_cargo_metadata, cargo_build, find_first_shuttle_package, gather_rust_build_args,
     BuiltService,
@@ -1338,14 +1339,14 @@ impl Shuttle {
             eprintln!("Writing archive to {}", path.display());
             fs::write(path, archive).context("writing archive")?;
             Ok(())
-        } else if build_args.docker {
-            self.local_docker_build(build_args).await
+        } else if build_args.inner.docker {
+            self.local_docker_build(&build_args.inner).await
         } else {
-            self.local_build(build_args).await.map(|_| ())
+            self.local_build(&build_args.inner).await.map(|_| ())
         }
     }
 
-    async fn local_build(&self, build_args: &BuildArgs) -> Result<BuiltService> {
+    async fn local_build(&self, build_args: &BuildArgsShared) -> Result<BuiltService> {
         let project_directory = self.ctx.project_directory();
 
         cargo_green_eprintln("Building", project_directory.display());
@@ -1647,7 +1648,7 @@ impl Shuttle {
         Ok(())
     }
 
-    async fn local_docker_build(&self, build_args: &BuildArgs) -> Result<()> {
+    async fn local_docker_build(&self, build_args: &BuildArgsShared) -> Result<()> {
         let project_name = self.ctx.project_name().to_owned();
         let project_directory = self.ctx.project_directory();
         let manifest_path = project_directory.join("Cargo.toml");

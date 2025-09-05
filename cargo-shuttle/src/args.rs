@@ -405,6 +405,9 @@ pub struct BuildArgs {
     /// Uses bacon crate to run the project in watch mode
     #[arg(long)]
     pub bacon: bool,
+    /// Output the build archive to a file instead of building
+    #[arg(long)]
+    pub output_archive: Option<PathBuf>,
 
     // Docker-related args
     /// Build/Run with docker instead of natively

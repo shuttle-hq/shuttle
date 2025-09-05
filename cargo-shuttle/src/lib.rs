@@ -224,8 +224,8 @@ impl Shuttle {
                 )
                 | Command::Logs { .. }
         ) {
-            // Command::Run and Command::Build use `load_local_config` (below) instead of `load_project` since they don't target a project in the API
-            self.load_project(
+            // Command::Run and Command::Build use `load_local_config` (below) instead of `load_project_id` since they don't target a project in the API
+            self.load_project_id(
                 &args.project_args,
                 matches!(args.cmd, Command::Project(ProjectCommand::Link)),
                 // Only 'deploy' should create a project if the provided name is not found in the project list
@@ -260,11 +260,7 @@ impl Shuttle {
             }
             Command::Build(build_args) => {
                 self.ctx.load_local_config(&args.project_args)?;
-                if build_args.docker {
-                    self.local_docker_build(&build_args).await
-                } else {
-                    self.local_build(&build_args).await.map(|_| ())
-                }
+                self.build(&build_args).await
             }
             Command::Deploy(deploy_args) => self.deploy(deploy_args).await,
             Command::Logs(logs_args) => self.logs(logs_args).await,
@@ -310,7 +306,7 @@ impl Shuttle {
                 ProjectCommand::Status => self.project_status().await,
                 ProjectCommand::List { table, .. } => self.projects_list(table).await,
                 ProjectCommand::Delete(ConfirmationArgs { yes }) => self.project_delete(yes).await,
-                ProjectCommand::Link => Ok(()), // logic is done in `load_project` in previous step
+                ProjectCommand::Link => Ok(()), // logic is done in `load_project_id` in previous step
             },
             Command::Upgrade { preview } => update_cargo_shuttle(preview).await,
             Command::Mcp(cmd) => match cmd {
@@ -599,10 +595,10 @@ impl Shuttle {
 
         if should_link || should_create_project {
             // Set the project working directory path to the init path,
-            // so `load_project` is ran with the correct project path when linking
+            // so `load_project_id` is ran with the correct project path when linking
             project_args.working_directory.clone_from(&path);
 
-            self.load_project(&project_args, true, true).await?;
+            self.load_project_id(&project_args, true, true).await?;
         }
 
         if std::env::current_dir().is_ok_and(|d| d != path) {
@@ -655,7 +651,7 @@ impl Shuttle {
 
     /// Ensures a project id is known, either by explicit --id/--name args or config file(s)
     /// or by asking user to link the project folder.
-    pub async fn load_project(
+    pub async fn load_project_id(
         &mut self,
         project_args: &ProjectArgs,
         do_linking: bool,
@@ -1334,6 +1330,19 @@ impl Shuttle {
         trace!(keys = ?secrets.keys(), "Loaded secrets");
 
         Ok(Some(secrets))
+    }
+
+    async fn build(&self, build_args: &BuildArgs) -> Result<()> {
+        if let Some(path) = build_args.output_archive.as_ref() {
+            let archive = self.make_archive()?;
+            eprintln!("Writing archive to {}", path.display());
+            fs::write(path, archive).context("writing archive")?;
+            Ok(())
+        } else if build_args.docker {
+            self.local_docker_build(&build_args).await
+        } else {
+            self.local_build(&build_args).await.map(|_| ())
+        }
     }
 
     async fn local_build(&self, build_args: &BuildArgs) -> Result<BuiltService> {
@@ -2233,7 +2242,7 @@ mod tests {
     async fn get_archive_entries(project_args: ProjectArgs) -> Vec<String> {
         let mut shuttle = Shuttle::new(crate::Binary::Shuttle, None).unwrap();
         shuttle
-            .load_project(&project_args, false, false)
+            .load_project_id(&project_args, false, false)
             .await
             .unwrap();
 

@@ -50,6 +50,7 @@ async fn shuttle_run(working_directory: &str, external: bool) -> String {
                     build_args: BuildArgs {
                         release: false,
                         bacon: false,
+                        output_archive: None,
                         docker: false,
                         tag: None,
                     },

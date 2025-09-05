@@ -1,6 +1,5 @@
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Stdio;
 
 use anyhow::{bail, Context, Result};
 use cargo_metadata::{Metadata, Package, Target};
@@ -127,7 +126,7 @@ pub async fn gather_rust_build_args(metadata: &Metadata) -> Result<BuildArgsRust
 pub async fn cargo_build(
     project_path: impl Into<PathBuf>,
     release_mode: bool,
-    silent: bool,
+    quiet: bool,
 ) -> Result<BuiltService> {
     let project_path = project_path.into();
     let manifest_path = project_path.join("Cargo.toml");
@@ -168,11 +167,10 @@ pub async fn cargo_build(
     } else {
         "debug"
     };
-
-    if silent {
-        cmd.stderr(Stdio::null());
-        cmd.stdout(Stdio::null());
+    if quiet {
+        cmd.arg("--quiet");
     }
+
     let status = cmd.spawn()?.wait().await?;
     if !status.success() {
         bail!("Build failed.");

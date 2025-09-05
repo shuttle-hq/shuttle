@@ -1341,9 +1341,9 @@ impl Shuttle {
 
         cargo_green_eprintln("Building", project_directory.display());
 
-        // TODO: hook up --quiet flag to silent param
-        let silent = false;
-        cargo_build(project_directory.to_owned(), build_args.release, silent).await
+        // TODO: hook up -q/--quiet flag
+        let quiet = false;
+        cargo_build(project_directory.to_owned(), build_args.release, quiet).await
     }
 
     fn find_available_port(run_args: &mut RunArgs) {

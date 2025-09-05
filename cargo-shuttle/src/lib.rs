@@ -1339,9 +1339,9 @@ impl Shuttle {
             fs::write(path, archive).context("writing archive")?;
             Ok(())
         } else if build_args.docker {
-            self.local_docker_build(&build_args).await
+            self.local_docker_build(build_args).await
         } else {
-            self.local_build(&build_args).await.map(|_| ())
+            self.local_build(build_args).await.map(|_| ())
         }
     }
 

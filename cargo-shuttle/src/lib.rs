@@ -1334,6 +1334,7 @@ impl Shuttle {
     }
 
     async fn build(&self, build_args: &BuildArgs) -> Result<()> {
+        eprintln!("WARN: The build command is EXPERIMENTAL. Please submit feedback on GitHub or Discord if you encounter issues.");
         if let Some(path) = build_args.output_archive.as_ref() {
             let archive = self.make_archive()?;
             eprintln!("Writing archive to {}", path.display());

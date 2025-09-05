@@ -66,7 +66,7 @@ use crate::args::{
     ResourceCommand, SecretsArgs, TableArgs, TemplateLocation,
 };
 use crate::builder::{
-    async_cargo_metadata, build_workspace, find_first_shuttle_package, gather_rust_build_args,
+    async_cargo_metadata, cargo_build, find_first_shuttle_package, gather_rust_build_args,
     BuiltService,
 };
 use crate::config::RequestContext;
@@ -1337,23 +1337,13 @@ impl Shuttle {
     }
 
     async fn local_build(&self, build_args: &BuildArgs) -> Result<BuiltService> {
-        let (tx, mut rx) = tokio::sync::mpsc::channel::<String>(256);
-        tokio::task::spawn(async move {
-            while let Some(line) = rx.recv().await {
-                println!("{line}");
-            }
-        });
-
         let project_directory = self.ctx.project_directory();
-
-        // TODO: use build args in local build
-        let manifest_path = project_directory.join("Cargo.toml");
-        let metadata = async_cargo_metadata(manifest_path.as_path()).await?;
-        let _rust_build_args = gather_rust_build_args(&metadata).await?;
 
         cargo_green_eprintln("Building", project_directory.display());
 
-        build_workspace(project_directory, build_args.release, tx).await
+        // TODO: hook up --quiet flag to silent param
+        let silent = false;
+        cargo_build(project_directory.to_owned(), build_args.release, silent).await
     }
 
     fn find_available_port(run_args: &mut RunArgs) {

@@ -1480,7 +1480,7 @@ impl Shuttle {
                 .spawn()
                 .context("spawning 'docker run' process")?
         } else {
-            let (service, runtime_executable) = s_re.expect("skill issue");
+            let (service, runtime_executable) = s_re.context("developer skill issue")?;
             eprintln!();
             cargo_green_eprintln(
                 "Starting",

@@ -1655,7 +1655,7 @@ impl Shuttle {
         let manifest_path = project_directory.join("Cargo.toml");
 
         let metadata = async_cargo_metadata(manifest_path.as_path()).await?;
-        let rust_build_args = gather_rust_build_args(&metadata).await?;
+        let rust_build_args = gather_rust_build_args(&metadata)?;
 
         cargo_green_eprintln("Building", format!("{} with docker", project_name));
 
@@ -1764,7 +1764,7 @@ impl Shuttle {
 
         let metadata = async_cargo_metadata(manifest_path.as_path()).await?;
 
-        let rust_build_args = gather_rust_build_args(&metadata).await?;
+        let rust_build_args = gather_rust_build_args(&metadata)?;
         deployment_req.build_args = Some(CommonBuildArgs::Rust(rust_build_args));
 
         let (_, target, _) = find_first_shuttle_package(&metadata)?;

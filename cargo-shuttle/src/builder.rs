@@ -5,7 +5,7 @@ use anyhow::{bail, Context, Result};
 use cargo_metadata::{Metadata, Package, Target};
 use shuttle_common::models::deployment::BuildArgsRust;
 use shuttle_ifc::find_runtime_main_fn;
-use tracing::trace;
+use tracing::{debug, trace};
 
 /// This represents a compiled Shuttle service
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -101,7 +101,7 @@ pub fn find_first_shuttle_package(
     )
 }
 
-pub async fn gather_rust_build_args(metadata: &Metadata) -> Result<BuildArgsRust> {
+pub fn gather_rust_build_args(metadata: &Metadata) -> Result<BuildArgsRust> {
     let mut rust_build_args = BuildArgsRust::default();
 
     let (package, target, runtime_version) = find_first_shuttle_package(metadata)?;
@@ -120,6 +120,8 @@ pub async fn gather_rust_build_args(metadata: &Metadata) -> Result<BuildArgsRust
 
     // TODO: have all of the above be configurable in CLI and Shuttle.toml
 
+    debug!("Gathered build args: {:?}", rust_build_args);
+
     Ok(rust_build_args)
 }
 
@@ -131,7 +133,7 @@ pub async fn cargo_build(
     let project_path = project_path.into();
     let manifest_path = project_path.join("Cargo.toml");
     let metadata = async_cargo_metadata(manifest_path.as_path()).await?;
-    let build_args = gather_rust_build_args(&metadata).await?;
+    let build_args = gather_rust_build_args(&metadata)?;
 
     let package_name = build_args
         .package_name

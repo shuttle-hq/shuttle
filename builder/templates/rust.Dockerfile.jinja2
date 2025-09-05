@@ -20,7 +20,8 @@ COPY shuttle_prebuild.sh .
 RUN bash shuttle_prebuild.sh
 
 {% if build_args.mold %}
-export RUSTFLAGS="-C linker=clang -C link-arg=-fuse-ld=/usr/local/bin/mold"
+{# TODO: fix #}
+ENV RUSTFLAGS="-C linker=clang -C link-arg=-fuse-ld=/usr/local/bin/mold"
 {% endif %}
 
 {% if build_args.cargo_chef %}

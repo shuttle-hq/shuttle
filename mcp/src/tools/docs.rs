@@ -12,13 +12,13 @@ pub async fn search_docs(query: String) -> Result<String, String> {
         .get(&url)
         .send()
         .await
-        .map_err(|e| format!("Request failed: {}", e))?;
+        .map_err(|e| format!("Request failed: {e}"))?;
 
     if response.status().is_success() {
         response
             .text()
             .await
-            .map_err(|e| format!("Failed to read response: {}", e))
+            .map_err(|e| format!("Failed to read response: {e}"))
     } else {
         Err(format!("Request failed with status: {}", response.status()))
     }

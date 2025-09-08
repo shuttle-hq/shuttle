@@ -51,12 +51,14 @@ struct LogsArgs {
     cwd: String,
     #[schemars(description = "Deployment ID to get logs for. Defaults to the current deployment")]
     deployment_id: Option<String>,
-    #[schemars(description = "View logs from the most recent deployment")]
+    #[schemars(description = "View logs from the most recent deployment (which is not always the running one)")]
     latest: Option<bool>,
     #[schemars(description = "Specify the name of the project")]
     name: Option<String>,
     #[schemars(description = "Specify the id of the project")]
     project_id: Option<String>,
+    #[schemars(description = "View the last N log lines")]
+    lines: Option<u32>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
@@ -151,6 +153,7 @@ impl ShuttleMcpServer {
                 latest: args.latest,
                 name: args.name,
                 project_id: args.project_id,
+                lines: args.lines,
             },
         ))
         .await

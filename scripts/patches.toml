@@ -18,6 +18,5 @@ shuttle-rocket = { path = "BASE/services/shuttle-rocket" }
 shuttle-salvo = { path = "BASE/services/shuttle-salvo" }
 shuttle-serenity = { path = "BASE/services/shuttle-serenity" }
 shuttle-thruster = { path = "BASE/services/shuttle-thruster" }
-shuttle-tide = { path = "BASE/services/shuttle-tide" }
 shuttle-tower = { path = "BASE/services/shuttle-tower" }
 shuttle-warp = { path = "BASE/services/shuttle-warp" }

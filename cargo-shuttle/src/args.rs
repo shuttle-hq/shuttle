@@ -485,8 +485,6 @@ pub enum InitTemplateArg {
     Tower,
     /// Thruster - Web framework
     Thruster,
-    /// Tide - Web framework
-    Tide,
     /// Warp - Web framework
     Warp,
     /// No template - Make a custom service
@@ -529,7 +527,6 @@ impl InitTemplateArg {
             Rama => "rama/hello-world",
             Serenity => "serenity/hello-world",
             Thruster => "thruster/hello-world",
-            Tide => "tide/hello-world",
             Tower => "tower/hello-world",
             Warp => "warp/hello-world",
             None => "custom-service/none",

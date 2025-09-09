@@ -2535,7 +2535,7 @@ dependencies = [
  "portable-atomic",
  "portable-atomic-util",
  "serde",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -3543,9 +3543,9 @@ dependencies = [
 
 [[package]]
 name = "rmcp"
-version = "0.6.1"
+version = "0.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1f521fbd040eba82684b17d787d423f43afb6e97974029b51f679157a589592a"
+checksum = "c7dd163d26e254725137b7933e4ba042ea6bf2d756a4260559aaea8b6ad4c27e"
 dependencies = [
  "base64",
  "chrono",
@@ -3564,9 +3564,9 @@ dependencies = [
 
 [[package]]
 name = "rmcp-macros"
-version = "0.6.1"
+version = "0.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c162bf8a2846f70464ded6dda6430b60d1e2fb4b0e371f0906e39f63916641b9"
+checksum = "a43bb4c90a0d4b12f7315eb681a73115d335a2cee81322eca96f3467fe4cd06f"
 dependencies = [
  "darling",
  "proc-macro2",
@@ -3642,7 +3642,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.4.15",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]

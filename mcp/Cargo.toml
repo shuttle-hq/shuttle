@@ -9,7 +9,8 @@ description = "Shuttle MCP server"
 [dependencies]
 anyhow = { workspace = true }
 reqwest = { workspace = true, features = ["json"] }
-rmcp = { workspace = true, features = ["server", "transport-io"] }
+rmcp = { workspace = true, features = ["server", "transport-io", "macros"] }
+schemars = { workspace = true }
 serde = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 urlencoding = { workspace = true }

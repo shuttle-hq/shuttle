@@ -483,8 +483,6 @@ pub enum InitTemplateArg {
     Serenity,
     /// Tower - Modular service library
     Tower,
-    /// Thruster - Web framework
-    Thruster,
     /// Warp - Web framework
     Warp,
     /// No template - Make a custom service
@@ -526,7 +524,6 @@ impl InitTemplateArg {
             Salvo => "salvo/hello-world",
             Rama => "rama/hello-world",
             Serenity => "serenity/hello-world",
-            Thruster => "thruster/hello-world",
             Tower => "tower/hello-world",
             Warp => "warp/hello-world",
             None => "custom-service/none",

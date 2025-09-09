@@ -28,7 +28,6 @@ mod shuttle_main;
 /// | `ShuttleRocket`   | [shuttle-rocket](https://crates.io/crates/shuttle-rocket)      | [rocket](https://docs.rs/rocket)                                        | [GitHub](https://github.com/shuttle-hq/shuttle-examples/tree/main/rocket/hello-world)   |
 /// | `ShuttleSalvo`    | [shuttle-salvo](https://crates.io/crates/shuttle-salvo)        | [salvo](https://docs.rs/salvo)                                          | [GitHub](https://github.com/shuttle-hq/shuttle-examples/tree/main/salvo/hello-world)    |
 /// | `ShuttleSerenity` | [shuttle-serenity](https://crates.io/crates/shuttle-serenity)  | [serenity](https://docs.rs/serenity) and [poise](https://docs.rs/poise) | [GitHub](https://github.com/shuttle-hq/shuttle-examples/tree/main/serenity/hello-world) |
-/// | `ShuttleThruster` | [shuttle-thruster](https://crates.io/crates/shuttle-thruster)  | [thruster](https://docs.rs/thruster)                                    | [GitHub](https://github.com/shuttle-hq/shuttle-examples/tree/main/thruster/hello-world) |
 /// | `ShuttleTower`    | [shuttle-tower](https://crates.io/crates/shuttle-tower)        | [tower](https://docs.rs/tower)                                          | [GitHub](https://github.com/shuttle-hq/shuttle-examples/tree/main/tower/hello-world)    |
 ///
 /// ## Getting shuttle managed resources

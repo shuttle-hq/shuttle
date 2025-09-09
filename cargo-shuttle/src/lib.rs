@@ -1,4 +1,4 @@
-mod args;
+pub mod args;
 pub mod builder;
 pub mod config;
 mod init;
@@ -15,7 +15,6 @@ use std::process::Stdio;
 use std::sync::Arc;
 
 use anyhow::{bail, Context, Result};
-use args::DeploymentTrackingArgs;
 use chrono::Utc;
 use clap::{parser::ValueSource, CommandFactory, FromArgMatches};
 use crossterm::style::Stylize;
@@ -56,24 +55,23 @@ use tokio::time::{sleep, Duration};
 use tokio_tungstenite::tungstenite::Message;
 use tracing::{debug, error, info, trace, warn};
 use tracing_subscriber::{fmt, prelude::*, registry, EnvFilter};
-use util::cargo_green_eprintln;
 use zip::write::FileOptions;
 
 use crate::args::{
-    BuildArgs, CertificateCommand, ConfirmationArgs, DeployArgs, DeploymentCommand,
-    GenerateCommand, InitArgs, LoginArgs, LogoutArgs, LogsArgs, McpCommand, OutputMode,
-    ProjectCommand, ProjectUpdateCommand, ResourceCommand, SecretsArgs, TableArgs,
-    TemplateLocation,
+    BuildArgs, BuildArgsShared, CertificateCommand, Command, ConfirmationArgs, DeployArgs,
+    DeploymentCommand, DeploymentTrackingArgs, GenerateCommand, InitArgs, LoginArgs, LogoutArgs,
+    LogsArgs, McpCommand, OutputMode, ProjectArgs, ProjectCommand, ProjectUpdateCommand,
+    ResourceCommand, RunArgs, SecretsArgs, ShuttleArgs, TableArgs, TemplateLocation,
 };
-pub use crate::args::{BuildArgsShared, Command, ProjectArgs, RunArgs, ShuttleArgs};
 use crate::builder::{
     cargo_build, find_first_shuttle_package, gather_rust_build_args, BuiltService,
 };
 use crate::config::RequestContext;
 use crate::provisioner_server::{ProvApiState, ProvisionerServer};
 use crate::util::{
-    bacon, cargo_metadata, check_and_warn_runtime_version, generate_completions, generate_manpage,
-    get_templates_schema, is_dirty, open_gh_issue, read_ws_until_text, update_cargo_shuttle,
+    bacon, cargo_green_eprintln, cargo_metadata, check_and_warn_runtime_version,
+    generate_completions, generate_manpage, get_templates_schema, is_dirty, open_gh_issue,
+    read_ws_until_text, update_cargo_shuttle,
 };
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -132,6 +130,16 @@ impl Binary {
     }
 }
 
+#[derive(Default)]
+pub enum CommandOutput {
+    // Project(ProjectResponse),
+    // ProjectList(ProjectListResponse),
+    Deployment(DeploymentResponse),
+    // DeploymentList(DeploymentListResponse),
+    #[default]
+    None,
+}
+
 pub struct Shuttle {
     ctx: RequestContext,
     client: Option<ShuttleApiClient>,
@@ -156,7 +164,11 @@ impl Shuttle {
         })
     }
 
-    pub async fn run(mut self, args: ShuttleArgs, provided_path_to_init: bool) -> Result<()> {
+    pub async fn run(
+        mut self,
+        args: ShuttleArgs,
+        provided_path_to_init: bool,
+    ) -> Result<CommandOutput> {
         self.output_mode = args.output_mode;
 
         // Set up the API client for all commands that call the API
@@ -235,82 +247,126 @@ impl Shuttle {
         }
 
         match args.cmd {
-            Command::Init(init_args) => {
-                self.init(
+            Command::Init(init_args) => self
+                .init(
                     init_args,
                     args.project_args,
                     provided_path_to_init,
                     args.offline,
                 )
                 .await
-            }
+                .map(|_| CommandOutput::None),
             Command::Generate(cmd) => match cmd {
-                GenerateCommand::Manpage => generate_manpage(),
+                GenerateCommand::Manpage => generate_manpage().map(|_| CommandOutput::None),
                 GenerateCommand::Shell { shell, output_file } => {
-                    generate_completions(self.bin, shell, output_file)
+                    generate_completions(self.bin, shell, output_file).map(|_| CommandOutput::None)
                 }
             },
-            Command::Account => self.account().await,
-            Command::Login(login_args) => self.login(login_args, args.offline, true).await,
-            Command::Logout(logout_args) => self.logout(logout_args).await,
-            Command::Feedback => open_gh_issue(),
+            Command::Account => self.account().await.map(|_| CommandOutput::None),
+            Command::Login(login_args) => self
+                .login(login_args, args.offline, true)
+                .await
+                .map(|_| CommandOutput::None),
+            Command::Logout(logout_args) => {
+                self.logout(logout_args).await.map(|_| CommandOutput::None)
+            }
+            Command::Feedback => open_gh_issue().map(|_| CommandOutput::None),
             Command::Run(run_args) => {
                 self.ctx.load_local_config(&args.project_args)?;
-                self.local_run(run_args, args.debug).await
+                self.local_run(run_args, args.debug)
+                    .await
+                    .map(|_| CommandOutput::None)
             }
             Command::Build(build_args) => {
                 self.ctx.load_local_config(&args.project_args)?;
-                self.build(&build_args).await
+                self.build(&build_args).await.map(|_| CommandOutput::None)
             }
             Command::Deploy(deploy_args) => self.deploy(deploy_args).await,
-            Command::Logs(logs_args) => self.logs(logs_args).await,
+            Command::Logs(logs_args) => self.logs(logs_args).await.map(|_| CommandOutput::None),
             Command::Deployment(cmd) => match cmd {
-                DeploymentCommand::List { page, limit, table } => {
-                    self.deployments_list(page, limit, table).await
-                }
+                DeploymentCommand::List { page, limit, table } => self
+                    .deployments_list(page, limit, table)
+                    .await
+                    .map(|_| CommandOutput::None),
                 DeploymentCommand::Status { deployment_id } => {
                     self.deployment_get(deployment_id).await
                 }
                 DeploymentCommand::Redeploy {
                     deployment_id,
                     tracking_args,
-                } => self.deployment_redeploy(deployment_id, tracking_args).await,
-                DeploymentCommand::Stop { tracking_args } => {
-                    self.deployment_stop(tracking_args).await
-                }
+                } => self
+                    .deployment_redeploy(deployment_id, tracking_args)
+                    .await
+                    .map(|_| CommandOutput::None),
+                DeploymentCommand::Stop { tracking_args } => self
+                    .deployment_stop(tracking_args)
+                    .await
+                    .map(|_| CommandOutput::None),
             },
             Command::Resource(cmd) => match cmd {
                 ResourceCommand::List {
                     table,
                     show_secrets,
-                } => self.resources_list(table, show_secrets).await,
+                } => self
+                    .resources_list(table, show_secrets)
+                    .await
+                    .map(|_| CommandOutput::None),
                 ResourceCommand::Delete {
                     resource_type,
                     confirmation: ConfirmationArgs { yes },
-                } => self.resource_delete(&resource_type, yes).await,
-                ResourceCommand::Dump { resource_type } => self.resource_dump(&resource_type).await,
+                } => self
+                    .resource_delete(&resource_type, yes)
+                    .await
+                    .map(|_| CommandOutput::None),
+                ResourceCommand::Dump { resource_type } => self
+                    .resource_dump(&resource_type)
+                    .await
+                    .map(|_| CommandOutput::None),
             },
             Command::Certificate(cmd) => match cmd {
-                CertificateCommand::Add { domain } => self.add_certificate(domain).await,
-                CertificateCommand::List { table } => self.list_certificates(table).await,
+                CertificateCommand::Add { domain } => self
+                    .add_certificate(domain)
+                    .await
+                    .map(|_| CommandOutput::None),
+                CertificateCommand::List { table } => self
+                    .list_certificates(table)
+                    .await
+                    .map(|_| CommandOutput::None),
                 CertificateCommand::Delete {
                     domain,
                     confirmation: ConfirmationArgs { yes },
-                } => self.delete_certificate(domain, yes).await,
+                } => self
+                    .delete_certificate(domain, yes)
+                    .await
+                    .map(|_| CommandOutput::None),
             },
             Command::Project(cmd) => match cmd {
-                ProjectCommand::Create => self.project_create(args.project_args.name).await,
+                ProjectCommand::Create => self
+                    .project_create(args.project_args.name)
+                    .await
+                    .map(|_| CommandOutput::None),
                 ProjectCommand::Update(cmd) => match cmd {
-                    ProjectUpdateCommand::Name { new_name } => self.project_rename(new_name).await,
+                    ProjectUpdateCommand::Name { new_name } => self
+                        .project_rename(new_name)
+                        .await
+                        .map(|_| CommandOutput::None),
                 },
-                ProjectCommand::Status => self.project_status().await,
-                ProjectCommand::List { table, .. } => self.projects_list(table).await,
-                ProjectCommand::Delete(ConfirmationArgs { yes }) => self.project_delete(yes).await,
-                ProjectCommand::Link => Ok(()), // logic is done in `load_project_id` in previous step
+                ProjectCommand::Status => self.project_status().await.map(|_| CommandOutput::None),
+                ProjectCommand::List { table, .. } => {
+                    self.projects_list(table).await.map(|_| CommandOutput::None)
+                }
+                ProjectCommand::Delete(ConfirmationArgs { yes }) => {
+                    self.project_delete(yes).await.map(|_| CommandOutput::None)
+                }
+                ProjectCommand::Link => Ok(CommandOutput::None), // logic is done in `load_project_id` in previous step
             },
-            Command::Upgrade { preview } => update_cargo_shuttle(preview).await,
+            Command::Upgrade { preview } => update_cargo_shuttle(preview)
+                .await
+                .map(|_| CommandOutput::None),
             Command::Mcp(cmd) => match cmd {
-                McpCommand::Start => shuttle_mcp::run_mcp_server().await,
+                McpCommand::Start => shuttle_mcp::run_mcp_server()
+                    .await
+                    .map(|_| CommandOutput::None),
             },
         }
     }
@@ -1075,7 +1131,7 @@ impl Shuttle {
         Ok(())
     }
 
-    async fn deployment_get(&self, deployment_id: Option<String>) -> Result<()> {
+    async fn deployment_get(&self, deployment_id: Option<String>) -> Result<CommandOutput> {
         let client = self.client.as_ref().unwrap();
         let pid = self.ctx.project_id();
 
@@ -1084,7 +1140,7 @@ impl Shuttle {
                 let r = client.get_deployment(pid, &id).await?;
                 if self.output_mode == OutputMode::Json {
                     println!("{}", r.raw_json);
-                    return Ok(());
+                    return Ok(CommandOutput::Deployment(r.into_inner()));
                 }
                 r.into_inner()
             }
@@ -1092,12 +1148,15 @@ impl Shuttle {
                 let r = client.get_current_deployment(pid).await?;
                 if self.output_mode == OutputMode::Json {
                     println!("{}", r.raw_json);
-                    return Ok(());
+                    return Ok(r
+                        .into_inner()
+                        .map(CommandOutput::Deployment)
+                        .unwrap_or_default());
                 }
 
                 let Some(d) = r.into_inner() else {
                     println!("No deployment found");
-                    return Ok(());
+                    return Ok(CommandOutput::None);
                 };
                 d
             }
@@ -1105,7 +1164,7 @@ impl Shuttle {
 
         println!("{}", deployment.to_string_colored());
 
-        Ok(())
+        Ok(CommandOutput::Deployment(deployment))
     }
 
     async fn deployment_redeploy(
@@ -1715,7 +1774,7 @@ impl Shuttle {
         Ok(())
     }
 
-    async fn deploy(&mut self, args: DeployArgs) -> Result<()> {
+    async fn deploy(&mut self, args: DeployArgs) -> Result<CommandOutput> {
         let client = self.client.as_ref().unwrap();
         let project_directory = self.ctx.project_directory();
 
@@ -1740,7 +1799,7 @@ impl Shuttle {
                         println!("{}", raw_json);
                     }
                 }
-                return Ok(());
+                return Ok(CommandOutput::Deployment(deployment));
             }
 
             return self
@@ -1749,7 +1808,8 @@ impl Shuttle {
                     &deployment.id,
                     args.tracking_args.raw,
                 )
-                .await;
+                .await
+                .map(|_| CommandOutput::None);
         }
 
         // Build archive deployment mode
@@ -1757,7 +1817,6 @@ impl Shuttle {
             secrets,
             ..Default::default()
         };
-        let mut build_meta = BuildMeta::default();
 
         let metadata = cargo_metadata(project_directory)?;
 
@@ -1771,7 +1830,10 @@ impl Shuttle {
         )
         .context("parsing infra annotations")?;
 
-        if let Ok(repo) = Repository::discover(project_directory) {
+        let build_meta = if let Some(args_build_meta) = args._build_meta {
+            Some(args_build_meta)
+        } else if let Ok(repo) = Repository::discover(project_directory) {
+            let mut build_meta = BuildMeta::default();
             let repo_path = repo
                 .workdir()
                 .context("getting working directory of repository")?;
@@ -1800,7 +1862,11 @@ impl Shuttle {
                         .map(|s| s.chars().take(GIT_STRINGS_MAX_LENGTH).collect());
                 }
             }
-        }
+
+            Some(build_meta)
+        } else {
+            None
+        };
 
         cargo_green_eprintln("Packing", "build files");
         let archive = self.make_archive()?;
@@ -1809,7 +1875,7 @@ impl Shuttle {
             eprintln!("Writing archive to {}", path.display());
             fs::write(path, archive).context("writing archive")?;
 
-            return Ok(());
+            return Ok(CommandOutput::None);
         }
 
         // TODO: upload secrets separately
@@ -1819,7 +1885,7 @@ impl Shuttle {
         cargo_green_eprintln("Uploading", "build archive");
         let arch = client.upload_archive(pid, archive).await?.into_inner();
         deployment_req.archive_version_id = arch.archive_version_id;
-        deployment_req.build_meta = Some(build_meta);
+        deployment_req.build_meta = build_meta;
 
         cargo_green_eprintln("Creating", "deployment");
         let (deployment, raw_json) = client
@@ -1839,7 +1905,7 @@ impl Shuttle {
                     println!("{}", raw_json);
                 }
             }
-            return Ok(());
+            return Ok(CommandOutput::Deployment(deployment));
         }
 
         self.track_deployment_status_and_print_logs_on_fail(
@@ -1848,6 +1914,7 @@ impl Shuttle {
             args.tracking_args.raw,
         )
         .await
+        .map(|_| CommandOutput::None)
     }
 
     /// Returns true if the deployment failed

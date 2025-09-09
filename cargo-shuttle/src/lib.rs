@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::Arc;
 
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{bail, Context, Result};
 use args::DeploymentTrackingArgs;
 use chrono::Utc;
 use clap::{parser::ValueSource, CommandFactory, FromArgMatches};
@@ -1923,7 +1923,7 @@ impl Shuttle {
                     println!("{}", r.raw_json);
                 }
             }
-            return Err(anyhow!("Deployment failed"));
+            bail!("Deployment failed");
         }
 
         Ok(())

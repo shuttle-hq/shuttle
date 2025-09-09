@@ -163,7 +163,7 @@ pub enum BuildArgs {
     // No Unknown variant: is a Request type and should only be deserialized on backend
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[typeshare::typeshare]
 pub struct BuildArgsRust {

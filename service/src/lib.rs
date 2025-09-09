@@ -107,10 +107,14 @@ impl<R: Serialize + DeserializeOwned + Send> IntoResource<R> for R {
 /// An `Into<Service>` implementor is what is returned in the `shuttle_runtime::main` macro
 /// in order to run it on the Shuttle servers.
 #[async_trait]
-pub trait Service: Send {
+pub trait Service: Send + Clone {
     /// This function is run exactly once on startup of a deployment.
     ///
     /// The passed [`SocketAddr`] receives proxied HTTP traffic from your Shuttle subdomain (or custom domain).
     /// Binding to the address is only relevant if this service is an HTTP server.
-    async fn bind(mut self, addr: SocketAddr) -> Result<(), error::Error>;
+    async fn bind(self, addr: SocketAddr) -> Result<(), error::Error>;
+
+    async fn shutdown(self) -> Result<(), CustomError> {
+        Ok(())
+    }
 }

@@ -1502,6 +1502,8 @@ impl Shuttle {
             .spawn()
             .context("spawning runtime process")?
         };
+        #[allow(unused)]
+        let pid = child.id().context("getting runtime's PID")?;
 
         // Start background tasks for reading child's stdout and stderr
         let raw = run_args.raw;
@@ -1554,7 +1556,7 @@ impl Shuttle {
         });
 
         #[cfg(target_family = "unix")]
-        let exit_result = {
+        let (exit_result, interrupted) = {
             let mut sigterm_notif =
                 tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
                     .expect("Can not get the SIGTERM signal receptor");
@@ -1563,20 +1565,20 @@ impl Shuttle {
                     .expect("Can not get the SIGINT signal receptor");
             tokio::select! {
                 exit_result = child.wait() => {
-                    Some(exit_result)
+                    (Some(exit_result), false)
                 }
                 _ = sigterm_notif.recv() => {
                     eprintln!("Received SIGTERM.");
-                    None
+                    (None, false)
                 },
                 _ = sigint_notif.recv() => {
                     eprintln!("Received SIGINT.");
-                    None
+                    (None, true)
                 }
             }
         };
         #[cfg(target_family = "windows")]
-        let exit_result = {
+        let (exit_result, interrupted) = {
             let mut ctrl_break_notif = tokio::signal::windows::ctrl_break()
                 .expect("Can not get the CtrlBreak signal receptor");
             let mut ctrl_c_notif =
@@ -1589,27 +1591,27 @@ impl Shuttle {
                 .expect("Can not get the CtrlShutdown signal receptor");
             tokio::select! {
                 exit_result = child.wait() => {
-                    Some(exit_result)
+                    (Some(exit_result), false)
                 }
                 _ = ctrl_break_notif.recv() => {
                     eprintln!("Received ctrl-break.");
-                    None
+                    (None, false)
                 },
                 _ = ctrl_c_notif.recv() => {
                     eprintln!("Received ctrl-c.");
-                    None
+                    (None, true)
                 },
                 _ = ctrl_close_notif.recv() => {
                     eprintln!("Received ctrl-close.");
-                    None
+                    (None, false)
                 },
                 _ = ctrl_logoff_notif.recv() => {
                     eprintln!("Received ctrl-logoff.");
-                    None
+                    (None, false)
                 },
                 _ = ctrl_shutdown_notif.recv() => {
                     eprintln!("Received ctrl-shutdown.");
-                    None
+                    (None, false)
                 }
             }
         };
@@ -1624,24 +1626,46 @@ impl Shuttle {
                 bail!("Failed to wait for runtime process to exit: {e}");
             }
             None => {
-                eprintln!("Stopping runtime.");
-                child.kill().await?;
-                if run_args.build_args.docker {
-                    let status = tokio::process::Command::new("docker")
-                        .arg("stop")
-                        .arg(name)
-                        .kill_on_drop(true)
-                        .stdout(Stdio::null())
-                        .spawn()
-                        .context("spawning 'docker stop'")?
-                        .wait()
-                        .await
-                        .context("waiting for 'docker stop'")?;
+                #[cfg(target_family = "unix")]
+                {
+                    eprintln!("Stopping runtime.");
+                    if run_args.build_args.docker {
+                        let status = tokio::process::Command::new("docker")
+                            .arg("stop")
+                            .arg(name)
+                            .kill_on_drop(true)
+                            .stdout(Stdio::null())
+                            .spawn()
+                            .context("spawning 'docker stop'")?
+                            .wait()
+                            .await
+                            .context("waiting for 'docker stop'")?;
 
-                    if !status.success() {
-                        eprintln!("WARN: 'docker stop' failed");
+                        if !status.success() {
+                            eprintln!("WARN: 'docker stop' failed");
+                        }
+                    } else if interrupted {
+                        nix::sys::signal::kill(
+                            nix::unistd::Pid::from_raw(pid as i32),
+                            nix::sys::signal::SIGINT,
+                        )
+                        .context("Sending SIGINT to runtime process")?;
+                        match tokio::time::timeout(Duration::from_secs(30), child.wait()).await {
+                            Ok(exit_result) => {
+                                debug!("Runtime exited {:?}", exit_result)
+                            }
+                            Err(_) => {
+                                eprintln!("Runtime shutdown timed out. Sending SIGKILL");
+                                child.kill().await?;
+                            }
+                        };
+                    } else {
+                        child.kill().await?;
                     }
                 }
+
+                #[cfg(target_family = "windows")]
+                child.kill().await?;
             }
         }
 

@@ -409,6 +409,7 @@ workflows:
           matrix:
             parameters:
               crate:
+                - shuttle-builder
                 - shuttle-codegen
                 - shuttle-common
                 - shuttle-ifc

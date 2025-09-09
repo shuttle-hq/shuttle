@@ -3,6 +3,7 @@ resolver = "2"
 members = [
   "admin",
   "api-client",
+  "builder",
   "cargo-shuttle",
   "codegen",
   "common",
@@ -21,6 +22,7 @@ repository = "https://github.com/shuttle-hq/shuttle"
 
 [workspace.dependencies]
 shuttle-api-client = { path = "api-client", version = "0.56.1", default-features = false }
+shuttle-builder = { path = "builder", version = "0.56.0" }
 shuttle-codegen = { path = "codegen", version = "0.56.0" }
 shuttle-common = { path = "common", version = "0.56.0" }
 shuttle-ifc = { path = "ifc", version = "0.56.0" }
@@ -30,6 +32,7 @@ shuttle-service = { path = "service", version = "0.56.0" }
 schemars = "1"
 
 anyhow = "1.0.66"
+askama = "0.14.0"
 assert_cmd = "2.0.6"
 async-trait = "0.1.58"
 axum = { version = "0.8.1", default-features = false }
@@ -98,4 +101,4 @@ urlencoding = "2.1.3"
 walkdir = "2.3.3"
 webbrowser = "1.0.1"
 zeroize = "1.6.0"
-zip = "4"
+zip = "5"

@@ -45,10 +45,7 @@ async fn shuttle_run(working_directory: &str, external: bool) -> String {
                 cmd: Command::Run(RunArgs {
                     port,
                     external,
-                    release: false,
-                    raw: false,
-                    bacon: false,
-                    secret_args: Default::default(),
+                    ..Default::default()
                 }),
             },
             false,

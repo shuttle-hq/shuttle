@@ -10,4 +10,5 @@ async fn main() -> Result<()> {
     Shuttle::new(Binary::CargoShuttle, args.api_env.clone())?
         .run(args, provided_path_to_init)
         .await
+        .map(|_| ())
 }

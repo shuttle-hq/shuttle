@@ -16,7 +16,7 @@ use shuttle_common::{
 };
 use shuttle_service::{Environment, ResourceFactory, Service};
 use tokio::net::TcpListener;
-use tracing::{debug, info, trace};
+use tracing::{debug, error, info, trace};
 
 use crate::__internals::{Loader, Runner};
 
@@ -119,8 +119,8 @@ pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + S
                         )
                         .await
                     {
-                        eprintln!("ERROR: Health check error: {err}");
-                        exit(200);
+                        // Error happens i.e. if something was wrong with the HTTP request
+                        error!("Health check error: {err}");
                     }
                 });
             }

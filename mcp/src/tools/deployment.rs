@@ -1,25 +1,44 @@
 use crate::utils::execute_command;
 
-pub struct DeployParams {
-    pub secrets_file: Option<String>,
-    pub name: Option<String>,
-    pub project_id: Option<String>,
+#[derive(serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
+pub struct DeployArgs {
+    #[schemars(description = "Specify the working directory")]
+    cwd: String,
+    #[schemars(description = "Use this secrets file instead")]
+    secrets_file: Option<String>,
+    #[schemars(description = "Specify the name of the project")]
+    name: Option<String>,
+    #[schemars(description = "Specify the id of the project")]
+    project_id: Option<String>,
 }
 
-pub struct DeploymentListParams {
-    pub page: Option<u32>,
-    pub limit: Option<u32>,
-    pub name: Option<String>,
-    pub project_id: Option<String>,
+#[derive(serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
+pub struct DeploymentListArgs {
+    #[schemars(description = "Specify the working directory")]
+    cwd: String,
+    #[schemars(description = "Which page to display")]
+    page: Option<u32>,
+    #[schemars(description = "How many deployments per page to display")]
+    limit: Option<u32>,
+    #[schemars(description = "Specify the name of the project")]
+    name: Option<String>,
+    #[schemars(description = "Specify the id of the project")]
+    project_id: Option<String>,
 }
 
-pub struct DeploymentStatusParams {
-    pub deployment_id: Option<String>,
-    pub name: Option<String>,
-    pub project_id: Option<String>,
+#[derive(serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
+pub struct DeploymentStatusArgs {
+    #[schemars(description = "Specify the working directory")]
+    cwd: String,
+    #[schemars(description = "ID of deployment to get status for")]
+    deployment_id: Option<String>,
+    #[schemars(description = "Specify the name of the project")]
+    name: Option<String>,
+    #[schemars(description = "Specify the id of the project")]
+    project_id: Option<String>,
 }
 
-pub async fn deploy(cwd: String, params: DeployParams) -> Result<String, String> {
+pub async fn deploy(params: DeployArgs) -> Result<String, String> {
     let mut args = vec!["deploy".to_string()];
 
     if let Some(secrets) = params.secrets_file {
@@ -37,10 +56,10 @@ pub async fn deploy(cwd: String, params: DeployParams) -> Result<String, String>
         args.push(id);
     }
 
-    execute_command("shuttle", args, &cwd).await
+    execute_command("shuttle", args, &params.cwd).await
 }
 
-pub async fn deployment_list(cwd: String, params: DeploymentListParams) -> Result<String, String> {
+pub async fn deployment_list(params: DeploymentListArgs) -> Result<String, String> {
     let mut args = vec!["deployment".to_string(), "list".to_string()];
 
     if let Some(page) = params.page {
@@ -63,13 +82,10 @@ pub async fn deployment_list(cwd: String, params: DeploymentListParams) -> Resul
         args.push(id);
     }
 
-    execute_command("shuttle", args, &cwd).await
+    execute_command("shuttle", args, &params.cwd).await
 }
 
-pub async fn deployment_status(
-    cwd: String,
-    params: DeploymentStatusParams,
-) -> Result<String, String> {
+pub async fn deployment_status(params: DeploymentStatusArgs) -> Result<String, String> {
     let mut args = vec!["deployment".to_string(), "status".to_string()];
 
     if let Some(id) = params.deployment_id {
@@ -86,5 +102,5 @@ pub async fn deployment_status(
         args.push(id);
     }
 
-    execute_command("shuttle", args, &cwd).await
+    execute_command("shuttle", args, &params.cwd).await
 }

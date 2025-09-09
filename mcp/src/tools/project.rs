@@ -1,13 +1,22 @@
 use crate::utils::execute_command;
 
-pub struct ProjectStatusParams {
-    pub name: Option<String>,
-    pub project_id: Option<String>,
+#[derive(serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
+pub struct ProjectStatusArgs {
+    #[schemars(description = "Specify the working directory")]
+    cwd: String,
+    #[schemars(description = "Specify the name of the project")]
+    name: Option<String>,
+    #[schemars(description = "Specify the id of the project")]
+    project_id: Option<String>,
 }
 
-pub struct ProjectListParams {}
+#[derive(serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
+pub struct ProjectListArgs {
+    #[schemars(description = "Specify the working directory")]
+    cwd: String,
+}
 
-pub async fn project_status(cwd: String, params: ProjectStatusParams) -> Result<String, String> {
+pub async fn project_status(params: ProjectStatusArgs) -> Result<String, String> {
     let mut args = vec!["project".to_string(), "status".to_string()];
 
     if let Some(name) = params.name {
@@ -20,11 +29,11 @@ pub async fn project_status(cwd: String, params: ProjectStatusParams) -> Result<
         args.push(id);
     }
 
-    execute_command("shuttle", args, &cwd).await
+    execute_command("shuttle", args, &params.cwd).await
 }
 
-pub async fn project_list(cwd: String, _params: ProjectListParams) -> Result<String, String> {
+pub async fn project_list(params: ProjectListArgs) -> Result<String, String> {
     let args = vec!["project".to_string(), "list".to_string()];
 
-    execute_command("shuttle", args, &cwd).await
+    execute_command("shuttle", args, &params.cwd).await
 }

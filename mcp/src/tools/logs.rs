@@ -1,13 +1,20 @@
 use crate::utils::execute_command;
 
-pub struct LogsParams {
-    pub deployment_id: Option<String>,
-    pub latest: Option<bool>,
-    pub name: Option<String>,
-    pub project_id: Option<String>,
+#[derive(serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
+pub struct LogsArgs {
+    #[schemars(description = "Specify the working directory")]
+    cwd: String,
+    #[schemars(description = "Deployment ID to get logs for. Defaults to the current deployment")]
+    deployment_id: Option<String>,
+    #[schemars(description = "View logs from the most recent deployment")]
+    latest: Option<bool>,
+    #[schemars(description = "Specify the name of the project")]
+    name: Option<String>,
+    #[schemars(description = "Specify the id of the project")]
+    project_id: Option<String>,
 }
 
-pub async fn logs(cwd: String, params: LogsParams) -> Result<String, String> {
+pub async fn logs(params: LogsArgs) -> Result<String, String> {
     let mut args = vec!["logs".to_string()];
 
     if let Some(id) = params.deployment_id {
@@ -28,5 +35,5 @@ pub async fn logs(cwd: String, params: LogsParams) -> Result<String, String> {
         args.push(id);
     }
 
-    execute_command("shuttle", args, &cwd).await
+    execute_command("shuttle", args, &params.cwd).await
 }

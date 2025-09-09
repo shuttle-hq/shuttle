@@ -2144,7 +2144,6 @@ impl Shuttle {
     fn make_archive(&self) -> Result<Vec<u8>> {
         let archive_files = self.gather_build_files()?;
         if archive_files.is_empty() {
-            error!("No files included in build. Aborting...");
             bail!("No files included in build");
         }
 

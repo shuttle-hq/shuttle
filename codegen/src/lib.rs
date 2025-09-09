@@ -29,6 +29,7 @@ mod shuttle_main;
 /// | `ShuttleSalvo`    | [shuttle-salvo](https://crates.io/crates/shuttle-salvo)        | [salvo](https://docs.rs/salvo)                                          | [GitHub](https://github.com/shuttle-hq/shuttle-examples/tree/main/salvo/hello-world)    |
 /// | `ShuttleSerenity` | [shuttle-serenity](https://crates.io/crates/shuttle-serenity)  | [serenity](https://docs.rs/serenity) and [poise](https://docs.rs/poise) | [GitHub](https://github.com/shuttle-hq/shuttle-examples/tree/main/serenity/hello-world) |
 /// | `ShuttleTower`    | [shuttle-tower](https://crates.io/crates/shuttle-tower)        | [tower](https://docs.rs/tower)                                          | [GitHub](https://github.com/shuttle-hq/shuttle-examples/tree/main/tower/hello-world)    |
+/// | `ShuttleWarp`     | [shuttle-warp](https://crates.io/crates/shuttle-warp)          | [warp](https://docs.rs/warp)                                            | [GitHub](https://github.com/shuttle-hq/shuttle-examples/tree/main/warp/hello-world)     |
 ///
 /// ## Getting shuttle managed resources
 /// Shuttle is able to manage resource dependencies for you. These resources are passed in as inputs to your `#[shuttle_runtime::main]` function and are configured using attributes:

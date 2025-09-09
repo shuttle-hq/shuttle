@@ -67,13 +67,12 @@ use crate::args::{
 };
 pub use crate::args::{BuildArgsShared, Command, ProjectArgs, RunArgs, ShuttleArgs};
 use crate::builder::{
-    async_cargo_metadata, cargo_build, find_first_shuttle_package, gather_rust_build_args,
-    BuiltService,
+    cargo_build, find_first_shuttle_package, gather_rust_build_args, BuiltService,
 };
 use crate::config::RequestContext;
 use crate::provisioner_server::{ProvApiState, ProvisionerServer};
 use crate::util::{
-    bacon, check_and_warn_runtime_version, generate_completions, generate_manpage,
+    bacon, cargo_metadata, check_and_warn_runtime_version, generate_completions, generate_manpage,
     get_templates_schema, is_dirty, open_gh_issue, read_ws_until_text, update_cargo_shuttle,
 };
 
@@ -1652,9 +1651,8 @@ impl Shuttle {
     async fn local_docker_build(&self, build_args: &BuildArgsShared) -> Result<()> {
         let project_name = self.ctx.project_name().to_owned();
         let project_directory = self.ctx.project_directory();
-        let manifest_path = project_directory.join("Cargo.toml");
 
-        let metadata = async_cargo_metadata(manifest_path.as_path()).await?;
+        let metadata = cargo_metadata(project_directory)?;
         let rust_build_args = gather_rust_build_args(&metadata)?;
 
         cargo_green_eprintln("Building", format!("{} with docker", project_name));
@@ -1720,7 +1718,6 @@ impl Shuttle {
     async fn deploy(&mut self, args: DeployArgs) -> Result<()> {
         let client = self.client.as_ref().unwrap();
         let project_directory = self.ctx.project_directory();
-        let manifest_path = project_directory.join("Cargo.toml");
 
         let secrets = Shuttle::get_secrets(&args.secret_args, project_directory, false)?;
 
@@ -1762,7 +1759,7 @@ impl Shuttle {
         };
         let mut build_meta = BuildMeta::default();
 
-        let metadata = async_cargo_metadata(manifest_path.as_path()).await?;
+        let metadata = cargo_metadata(project_directory)?;
 
         let rust_build_args = gather_rust_build_args(&metadata)?;
         deployment_req.build_args = Some(CommonBuildArgs::Rust(rust_build_args));

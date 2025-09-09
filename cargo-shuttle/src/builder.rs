@@ -1,5 +1,5 @@
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use anyhow::{bail, Context, Result};
 use cargo_metadata::{Metadata, Package, Target};
@@ -7,39 +7,14 @@ use shuttle_common::models::deployment::BuildArgsRust;
 use shuttle_ifc::find_runtime_main_fn;
 use tracing::{debug, trace};
 
+use crate::util::cargo_metadata;
+
 /// This represents a compiled Shuttle service
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct BuiltService {
     pub workspace_path: PathBuf,
     pub target_name: String,
     pub executable_path: PathBuf,
-}
-
-pub async fn async_cargo_metadata(manifest_path: &Path) -> Result<Metadata> {
-    let metadata = {
-        // Modified implementaion of `cargo_metadata::MetadataCommand::exec` (from v0.15.3).
-        // Uses tokio Command instead of std, to make this operation non-blocking.
-        let mut cmd = tokio::process::Command::from(
-            cargo_metadata::MetadataCommand::new()
-                .manifest_path(manifest_path)
-                .cargo_command(),
-        );
-
-        let output = cmd.output().await?;
-        if !output.status.success() {
-            return Err(cargo_metadata::Error::CargoMetadata {
-                stderr: String::from_utf8(output.stderr)?,
-            })?;
-        }
-        let json = std::str::from_utf8(&output.stdout)?
-            .lines()
-            .find(|line| line.starts_with('{'))
-            .ok_or(cargo_metadata::Error::NoJson)?;
-        cargo_metadata::MetadataCommand::parse(json)?
-    };
-    trace!("Cargo metadata parsed");
-
-    Ok(metadata)
 }
 
 /// Find crates with a runtime dependency and main macro
@@ -132,7 +107,7 @@ pub async fn cargo_build(
 ) -> Result<BuiltService> {
     let project_path = project_path.into();
     let manifest_path = project_path.join("Cargo.toml");
-    let metadata = async_cargo_metadata(manifest_path.as_path()).await?;
+    let metadata = cargo_metadata(project_path.as_path())?;
     let build_args = gather_rust_build_args(&metadata)?;
 
     let package_name = build_args

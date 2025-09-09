@@ -1,5 +1,3 @@
-#syntax=docker/dockerfile:1.4
-
 FROM lukemathwalker/cargo-chef:latest AS cargo-chef
 
 SHELL ["/bin/bash", "-e", "-o", "pipefail", "-c"]

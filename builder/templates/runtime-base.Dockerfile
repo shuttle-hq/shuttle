@@ -1,5 +1,3 @@
-#syntax=docker/dockerfile:1.4
-
 FROM debian:bookworm-slim AS runtime-base
 
 SHELL ["/bin/bash", "-e", "-o", "pipefail", "-c"]

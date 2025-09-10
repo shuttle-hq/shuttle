@@ -1937,22 +1937,22 @@ impl Shuttle {
         self.ctx.load_local_internal_config(project_args)?;
 
         let client = self.client.as_ref().unwrap();
-        let r = client.create_project(name).await?;
-
-        let raw_json = r.raw_json.clone();
-        let project = r.into_inner();
+        let (proj, raw_json) = client.create_project(name).await?.into_parts();
 
         match self.output_mode {
             OutputMode::Normal => {
-                println!("Created project '{}' with id {}", project.name, project.id);
+                println!("Created project '{}' with id {}", proj.name, proj.id);
             }
             OutputMode::Json => {
                 println!("{}", raw_json);
             }
         }
 
-        self.ctx.set_project_id(project.id);
-        self.ctx.save_local_internal()?;
+        // Update the local internal config file if we are in a Rust project
+        if project_args.workspace_path().is_ok() {
+            self.ctx.set_project_id(proj.id);
+            self.ctx.save_local_internal()?;
+        }
 
         Ok(())
     }
@@ -2071,6 +2071,9 @@ impl Shuttle {
 
         let res = client.delete_project(pid).await?.into_inner();
 
+        // todo
+        // if --id is provided, then we don't want to clear the id in the config file
+        // also should only happen if the file exists
         self.ctx.remove_project_id();
         self.ctx.save_local_internal()?;
 

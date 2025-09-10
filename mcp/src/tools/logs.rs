@@ -1,13 +1,5 @@
 use crate::utils::execute_command;
 
-pub struct LogsParams {
-    pub deployment_id: Option<String>,
-    pub latest: Option<bool>,
-    pub name: Option<String>,
-    pub project_id: Option<String>,
-    pub lines: Option<u32>,
-}
-
 fn limit_to_last_n_lines(text: &str, max_lines: u32) -> String {
     let lines: Vec<&str> = text.lines().collect();
 
@@ -31,6 +23,8 @@ pub struct LogsArgs {
     name: Option<String>,
     #[schemars(description = "Specify the id of the project")]
     project_id: Option<String>,
+    #[schemars(description = "Maximum number of lines to return")]
+    lines: Option<u32>,
 }
 
 pub async fn logs(params: LogsArgs) -> Result<String, String> {

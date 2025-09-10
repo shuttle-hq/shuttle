@@ -404,7 +404,7 @@ dependencies = [
 
 [[package]]
 name = "cargo-shuttle"
-version = "0.56.6"
+version = "0.57.0"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -4010,7 +4010,7 @@ checksum = "0fda2ff0d084019ba4d7c6f371c95d8fd75ce3524c3cb8fb653a3023f6323e64"
 
 [[package]]
 name = "shuttle-admin"
-version = "0.56.0"
+version = "0.57.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -4026,7 +4026,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-api-client"
-version = "0.56.1"
+version = "0.57.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4047,7 +4047,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-builder"
-version = "0.56.0"
+version = "0.57.0"
 dependencies = [
  "askama",
  "pretty_assertions",
@@ -4056,7 +4056,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-codegen"
-version = "0.56.0"
+version = "0.57.0"
 dependencies = [
  "pretty_assertions",
  "proc-macro-error2",
@@ -4069,7 +4069,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-common"
-version = "0.56.0"
+version = "0.57.0"
 dependencies = [
  "anyhow",
  "axum",
@@ -4092,7 +4092,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-ifc"
-version = "0.56.0"
+version = "0.57.0"
 dependencies = [
  "proc-macro2",
  "shuttle-common",
@@ -4101,7 +4101,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-mcp"
-version = "0.56.0"
+version = "0.57.0"
 dependencies = [
  "anyhow",
  "reqwest",
@@ -4115,7 +4115,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-runtime"
-version = "0.56.0"
+version = "0.57.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4145,7 +4145,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-service"
-version = "0.56.0"
+version = "0.57.0"
 dependencies = [
  "anyhow",
  "async-trait",

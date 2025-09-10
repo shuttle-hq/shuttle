@@ -1,6 +1,6 @@
 [package]
 name = "shuttle-admin"
-version = "0.56.0"
+version = "0.57.0"
 edition = "2021"
 publish = false
 

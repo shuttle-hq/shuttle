@@ -10,7 +10,7 @@ pub struct LogsParams {
 
 fn limit_to_last_n_lines(text: &str, max_lines: u32) -> String {
     let lines: Vec<&str> = text.lines().collect();
-    
+
     if lines.len() <= max_lines as usize {
         return text.to_string();
     }
@@ -19,7 +19,21 @@ fn limit_to_last_n_lines(text: &str, max_lines: u32) -> String {
     lines[start_index..].join("\n")
 }
 
-pub async fn logs(cwd: String, params: LogsParams) -> Result<String, String> {
+#[derive(serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
+pub struct LogsArgs {
+    #[schemars(description = "Specify the working directory")]
+    cwd: String,
+    #[schemars(description = "Deployment ID to get logs for. Defaults to the current deployment")]
+    deployment_id: Option<String>,
+    #[schemars(description = "View logs from the most recent deployment")]
+    latest: Option<bool>,
+    #[schemars(description = "Specify the name of the project")]
+    name: Option<String>,
+    #[schemars(description = "Specify the id of the project")]
+    project_id: Option<String>,
+}
+
+pub async fn logs(params: LogsArgs) -> Result<String, String> {
     let mut args = vec!["logs".to_string()];
 
     if let Some(id) = params.deployment_id {
@@ -40,7 +54,7 @@ pub async fn logs(cwd: String, params: LogsParams) -> Result<String, String> {
         args.push(id);
     }
 
-    let output = execute_command("shuttle", args, &cwd).await?;
+    let output = execute_command("shuttle", args, &params.cwd).await?;
 
     // Limit the output to the last N lines (default 50)
     let max_lines = params.lines.unwrap_or(50);

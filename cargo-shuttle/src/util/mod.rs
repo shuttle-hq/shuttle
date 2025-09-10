@@ -1,7 +1,7 @@
 pub mod bacon;
 
 use std::{
-    fmt::Write,
+    fmt::{Display, Write},
     fs::File,
     io::stdout,
     path::{Path, PathBuf},
@@ -13,6 +13,7 @@ use anyhow::{bail, Context, Result};
 use clap::CommandFactory;
 use clap_complete::{generate, Shell};
 use clap_mangen::Man;
+use crossterm::style::Stylize;
 use futures::StreamExt;
 use git2::{Repository, StatusOptions};
 use indoc::writedoc;
@@ -287,4 +288,23 @@ where
     }
 
     Ok(None)
+}
+
+/// Print a green verb + rest of line similar to how cargo does
+pub fn cargo_green_eprintln(verb: impl Display, line: impl Display) {
+    eprintln!("{} {}", format!("{verb:>12}").bold().green(), line);
+}
+
+/// Calls cargo metadata with --no-deps to prevent from blocking for a download if crates cache is missing
+pub fn cargo_metadata(path: &Path) -> anyhow::Result<cargo_metadata::Metadata> {
+    let meta = cargo_metadata::MetadataCommand::new()
+        .current_dir(path)
+        .no_deps()
+        .exec()
+        .context(format!(
+            "Failed to find a Rust project in {}. Try again in a cargo workspace, or provide a --name or --id argument.",
+            path.display()
+        ))?;
+
+    Ok(meta)
 }

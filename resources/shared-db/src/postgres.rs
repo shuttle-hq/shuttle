@@ -199,7 +199,7 @@ impl SerdeJsonOperator {
         &self,
         key: &str,
         value: &T,
-    ) -> Result<(), opendal::Error> {
+    ) -> Result<opendal::Metadata, opendal::Error> {
         let b = serde_json::to_vec(value).map_err(|e| {
             opendal::Error::new(opendal::ErrorKind::Unexpected, "serialization error").set_source(e)
         })?;

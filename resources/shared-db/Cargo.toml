@@ -9,7 +9,7 @@ keywords = ["shuttle-service", "database"]
 
 [dependencies]
 async-trait = "0.1.56"
-diesel-async = { version = "0.5.2", optional = true }
+diesel-async = { version = "0.6", optional = true }
 opendal = { version = "0.54", optional = true }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

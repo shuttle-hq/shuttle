@@ -32,53 +32,51 @@ pub enum MaybeRequest {
 
 macro_rules! aws_engine {
     ($feature:expr, $struct_ident:ident, $res_type:ident) => {
-        paste::paste! {
-            #[cfg(feature = $feature)]
-            #[derive(Default)]
-            #[doc = "Shuttle managed AWS RDS " $struct_ident " instance"]
-            pub struct $struct_ident(DbInput);
+        #[cfg(feature = $feature)]
+        #[derive(Default)]
+        /// Shuttle managed AWS RDS instance
+        pub struct $struct_ident(DbInput);
 
-            #[cfg(feature = $feature)]
-            impl $struct_ident {
-                /// Use a custom connection string for local runs
-                pub fn local_uri(mut self, local_uri: &str) -> Self {
-                    self.0.local_uri = Some(local_uri.to_string());
+        #[cfg(feature = $feature)]
+        impl $struct_ident {
+            /// Use a custom connection string for local runs
+            pub fn local_uri(mut self, local_uri: &str) -> Self {
+                self.0.local_uri = Some(local_uri.to_string());
 
-                    self
-                }
-
-                /// Use something other than the project name as the DB name
-                pub fn database_name(mut self, database_name: &str) -> Self {
-                    self.0.db_name = Some(database_name.to_string());
-
-                    self
-                }
+                self
             }
 
-            #[cfg(feature = $feature)]
-            #[async_trait::async_trait]
-            impl ResourceInputBuilder for $struct_ident {
-                type Input = MaybeRequest;
-                type Output = OutputWrapper;
+            /// Use something other than the project name as the DB name
+            pub fn database_name(mut self, database_name: &str) -> Self {
+                self.0.db_name = Some(database_name.to_string());
 
-                async fn build(self, factory: &ResourceFactory) -> Result<Self::Input, Error> {
-                    let md = factory.get_metadata();
-                    Ok(match md.env {
-                        Environment::Deployment => MaybeRequest::Request(ProvisionResourceRequest {
+                self
+            }
+        }
+
+        #[cfg(feature = $feature)]
+        #[async_trait::async_trait]
+        impl ResourceInputBuilder for $struct_ident {
+            type Input = MaybeRequest;
+            type Output = OutputWrapper;
+
+            async fn build(self, factory: &ResourceFactory) -> Result<Self::Input, Error> {
+                let md = factory.get_metadata();
+                Ok(match md.env {
+                    Environment::Deployment => MaybeRequest::Request(ProvisionResourceRequest {
+                        r#type: ResourceType::$res_type,
+                        config: serde_json::to_value(self.0).unwrap(),
+                    }),
+                    Environment::Local => match self.0.local_uri {
+                        Some(local_uri) => {
+                            MaybeRequest::NotRequest(DatabaseResource::ConnectionString(local_uri))
+                        }
+                        None => MaybeRequest::Request(ProvisionResourceRequest {
                             r#type: ResourceType::$res_type,
                             config: serde_json::to_value(self.0).unwrap(),
                         }),
-                        Environment::Local => match self.0.local_uri {
-                            Some(local_uri) => {
-                                MaybeRequest::NotRequest(DatabaseResource::ConnectionString(local_uri))
-                            }
-                            None => MaybeRequest::Request(ProvisionResourceRequest {
-                                r#type: ResourceType::$res_type,
-                                config: serde_json::to_value(self.0).unwrap(),
-                            }),
-                        },
-                    })
-                }
+                    },
+                })
             }
         }
     };

@@ -400,8 +400,6 @@ workflows:
                 - services/shuttle-rocket
                 - services/shuttle-salvo
                 - services/shuttle-serenity
-                - services/shuttle-thruster
-                - services/shuttle-tide
                 - services/shuttle-tower
                 - services/shuttle-warp
       - test-workspace-member:
@@ -601,8 +599,6 @@ workflows:
                 - services/shuttle-rocket
                 - services/shuttle-salvo
                 - services/shuttle-serenity
-                - services/shuttle-thruster
-                - services/shuttle-tide
                 - services/shuttle-tower
                 - services/shuttle-warp
           name: publish-<< matrix.path >>

@@ -19,8 +19,6 @@ You can also add `-rustls` after the feature flag, for example `postgres-rustls`
 | MySql    | mysql        | shuttle_aws_rds::MySql    |
 | MariaDB  | mariadb      | shuttle_aws_rds::MariaDB  |
 
-An example using the Tide framework can be found on [GitHub](https://github.com/shuttle-hq/shuttle-examples/tree/main/tide/postgres)
-
 ### Options
 
 Each engine can take in the following options:

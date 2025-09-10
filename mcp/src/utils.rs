@@ -34,7 +34,7 @@ pub async fn run_tool<F>(tool: F) -> Result<String, String>
 where
     F: Future<Output = Result<String, String>>,
 {
-    debug!("Running tool"); // Instument span wraps the event to display the tool name
+    debug!("Running tool"); // Instrument span wraps the event to display the tool name
     tool.await
 }
 

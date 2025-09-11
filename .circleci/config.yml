@@ -529,6 +529,7 @@ workflows:
             parameters:
               path:
                 - api-client
+                - builder
                 - ifc
                 - service
           name: publish-<< matrix.path >>

@@ -1,6 +1,6 @@
 use crate::{constants::SHUTTLE_DOCS_SEARCH_BASE_URL, utils::build_client};
 
-#[derive(serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
+#[derive(Debug, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
 pub struct SearchDocsArgs {
     #[schemars(description = "Search query for documentation")]
     query: String,

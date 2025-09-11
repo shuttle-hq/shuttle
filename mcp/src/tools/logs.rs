@@ -11,7 +11,7 @@ fn limit_to_last_n_lines(text: &str, max_lines: u32) -> String {
     lines[start_index..].join("\n")
 }
 
-#[derive(serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
+#[derive(Debug, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
 pub struct LogsArgs {
     #[schemars(description = "Specify the working directory")]
     cwd: String,

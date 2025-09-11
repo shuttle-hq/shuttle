@@ -473,7 +473,12 @@ workflows:
               ignore: /.*/
             tags:
               only: /v[\d\.]+/
-      - build-binaries-windows
+      - build-binaries-windows:
+          filters:
+            branches:
+              ignore: /.*/
+            tags:
+              only: /v[\d\.]+/
       - build-binaries-mac:
           name: build-binaries-mac-x86_64
           target: x86_64-apple-darwin
@@ -492,17 +497,17 @@ workflows:
               only: /v[\d\.]+/
       - publish-github-release-draft:
           requires:
-            # - build-binaries-x86_64-gnu
-            # - build-binaries-x86_64-musl
-            # - build-binaries-aarch64
+            - build-binaries-x86_64-gnu
+            - build-binaries-x86_64-musl
+            - build-binaries-aarch64
             - build-binaries-windows
-            # - build-binaries-mac-x86_64
-            # - build-binaries-mac-aarch64
-          # filters:
-          #   branches:
-          #     ignore: /.*/
-          #   tags:
-          #     only: /v[\d\.]+/
+            - build-binaries-mac-x86_64
+            - build-binaries-mac-aarch64
+          filters:
+            branches:
+              ignore: /.*/
+            tags:
+              only: /v[\d\.]+/
   publish-crates:
     jobs:
       - approve-publish-crates:

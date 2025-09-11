@@ -1,5 +1,16 @@
 use crate::utils::execute_command;
 
+fn limit_to_last_n_lines(text: &str, max_lines: u32) -> String {
+    let lines: Vec<&str> = text.lines().collect();
+
+    if lines.len() <= max_lines as usize {
+        return text.to_string();
+    }
+
+    let start_index = lines.len() - max_lines as usize;
+    lines[start_index..].join("\n")
+}
+
 #[derive(Debug, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
 pub struct LogsArgs {
     #[schemars(description = "Specify the working directory")]
@@ -12,6 +23,8 @@ pub struct LogsArgs {
     name: Option<String>,
     #[schemars(description = "Specify the id of the project")]
     project_id: Option<String>,
+    #[schemars(description = "Maximum number of lines to return")]
+    lines: Option<u32>,
 }
 
 pub async fn logs(params: LogsArgs) -> Result<String, String> {
@@ -35,5 +48,9 @@ pub async fn logs(params: LogsArgs) -> Result<String, String> {
         args.push(id);
     }
 
-    execute_command("shuttle", args, &params.cwd).await
+    let output = execute_command("shuttle", args, &params.cwd).await?;
+
+    // Limit the output to the last N lines (default 50)
+    let max_lines = params.lines.unwrap_or(50);
+    Ok(limit_to_last_n_lines(&output, max_lines))
 }

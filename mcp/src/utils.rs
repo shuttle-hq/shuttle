@@ -46,5 +46,5 @@ pub fn build_client() -> Result<reqwest::Client, String> {
     reqwest::Client::builder()
         .default_headers(headers)
         .build()
-        .map_err(|e| format!("Failed to build client: {}", e))
+        .map_err(|e| format!("Failed to build client: {e}"))
 }

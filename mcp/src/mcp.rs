@@ -8,12 +8,6 @@ use tracing::instrument;
 use crate::tools::{deployment::*, docs::*, logs::*, project::*};
 use crate::utils::run_tool;
 
-#[derive(Debug, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
-struct SearchDocsArgs {
-    #[schemars(description = "Search query for documentation")]
-    query: String,
-}
-
 #[derive(Clone)]
 pub struct ShuttleMcpServer {
     pub(crate) tool_router: ToolRouter<Self>,
@@ -80,7 +74,7 @@ impl ShuttleMcpServer {
         &self,
         Parameters(args): Parameters<SearchDocsArgs>,
     ) -> Result<String, String> {
-        run_tool(search_docs(args.query)).await
+        run_tool(search_docs(args)).await
     }
 }
 

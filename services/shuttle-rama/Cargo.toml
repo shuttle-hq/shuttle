@@ -1,6 +1,6 @@
 [package]
 name = "shuttle-rama"
-version = "0.56.0"
+version = "0.57.0"
 edition = "2024"
 license = "Apache-2.0"
 description = "Service implementation to run a rama server on shuttle"
@@ -9,7 +9,7 @@ keywords = ["shuttle-service", "rama"]
 
 [dependencies]
 rama = { version = "0.2", features = ["tcp", "http-full"] }
-shuttle-runtime = { path = "../../runtime", version = "0.56.0", default-features = false }
+shuttle-runtime = { path = "../../runtime", version = "0.57.0", default-features = false }
 
 [features]
 default = []

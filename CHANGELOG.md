@@ -7,7 +7,106 @@ See [conventional commits](https://www.conventionalcommits.org/) for commit guid
 
 **For proper release notes with more details such as upgrading guidelines, check out the [releases page](https://github.com/shuttle-hq/shuttle/releases).**
 
-## [0.56.0](https://github.com/shuttle-hq/shuttle/compare/v0.55.0..0.56.0) - 2025-07-02
+## [0.57.0](https://github.com/shuttle-hq/shuttle/compare/v0.56.6..0.57.0) - 2025-09-11
+
+### Features
+
+- *(builder, cargo-shuttle)* Build and run with docker locally ([#2044](https://github.com/shuttle-hq/shuttle/issues/2044)) - ([764a3cd](https://github.com/shuttle-hq/shuttle/commit/764a3cda229cca61afe66503c2a2dcb18e314628))
+- *(cargo-shuttle)* Speed up metadata call ([#2112](https://github.com/shuttle-hq/shuttle/issues/2112)) - ([c56a730](https://github.com/shuttle-hq/shuttle/commit/c56a7306d420b58ce37c65e6dcbf19fc6d9a8f4f))
+- *(common)* Limits models ([#2100](https://github.com/shuttle-hq/shuttle/issues/2100)) - ([9096966](https://github.com/shuttle-hq/shuttle/commit/9096966492969b2fe5389fed0e0227ea7381fd90))
+- *(common)* Set env vars model ([#2097](https://github.com/shuttle-hq/shuttle/issues/2097)) - ([c8bb693](https://github.com/shuttle-hq/shuttle/commit/c8bb693155790b38b77d09816f696c0185dc1f51))
+- *(mcp)* Limit max tokens for docs search and logs ([#2114](https://github.com/shuttle-hq/shuttle/issues/2114)) - ([0615adb](https://github.com/shuttle-hq/shuttle/commit/0615adb6e329e7b6bb5ae7bc8c2e4ffe2a6513ea))
+- *(mcp)* Logs on stderr, improve args ([#2083](https://github.com/shuttle-hq/shuttle/issues/2083)) - ([2d8a2bd](https://github.com/shuttle-hq/shuttle/commit/2d8a2bd2468806d3d45803751883bee958de22e7))
+
+### Bug Fixes
+
+- *(runtime)* Emit error and don't exit on bad health request ([#2088](https://github.com/shuttle-hq/shuttle/issues/2088)) - ([b57ec5a](https://github.com/shuttle-hq/shuttle/commit/b57ec5a1fff808ee982fb68a000d961b307811ad))
+- Drop service before sys exit ([#2109](https://github.com/shuttle-hq/shuttle/issues/2109)) - ([c83c0d4](https://github.com/shuttle-hq/shuttle/commit/c83c0d4c78387f07fc46e39a92163120afc4cbee))
+
+### Miscellaneous Tasks
+
+- *(mcp)* Update rmcp crate ([#2106](https://github.com/shuttle-hq/shuttle/issues/2106)) - ([a810c37](https://github.com/shuttle-hq/shuttle/commit/a810c37df1bc83cbc2ed54b6d4bc61bd114f4843))
+- V0.57.0 - ([2d47ec2](https://github.com/shuttle-hq/shuttle/commit/2d47ec2c1e89aa281ee38d1a4922adf8faa57520))
+- Deprecate & bump services, resources ([#2113](https://github.com/shuttle-hq/shuttle/issues/2113)) - ([9bac83c](https://github.com/shuttle-hq/shuttle/commit/9bac83c75919e84af27df9d7c0caea50f6b92662))
+- Bump zip, cargo update ([#2108](https://github.com/shuttle-hq/shuttle/issues/2108)) - ([9001b89](https://github.com/shuttle-hq/shuttle/commit/9001b8991dab1cb3cff8730eb996307b82033d9a))
+- Bump dependencies, clippy 1.89, cargo update, MSRV 1.86 ([#2103](https://github.com/shuttle-hq/shuttle/issues/2103)) - ([8c95b6c](https://github.com/shuttle-hq/shuttle/commit/8c95b6c50a45c465374c5b676acb2c48526fc291))
+
+### Miscellaneous
+
+- Examples - ([2193cf6](https://github.com/shuttle-hq/shuttle/commit/2193cf61498f9d43353c40f4ef3967da141891ad))
+
+## [0.56.6](https://github.com/shuttle-hq/shuttle/compare/v0.56.5..v0.56.6) - 2025-07-28
+
+### Bug Fixes
+
+- Project create ([#2096](https://github.com/shuttle-hq/shuttle/issues/2096)) - ([b3d68a5](https://github.com/shuttle-hq/shuttle/commit/b3d68a5f25a209fdfd5538fb7919dd78021d737d))
+
+## [0.56.5](https://github.com/shuttle-hq/shuttle/compare/v0.56.4..v0.56.5) - 2025-07-24
+
+### Bug Fixes
+
+- *(cargo-shuttle)* Name arg conflict, v0.56.5 ([#2095](https://github.com/shuttle-hq/shuttle/issues/2095)) - ([933cbe9](https://github.com/shuttle-hq/shuttle/commit/933cbe9ad223d764951d27782584e450b5d31266))
+
+## [0.56.4](https://github.com/shuttle-hq/shuttle/compare/v0.56.3..v0.56.4) - 2025-07-23
+
+### Bug Fixes
+
+- Use api-client 0.56.1, cli 0.56.4 ([#2094](https://github.com/shuttle-hq/shuttle/issues/2094)) - ([b3ba0c0](https://github.com/shuttle-hq/shuttle/commit/b3ba0c03d855a94246b8285632fb4e707717a7fe))
+
+## [0.56.3](https://github.com/shuttle-hq/shuttle/compare/v0.56.2..v0.56.3) - 2025-07-21
+
+### Features
+
+- *(cargo-shuttle)* Add macos aarch64 binary, upgrade macos builder ([#2085](https://github.com/shuttle-hq/shuttle/issues/2085)) - ([714ab53](https://github.com/shuttle-hq/shuttle/commit/714ab536af5746cb6affbb5880d9cc39a548a1fe))
+- *(cargo-shuttle)* Re-enable resource dump command ([#2090](https://github.com/shuttle-hq/shuttle/issues/2090)) - ([c8a06a0](https://github.com/shuttle-hq/shuttle/commit/c8a06a0f48ecc902244c8fa7bb9f146ccb8bbf64))
+- *(common)* More otel fields ([#2087](https://github.com/shuttle-hq/shuttle/issues/2087)) - ([2d536f4](https://github.com/shuttle-hq/shuttle/commit/2d536f4f9db2332fe29d6d6030fd0181c49f5500))
+- *(common)* Generic otel config ([#2086](https://github.com/shuttle-hq/shuttle/issues/2086)) - ([5376867](https://github.com/shuttle-hq/shuttle/commit/537686753ea7cf6cbac1db3a5b32c53fba3bcd0f))
+- Add support for additional (common) CLI env vars ([#2091](https://github.com/shuttle-hq/shuttle/issues/2091)) - ([d4ea7eb](https://github.com/shuttle-hq/shuttle/commit/d4ea7eb0ed21dc3e0eea78b43d6b658564b7b4cf))
+- Honor insecure-skip-verify env var - ([1f75f21](https://github.com/shuttle-hq/shuttle/commit/1f75f21fcb03bec94cf7c71707c24c1f89b7ae5b))
+- Honor standard HTTP_PROXY env vars - ([caf9236](https://github.com/shuttle-hq/shuttle/commit/caf9236ef01c964d0991aa1969e5a6c7def8c01f))
+
+### Bug Fixes
+
+- *(cargo-shuttle)* Clashing id arg name in logs, deployment status, redeploy ([#2089](https://github.com/shuttle-hq/shuttle/issues/2089)) - ([33a485f](https://github.com/shuttle-hq/shuttle/commit/33a485f561ea4aaaf0c9d45bd518b5417d8c7324))
+
+### Styling
+
+- Update - ([ce14dd4](https://github.com/shuttle-hq/shuttle/commit/ce14dd467dd425b870b122b212b0525ea619bd45))
+- Organize imports - ([f324d3a](https://github.com/shuttle-hq/shuttle/commit/f324d3a5126dc96e94bc15cff7dee0cbd1ea7aa2))
+
+### Miscellaneous Tasks
+
+- 0.56.3 ([#2093](https://github.com/shuttle-hq/shuttle/issues/2093)) - ([f3c3766](https://github.com/shuttle-hq/shuttle/commit/f3c37669e84731f34451aea29fddb6bcf822c659))
+
+### Miscellaneous
+
+- Revert "style: organize imports" - ([25dd585](https://github.com/shuttle-hq/shuttle/commit/25dd585ad8761ed01acd4b4349e2dd7a6265357b))
+- Revert "feat: honor standard HTTP_PROXY env vars" - ([b599401](https://github.com/shuttle-hq/shuttle/commit/b5994018d6f9da043fdc50518eae729d13608c78))
+- Revert "feat: honor insecure-skip-verify env var" - ([e71c43d](https://github.com/shuttle-hq/shuttle/commit/e71c43dfd8c3b83ac3638c98a951690be17c361e))
+
+## [0.56.2](https://github.com/shuttle-hq/shuttle/compare/v0.56.1..v0.56.2) - 2025-07-07
+
+### Bug Fixes
+
+- *(cargo-shuttle)* Fix --name priority over config id ([#2082](https://github.com/shuttle-hq/shuttle/issues/2082)) - ([dfd0ec9](https://github.com/shuttle-hq/shuttle/commit/dfd0ec9bc702560e23739a777428a33eb85bb11b))
+
+### Miscellaneous Tasks
+
+- Cargo-shuttle 0.56.2 ([#2084](https://github.com/shuttle-hq/shuttle/issues/2084)) - ([247e9c6](https://github.com/shuttle-hq/shuttle/commit/247e9c6694d37befa0c75ee65d5e5f2113d26790))
+
+## [0.56.1](https://github.com/shuttle-hq/shuttle/compare/v0.56.0..v0.56.1) - 2025-07-04
+
+### Bug Fixes
+
+- *(cargo-shuttle)* Warn when only lowercase shuttle.toml file exists ([#2079](https://github.com/shuttle-hq/shuttle/issues/2079)) - ([b720681](https://github.com/shuttle-hq/shuttle/commit/b72068192f48f5e8c92ede299cb3f5cb50354eb2))
+- *(installer)* Respect $CARGO_HOME and $CARGO_INSTALL_ROOT ([#2078](https://github.com/shuttle-hq/shuttle/issues/2078)) - ([bb39e68](https://github.com/shuttle-hq/shuttle/commit/bb39e68eb79c0fd97d952bbc6c71af412e5ce13f))
+- Mcp release flow ([#2077](https://github.com/shuttle-hq/shuttle/issues/2077)) - ([256c806](https://github.com/shuttle-hq/shuttle/commit/256c80618f64ca7d9366052a8ffec3aa824d40b5))
+
+### Miscellaneous Tasks
+
+- Cargo-shuttle 0.56.1 ([#2081](https://github.com/shuttle-hq/shuttle/issues/2081)) - ([4fce3d6](https://github.com/shuttle-hq/shuttle/commit/4fce3d696fce2ccb8152139ed08e51ffe468dfc4))
+
+## [0.56.0](https://github.com/shuttle-hq/shuttle/compare/v0.55.0..v0.56.0) - 2025-07-02
 
 ### Features
 
@@ -33,15 +132,13 @@ See [conventional commits](https://www.conventionalcommits.org/) for commit guid
 
 ### Miscellaneous Tasks
 
-- V0.56.0 - ([0d20d44](https://github.com/shuttle-hq/shuttle/commit/0d20d44e2e902b1b950060d8248714761e336c8a))
+- V0.56.0 ([#2076](https://github.com/shuttle-hq/shuttle/issues/2076)) - ([33b9e55](https://github.com/shuttle-hq/shuttle/commit/33b9e55a99507341460b7af4d5026c65e47f6999))
 - Clean up legacy constants & related code ([#2073](https://github.com/shuttle-hq/shuttle/issues/2073)) - ([de40cb7](https://github.com/shuttle-hq/shuttle/commit/de40cb7ccde33c8e56f7d0954a103fc7037e27b4))
 - Add build_manifest to main macro output ([#2062](https://github.com/shuttle-hq/shuttle/issues/2062)) - ([8c3c1ea](https://github.com/shuttle-hq/shuttle/commit/8c3c1ea102bd754c14f728e24e86636d1ec73d81))
 
 ### Miscellaneous
 
 - *(cargo-shuttle)* Find binary target based on macro in source ([#2059](https://github.com/shuttle-hq/shuttle/issues/2059)) - ([03e25b6](https://github.com/shuttle-hq/shuttle/commit/03e25b6ec9c0e703e1d0a59eaa83d5ddca7e223a))
-- Audit - ([6da0151](https://github.com/shuttle-hq/shuttle/commit/6da0151a336050d9ad3922aba8c9d3ee45789ad8))
-- Bump examples - ([4d23e02](https://github.com/shuttle-hq/shuttle/commit/4d23e024a4bb8cd50b1ad035900bb662900f6a44))
 
 ## [0.55.0](https://github.com/shuttle-hq/shuttle/compare/v0.54.0..v0.55.0) - 2025-05-21
 

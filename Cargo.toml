@@ -15,19 +15,19 @@ members = [
 exclude = ["examples", "resources", "services"]
 
 [workspace.package]
-version = "0.56.0"
+version = "0.57.0"
 edition = "2021"
 license = "Apache-2.0"
 repository = "https://github.com/shuttle-hq/shuttle"
 
 [workspace.dependencies]
-shuttle-api-client = { path = "api-client", version = "0.56.1", default-features = false }
-shuttle-builder = { path = "builder", version = "0.56.0" }
-shuttle-codegen = { path = "codegen", version = "0.56.0" }
-shuttle-common = { path = "common", version = "0.56.0" }
-shuttle-ifc = { path = "ifc", version = "0.56.0" }
-shuttle-mcp = { path = "mcp", version = "0.56.0" }
-shuttle-service = { path = "service", version = "0.56.0" }
+shuttle-api-client = { path = "api-client", version = "0.57.0", default-features = false }
+shuttle-builder = { path = "builder", version = "0.57.0" }
+shuttle-codegen = { path = "codegen", version = "0.57.0" }
+shuttle-common = { path = "common", version = "0.57.0" }
+shuttle-ifc = { path = "ifc", version = "0.57.0" }
+shuttle-mcp = { path = "mcp", version = "0.57.0" }
+shuttle-service = { path = "service", version = "0.57.0" }
 
 anyhow = "1.0.66"
 askama = "0.14.0"

@@ -169,6 +169,11 @@ impl RequestContext {
             InternalProjectConfig { id: Some(id) };
     }
 
+    pub fn remove_project_id(&mut self) {
+        *self.project_internal.as_mut().unwrap().as_mut().unwrap() =
+            InternalProjectConfig { id: None };
+    }
+
     pub fn save_local_internal(&mut self) -> Result<()> {
         self.project_internal.as_ref().unwrap().save()?;
 

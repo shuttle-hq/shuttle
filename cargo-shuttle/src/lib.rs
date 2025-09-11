@@ -1588,7 +1588,7 @@ impl Shuttle {
             let mut ctrl_shutdown_notif = tokio::signal::windows::ctrl_shutdown()
                 .expect("Can not get the CtrlShutdown signal receptor");
             tokio::select! {
-                exit_result = runtime.wait() => {
+                exit_result = child.wait() => {
                     Some(exit_result)
                 }
                 _ = ctrl_break_notif.recv() => {

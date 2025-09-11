@@ -1,6 +1,6 @@
 use crate::utils::execute_command;
 
-#[derive(serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
+#[derive(Debug, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
 pub struct LogsArgs {
     #[schemars(description = "Specify the working directory")]
     cwd: String,

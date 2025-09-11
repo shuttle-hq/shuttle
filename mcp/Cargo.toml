@@ -13,4 +13,5 @@ rmcp = { workspace = true, features = ["server", "transport-io", "macros"] }
 schemars = { workspace = true }
 serde = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
+tracing = { workspace = true }
 urlencoding = { workspace = true }

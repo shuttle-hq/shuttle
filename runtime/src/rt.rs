@@ -3,6 +3,7 @@ use std::{
     iter::FromIterator,
     net::{IpAddr, Ipv4Addr, SocketAddr},
     process::exit,
+    time::Duration,
 };
 
 use anyhow::Context;
@@ -253,16 +254,28 @@ pub async fn start(
     //
     info!("Starting service");
 
-    let service_bind = service.bind(service_addr);
-
     #[cfg(target_family = "unix")]
-    let interrupted = {
+    async fn shutdown_signal() {
         let mut sigterm_notif =
             tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
                 .expect("Can not get the SIGTERM signal receptor");
         let mut sigint_notif =
             tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())
                 .expect("Can not get the SIGINT signal receptor");
+        tokio::select! {
+            _ = sigterm_notif.recv() => {
+                tracing::warn!("Runtime received SIGTERM. Shutting down...");
+            },
+            _ = sigint_notif.recv() => {
+                tracing::warn!("Runtime received SIGINT. Shutting down...");
+            }
+        }
+    }
+
+    let service_bind = service.clone().bind(service_addr);
+
+    #[cfg(target_family = "unix")]
+    let interrupted = {
         tokio::select! {
             res = service_bind => {
                 if let Err(e) = res {
@@ -272,12 +285,7 @@ pub async fn start(
                 tracing::warn!("Service terminated on its own. Shutting down the runtime...");
                 false
             }
-            _ = sigterm_notif.recv() => {
-                tracing::warn!("Received SIGTERM. Shutting down the runtime...");
-                true
-            },
-            _ = sigint_notif.recv() => {
-                tracing::warn!("Received SIGINT. Shutting down the runtime...");
+            _ = shutdown_signal() => {
                 true
             }
         }
@@ -306,19 +314,19 @@ pub async fn start(
             _ = ctrl_break_notif.recv() => {
                 tracing::warn!("Received ctrl-break. Shutting down the runtime...");
                 true
-            },
+            }
             _ = ctrl_c_notif.recv() => {
                 tracing::warn!("Received ctrl-c. Shutting down the runtime...");
                 true
-            },
+            }
             _ = ctrl_close_notif.recv() => {
                 tracing::warn!("Received ctrl-close. Shutting down the runtime...");
                 true
-            },
+            }
             _ = ctrl_logoff_notif.recv() => {
                 tracing::warn!("Received ctrl-logoff. Shutting down the runtime...");
                 true
-            },
+            }
             _ = ctrl_shutdown_notif.recv() => {
                 tracing::warn!("Received ctrl-shutdown. Shutting down the runtime...");
                 true
@@ -327,7 +335,19 @@ pub async fn start(
     };
 
     if interrupted {
-        return 10;
+        match tokio::time::timeout(Duration::from_secs(60), service.shutdown()).await {
+            Err(_) => {
+                tracing::error!("Service graceful shutdown timed out internally");
+                return 11;
+            }
+            Ok(Err(shutdown_err)) => {
+                tracing::error!("Service shutdown error: {shutdown_err}");
+                return 12;
+            }
+            _ => {
+                return 10;
+            }
+        };
     }
 
     0

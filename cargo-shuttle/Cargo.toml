@@ -1,6 +1,6 @@
 [package]
 name = "cargo-shuttle"
-version = "0.56.6"
+version = "0.57.1"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -10,6 +10,7 @@ default-run = "shuttle"
 
 [dependencies]
 shuttle-api-client = { workspace = true, default-features = true }
+shuttle-builder = { workspace = true }
 shuttle-common = { workspace = true, features = ["models", "tables", "config"] }
 shuttle-ifc = { workspace = true }
 shuttle-mcp = { workspace = true }

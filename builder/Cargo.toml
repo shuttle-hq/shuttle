@@ -1,14 +1,16 @@
 [package]
-name = "shuttle-ifc"
+name = "shuttle-builder"
 version = "0.57.0"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Infrastructure from Code (IfC) parser for the Shuttle platform (shuttle.dev)"
+description = "Docker build recipes for the Shuttle platform (shuttle.dev)"
 homepage = "https://www.shuttle.dev"
 
 [dependencies]
 shuttle-common = { workspace = true, features = ["models"] }
 
-proc-macro2 = { workspace = true }
-syn = { workspace = true, features = ["full", "extra-traits"] }
+askama = { workspace = true }
+
+[dev-dependencies]
+pretty_assertions = { workspace = true }

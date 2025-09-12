@@ -295,18 +295,25 @@ jobs:
     steps:
       - checkout
       - run:
+          name: Configure Git line endings (native/LF on checkout)
+          shell: powershell.exe
+          command: |
+            git config core.autocrlf input
+            git rm --cached -r .
+            git reset --hard
+      - run:
           name: Install Rust
+          shell: powershell.exe
           # Note: Let binary build use latest stable Rust
           command: |
             choco uninstall rust # The one coming from choco interferes with the one coming from rustup
             wget -OutFile "C:\rustup-init.exe" https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-msvc/rustup-init.exe
             C:\rustup-init.exe -y --target x86_64-pc-windows-msvc
-          shell: powershell.exe
       - run:
           name: Build
+          shell: powershell.exe
           command: |
             cargo.exe build --release --package cargo-shuttle --target x86_64-pc-windows-msvc
-          shell: powershell.exe
       - make-artifact:
           target: x86_64-pc-windows-msvc
           suffix: ".exe"
@@ -400,8 +407,6 @@ workflows:
                 - services/shuttle-rocket
                 - services/shuttle-salvo
                 - services/shuttle-serenity
-                - services/shuttle-thruster
-                - services/shuttle-tide
                 - services/shuttle-tower
                 - services/shuttle-warp
       - test-workspace-member:
@@ -409,6 +414,7 @@ workflows:
           matrix:
             parameters:
               crate:
+                - shuttle-builder
                 - shuttle-codegen
                 - shuttle-common
                 - shuttle-ifc
@@ -530,6 +536,7 @@ workflows:
             parameters:
               path:
                 - api-client
+                - builder
                 - ifc
                 - service
           name: publish-<< matrix.path >>
@@ -600,8 +607,6 @@ workflows:
                 - services/shuttle-rocket
                 - services/shuttle-salvo
                 - services/shuttle-serenity
-                - services/shuttle-thruster
-                - services/shuttle-tide
                 - services/shuttle-tower
                 - services/shuttle-warp
           name: publish-<< matrix.path >>

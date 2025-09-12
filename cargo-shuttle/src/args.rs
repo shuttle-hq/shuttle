@@ -6,13 +6,14 @@ use std::{
 };
 
 use anyhow::{bail, Context};
-use cargo_metadata::MetadataCommand;
 use clap::{
     builder::{OsStringValueParser, PossibleValue, TypedValueParser},
     Args, Parser, Subcommand, ValueEnum,
 };
 use clap_complete::Shell;
 use shuttle_common::{constants::EXAMPLES_REPO, models::resource::ResourceType};
+
+use crate::util::cargo_metadata;
 
 #[derive(Parser)]
 #[command(
@@ -68,40 +69,27 @@ pub enum OutputMode {
 /// Global project-related options
 #[derive(Args, Clone, Debug)]
 pub struct ProjectArgs {
-    /// Specify the working directory
     #[arg(global = true, long, visible_alias = "wd", default_value = ".", value_parser = OsStringValueParser::new().try_map(parse_path))]
     pub working_directory: PathBuf,
-    /// Specify the name of the project to target or create
+    /// The name of the project to target or create
     #[arg(global = true, long)]
     pub name: Option<String>,
-    /// Specify the id of the project to target
+    /// The id of the project to target
     #[arg(global = true, long)]
     pub id: Option<String>,
 }
 
 impl ProjectArgs {
     pub fn workspace_path(&self) -> anyhow::Result<PathBuf> {
-        // NOTE: If crates cache is missing, this blocks for several seconds during download
-        let path = MetadataCommand::new()
-            .current_dir(&self.working_directory)
-            .exec()
-            .context("Failed to find a Rust project in this directory. Try again in a cargo workspace, or provide a --name or --id argument.")?
-            .workspace_root
-            .into();
-
-        Ok(path)
+        cargo_metadata(self.working_directory.as_path()).map(|meta| meta.workspace_root.into())
     }
 
     pub fn project_name(&self) -> anyhow::Result<String> {
         let workspace_path = self.workspace_path()?;
-
         // This second call to cargo metadata in the workspace root seems superfluous,
         // but it does give a different output if the previous one was run in a workspace member.
-        // NOTE: If crates cache is missing, this blocks for several seconds during download
-        let meta = MetadataCommand::new()
-            .current_dir(&workspace_path)
-            .exec()
-            .expect("metadata command to succeed in cargo workspace root");
+        let meta = cargo_metadata(workspace_path.as_path())?;
+
         let package_name = if let Some(root_package) = meta.root_package() {
             root_package.name.to_string()
         } else {
@@ -124,10 +112,16 @@ impl ProjectArgs {
 #[derive(Subcommand)]
 pub enum Command {
     /// Generate a Shuttle project from a template
+    #[command(visible_alias = "i")]
     Init(InitArgs),
     /// Run a project locally
+    #[command(visible_alias = "r")]
     Run(RunArgs),
+    /// Build a project
+    #[command(visible_alias = "b", hide = true)]
+    Build(BuildArgs),
     /// Deploy a project
+    #[command(visible_alias = "d")]
     Deploy(DeployArgs),
     /// Manage deployments
     #[command(subcommand, visible_alias = "depl")]
@@ -373,7 +367,7 @@ pub struct DeploymentTrackingArgs {
     pub raw: bool,
 }
 
-#[derive(Args, Debug)]
+#[derive(Args, Debug, Default)]
 pub struct RunArgs {
     /// Port to start service on
     #[arg(long, short = 'p', env, default_value = "8000")]
@@ -381,21 +375,45 @@ pub struct RunArgs {
     /// Use 0.0.0.0 instead of localhost (for usage with local external devices)
     #[arg(long)]
     pub external: bool,
-    /// Use release mode for building the project
-    #[arg(long, short = 'r')]
-    pub release: bool,
     /// Don't display timestamps and log origin tags
     #[arg(long)]
     pub raw: bool,
-    /// Uses bacon crate to run the project in watch mode
+
+    #[command(flatten)]
+    pub secret_args: SecretsArgs,
+    #[command(flatten)]
+    pub build_args: BuildArgsShared,
+}
+
+#[derive(Args, Debug, Default)]
+pub struct BuildArgs {
+    /// Output the build archive to a file instead of building
+    #[arg(long)]
+    pub output_archive: Option<PathBuf>,
+    #[command(flatten)]
+    pub inner: BuildArgsShared,
+}
+
+/// Arguments shared by build and run commands
+#[derive(Args, Debug, Default)]
+pub struct BuildArgsShared {
+    /// Use release mode for building the project
+    #[arg(long, short = 'r')]
+    pub release: bool,
+    /// Uses bacon crate to build/run the project in watch mode
     #[arg(long)]
     pub bacon: bool,
     /// Suppress non-error output
     #[arg(long, short = 'q')]
     pub quiet: bool,
 
-    #[command(flatten)]
-    pub secret_args: SecretsArgs,
+    // Docker-related args
+    /// Build/Run with docker instead of natively
+    #[arg(long, hide = true)]
+    pub docker: bool,
+    /// Additional tag for the docker image
+    #[arg(long, short = 't', requires = "docker", hide = true)]
+    pub tag: Option<String>,
 }
 
 #[derive(Args, Debug, Default)]
@@ -457,10 +475,6 @@ pub enum InitTemplateArg {
     Serenity,
     /// Tower - Modular service library
     Tower,
-    /// Thruster - Web framework
-    Thruster,
-    /// Tide - Web framework
-    Tide,
     /// Warp - Web framework
     Warp,
     /// No template - Make a custom service
@@ -502,8 +516,6 @@ impl InitTemplateArg {
             Salvo => "salvo/hello-world",
             Rama => "rama/hello-world",
             Serenity => "serenity/hello-world",
-            Thruster => "thruster/hello-world",
-            Tide => "tide/hello-world",
             Tower => "tower/hello-world",
             Warp => "warp/hello-world",
             None => "custom-service/none",

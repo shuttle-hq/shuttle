@@ -1662,7 +1662,9 @@ impl Shuttle {
         let metadata = cargo_metadata(project_directory)?;
         let rust_build_args = gather_rust_build_args(&metadata)?;
 
-        cargo_green_eprintln("Building", format!("{} with docker", project_name));
+        if !build_args.quiet {
+            cargo_green_eprintln("Building", format!("{} with docker", project_name));
+        }
 
         let tempdir = tempfile::Builder::new()
             .prefix("shuttle-build-")
@@ -1705,6 +1707,9 @@ impl Shuttle {
         if let Some(ref tag) = build_args.tag {
             docker_cmd.arg("--tag").arg(tag);
         }
+        if build_args.quiet {
+            docker_cmd.arg("--quiet");
+        }
 
         let docker = docker_cmd.arg(tempdir).kill_on_drop(true).spawn();
 
@@ -1717,7 +1722,9 @@ impl Shuttle {
             bail!("Docker build error");
         }
 
-        cargo_green_eprintln("Finished", "building with docker");
+        if !build_args.quiet {
+            cargo_green_eprintln("Finished", "building with docker");
+        }
 
         Ok(())
     }

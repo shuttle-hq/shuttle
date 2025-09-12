@@ -403,6 +403,9 @@ pub struct BuildArgsShared {
     /// Uses bacon crate to build/run the project in watch mode
     #[arg(long)]
     pub bacon: bool,
+    /// Suppress non-error output
+    #[arg(long, short = 'q')]
+    pub quiet: bool,
 
     // Docker-related args
     /// Build/Run with docker instead of natively

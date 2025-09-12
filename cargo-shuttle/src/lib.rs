@@ -1349,10 +1349,11 @@ impl Shuttle {
     async fn local_build(&self, build_args: &BuildArgsShared) -> Result<BuiltService> {
         let project_directory = self.ctx.project_directory();
 
-        cargo_green_eprintln("Building", project_directory.display());
+        if !build_args.quiet {
+            cargo_green_eprintln("Building", project_directory.display());
+        }
 
-        // TODO: hook up -q/--quiet flag
-        let quiet = false;
+        let quiet = build_args.quiet;
         cargo_build(project_directory.to_owned(), build_args.release, quiet).await
     }
 
@@ -1442,6 +1443,8 @@ impl Shuttle {
         // Use a nice debugging tracing level if user does not provide their own
         if debug && std::env::var("RUST_LOG").is_err() {
             envs.push(("RUST_LOG", "info,shuttle=trace,reqwest=debug".to_owned()));
+        } else if run_args.build_args.quiet && std::env::var("RUST_LOG").is_err() {
+            envs.push(("RUST_LOG", "info,shuttle=error".to_owned()));
         } else if let Ok(v) = std::env::var("RUST_LOG") {
             // forward the RUST_LOG var into the container if using docker
             envs.push(("RUST_LOG", v));
@@ -1450,12 +1453,14 @@ impl Shuttle {
         let name = format!("shuttle-run-{project_name}");
         let mut child = if run_args.build_args.docker {
             let image = format!("shuttle-build-{project_name}");
-            eprintln!();
-            cargo_green_eprintln(
-                "Starting",
-                format!("{} on http://{}:{}", image, ip, run_args.port),
-            );
-            eprintln!();
+            if !run_args.build_args.quiet {
+                eprintln!();
+                cargo_green_eprintln(
+                    "Starting",
+                    format!("{} on http://{}:{}", image, ip, run_args.port),
+                );
+                eprintln!();
+            }
             info!(image, "Spawning 'docker run' process");
             let mut docker = tokio::process::Command::new("docker");
             docker
@@ -1480,12 +1485,14 @@ impl Shuttle {
                 .context("spawning 'docker run' process")?
         } else {
             let (service, runtime_executable) = s_re.context("developer skill issue")?;
-            eprintln!();
-            cargo_green_eprintln(
-                "Starting",
-                format!("{} on http://{}:{}", service.target_name, ip, run_args.port),
-            );
-            eprintln!();
+            if !run_args.build_args.quiet {
+                eprintln!();
+                cargo_green_eprintln(
+                    "Starting",
+                    format!("{} on http://{}:{}", service.target_name, ip, run_args.port),
+                );
+                eprintln!();
+            }
             info!(
                 path = %runtime_executable.display(),
                 "Spawning runtime process",
@@ -1655,7 +1662,9 @@ impl Shuttle {
         let metadata = cargo_metadata(project_directory)?;
         let rust_build_args = gather_rust_build_args(&metadata)?;
 
-        cargo_green_eprintln("Building", format!("{} with docker", project_name));
+        if !build_args.quiet {
+            cargo_green_eprintln("Building", format!("{} with docker", project_name));
+        }
 
         let tempdir = tempfile::Builder::new()
             .prefix("shuttle-build-")
@@ -1698,6 +1707,9 @@ impl Shuttle {
         if let Some(ref tag) = build_args.tag {
             docker_cmd.arg("--tag").arg(tag);
         }
+        if build_args.quiet {
+            docker_cmd.arg("--quiet");
+        }
 
         let docker = docker_cmd.arg(tempdir).kill_on_drop(true).spawn();
 
@@ -1710,7 +1722,9 @@ impl Shuttle {
             bail!("Docker build error");
         }
 
-        cargo_green_eprintln("Finished", "building with docker");
+        if !build_args.quiet {
+            cargo_green_eprintln("Finished", "building with docker");
+        }
 
         Ok(())
     }

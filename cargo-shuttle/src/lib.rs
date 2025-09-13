@@ -306,7 +306,9 @@ impl Shuttle {
                 },
                 ProjectCommand::Status => self.project_status().await,
                 ProjectCommand::List { table, .. } => self.projects_list(table).await,
-                ProjectCommand::Delete(ConfirmationArgs { yes }) => self.project_delete(yes).await,
+                ProjectCommand::Delete(ConfirmationArgs { yes }) => {
+                    self.project_delete(yes, &args.project_args).await
+                }
                 ProjectCommand::Link => Ok(()), // logic is done in `load_project_id` in previous step
             },
             Command::Upgrade { preview } => update_cargo_shuttle(preview).await,
@@ -1948,6 +1950,9 @@ impl Shuttle {
             }
         }
 
+        // self.ctx.project needs to be loaded for updating gitignore
+        self.ctx.load_local_config(project_args)?;
+
         // Update the local internal config file if we are in a Rust project
         if project_args.workspace_path().is_ok() {
             self.ctx.set_project_id(proj.id);
@@ -2035,7 +2040,7 @@ impl Shuttle {
         Ok(())
     }
 
-    async fn project_delete(&mut self, no_confirm: bool) -> Result<()> {
+    async fn project_delete(&mut self, no_confirm: bool, project_args: &ProjectArgs) -> Result<()> {
         let client = self.client.as_ref().unwrap();
         let pid = self.ctx.project_id();
 
@@ -2071,11 +2076,16 @@ impl Shuttle {
 
         let res = client.delete_project(pid).await?.into_inner();
 
-        // todo
-        // if --id is provided, then we don't want to clear the id in the config file
-        // also should only happen if the file exists
-        self.ctx.remove_project_id();
-        self.ctx.save_local_internal()?;
+        if self
+            .ctx
+            .linked_project_id(project_args)
+            .as_ref()
+            .map(|id| id.as_str() == self.ctx.project_id())
+            .unwrap_or(false)
+        {
+            self.ctx.remove_project_id();
+            self.ctx.save_local_internal()?;
+        }
 
         println!("{res}");
 

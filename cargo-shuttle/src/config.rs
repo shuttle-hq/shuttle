@@ -182,7 +182,7 @@ impl RequestContext {
         let local_manager =
             LocalConfigManager::new(workspace_path, ".shuttle/config.toml".to_string());
         let mut config = Config::new(local_manager);
-        config.open().unwrap();
+        config.open().ok()?;
         let content: &InternalProjectConfig = config.as_ref().unwrap();
 
         content.id.clone()

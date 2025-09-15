@@ -4101,7 +4101,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-mcp"
-version = "0.57.0"
+version = "0.57.1"
 dependencies = [
  "anyhow",
  "reqwest",

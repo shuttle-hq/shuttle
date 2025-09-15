@@ -4101,11 +4101,12 @@ dependencies = [
 
 [[package]]
 name = "shuttle-mcp"
-version = "0.57.1"
+version = "0.57.2"
 dependencies = [
  "anyhow",
  "reqwest",
  "rmcp",
+ "rmcp-macros",
  "schemars 1.0.4",
  "serde",
  "tokio",

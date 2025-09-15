@@ -73,6 +73,8 @@ reqwest-middleware = "0.4.0"
 rexpect = "0.6.0"
 # locked due to semver-breaking change in 0.6.4
 rmcp = { version = "=0.6.3", features = ["server", "transport-io", "macros"] }
+# locked due to semver-breaking change in 0.6.4. Remove this when unlocking `rmcp`
+rmcp-macros = "=0.6.3"
 schemars = "1"
 semver = { version = "1.0.17", features = ["serde"] }
 serde = { version = "1.0.148", default-features = false }

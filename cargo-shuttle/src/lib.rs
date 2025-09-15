@@ -299,13 +299,15 @@ impl Shuttle {
                 } => self.delete_certificate(domain, yes).await,
             },
             Command::Project(cmd) => match cmd {
-                ProjectCommand::Create => self.project_create(args.project_args.name).await,
+                ProjectCommand::Create => self.project_create(&args.project_args).await,
                 ProjectCommand::Update(cmd) => match cmd {
                     ProjectUpdateCommand::Name { new_name } => self.project_rename(new_name).await,
                 },
                 ProjectCommand::Status => self.project_status().await,
                 ProjectCommand::List { table, .. } => self.projects_list(table).await,
-                ProjectCommand::Delete(ConfirmationArgs { yes }) => self.project_delete(yes).await,
+                ProjectCommand::Delete(ConfirmationArgs { yes }) => {
+                    self.project_delete(yes, &args.project_args).await
+                }
                 ProjectCommand::Link => Ok(()), // logic is done in `load_project_id` in previous step
             },
             Command::Upgrade { preview } => update_cargo_shuttle(preview).await,
@@ -1926,22 +1928,32 @@ impl Shuttle {
         Ok(())
     }
 
-    async fn project_create(&self, name: Option<String>) -> Result<()> {
-        let Some(ref name) = name else {
+    async fn project_create(&mut self, project_args: &ProjectArgs) -> Result<()> {
+        let Some(ref name) = project_args.name else {
             bail!("Provide a project name with '--name <name>'");
         };
 
+        self.ctx.load_local_internal_config(project_args)?;
+
         let client = self.client.as_ref().unwrap();
-        let r = client.create_project(name).await?;
+        let (proj, raw_json) = client.create_project(name).await?.into_parts();
 
         match self.output_mode {
             OutputMode::Normal => {
-                let project = r.into_inner();
-                println!("Created project '{}' with id {}", project.name, project.id);
+                println!("Created project '{}' with id {}", proj.name, proj.id);
             }
             OutputMode::Json => {
-                println!("{}", r.raw_json);
+                println!("{}", raw_json);
             }
+        }
+
+        // self.ctx.project needs to be loaded for updating gitignore
+        self.ctx.load_local_config(project_args)?;
+
+        // Update the local internal config file if we are in a Rust project
+        if project_args.workspace_path().is_ok() {
+            self.ctx.set_project_id(proj.id);
+            self.ctx.save_local_internal()?;
         }
 
         Ok(())
@@ -2025,7 +2037,7 @@ impl Shuttle {
         Ok(())
     }
 
-    async fn project_delete(&self, no_confirm: bool) -> Result<()> {
+    async fn project_delete(&mut self, no_confirm: bool, project_args: &ProjectArgs) -> Result<()> {
         let client = self.client.as_ref().unwrap();
         let pid = self.ctx.project_id();
 
@@ -2060,6 +2072,17 @@ impl Shuttle {
         }
 
         let res = client.delete_project(pid).await?.into_inner();
+
+        if self
+            .ctx
+            .linked_project_id(project_args)
+            .as_ref()
+            .map(|id| id.as_str() == self.ctx.project_id())
+            .unwrap_or(false)
+        {
+            self.ctx.remove_project_id();
+            self.ctx.save_local_internal()?;
+        }
 
         println!("{res}");
 

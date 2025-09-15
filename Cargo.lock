@@ -4106,6 +4106,7 @@ dependencies = [
  "anyhow",
  "reqwest",
  "rmcp",
+ "rmcp-macros",
  "schemars 1.0.4",
  "serde",
  "tokio",

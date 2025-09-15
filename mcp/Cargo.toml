@@ -10,6 +10,8 @@ description = "Shuttle MCP server"
 anyhow = { workspace = true }
 reqwest = { workspace = true, features = ["json"] }
 rmcp = { workspace = true, features = ["server", "transport-io", "macros"] }
+# remove this when unlocking `rmcp`
+rmcp-macros = { workspace = true }
 schemars = { workspace = true }
 serde = { workspace = true }
 tokio = { workspace = true, features = ["full"] }

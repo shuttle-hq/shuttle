@@ -151,6 +151,7 @@ export interface DeploymentResponse {
 	uris: string[];
 	build_id?: string;
 	build_meta?: BuildMeta;
+	redeployment_of?: string;
 }
 
 export interface DeploymentListResponse {
@@ -212,6 +213,31 @@ export interface GenericOtelConfig {
 	metrics: boolean;
 }
 
+export interface GithubInstallation {
+	installation_id: number;
+	gh_account_id: number;
+	gh_account_name: string;
+	gh_account_type: string;
+}
+
+export interface GithubInstallationRepo {
+	installation_id: number;
+	repo_id: number;
+	owner: string;
+	name: string;
+}
+
+export interface GithubInstallationsResponse {
+	accounts: GithubInstallation[];
+	repos: GithubInstallationRepo[];
+}
+
+export interface GithubRepoLink {
+	project_id: string;
+	repo: GithubInstallationRepo;
+	branch?: string;
+}
+
 export interface GrafanaCloudConfig {
 	token: string;
 	endpoint: string;
@@ -263,6 +289,7 @@ export interface ProjectResponse {
 	deployment_state?: DeploymentState;
 	/** URIs where running deployments can be reached */
 	uris: string[];
+	repo_link?: GithubRepoLink;
 }
 
 export interface ProjectListResponse {

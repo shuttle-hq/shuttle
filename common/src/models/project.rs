@@ -7,6 +7,8 @@ use crossterm::style::Stylize;
 #[cfg(feature = "display")]
 use std::fmt::Write;
 
+use crate::models::github::GithubRepoLink;
+
 use super::deployment::DeploymentState;
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
@@ -34,6 +36,7 @@ pub struct ProjectResponse {
     pub deployment_state: Option<DeploymentState>,
     /// URIs where running deployments can be reached
     pub uris: Vec<String>,
+    pub repo_link: Option<GithubRepoLink>,
 }
 
 impl ProjectResponse {

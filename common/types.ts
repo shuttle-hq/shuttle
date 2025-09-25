@@ -244,6 +244,11 @@ export interface GrafanaCloudConfig {
 	instance_id: string;
 }
 
+export interface LinkGithubRepoRequest {
+	installation_id: number;
+	repo_id: number;
+}
+
 export interface LogItem {
 	timestamp: string;
 	/** Which container / log stream this line came from */
@@ -471,6 +476,10 @@ export interface TelemetryConfigResponse {
 
 export interface UpdateAccountTierRequest {
 	account_tier: AccountTier;
+}
+
+export interface UpdateGithubRepoBranchRequest {
+	branch: string;
 }
 
 export interface UploadArchiveResponse {

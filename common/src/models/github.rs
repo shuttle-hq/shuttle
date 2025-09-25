@@ -36,3 +36,12 @@ pub struct GithubRepoLink {
     pub repo: GithubInstallationRepo,
     pub branch: Option<String>,
 }
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[typeshare::typeshare]
+pub struct LinkGithubRepoRequest {
+    pub installation_id: u32, // TODO: change to u64 when typeshare supports it
+    pub repo_id: u32,         // TODO: change to u64 when typeshare supports it
+    pub branch: Option<String>,
+}

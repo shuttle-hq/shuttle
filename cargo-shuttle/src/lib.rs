@@ -1,6 +1,7 @@
 pub mod args;
 pub mod builder;
 pub mod config;
+mod impulse;
 mod init;
 mod provisioner_server;
 mod util;
@@ -59,9 +60,10 @@ use zip::write::FileOptions;
 
 use crate::args::{
     BuildArgs, BuildArgsShared, CertificateCommand, Command, ConfirmationArgs, DeployArgs,
-    DeploymentCommand, DeploymentTrackingArgs, GenerateCommand, InitArgs, LoginArgs, LogoutArgs,
-    LogsArgs, McpCommand, OutputMode, ProjectArgs, ProjectCommand, ProjectUpdateCommand,
-    ResourceCommand, RunArgs, SecretsArgs, ShuttleArgs, TableArgs, TemplateLocation,
+    DeploymentCommand, DeploymentTrackingArgs, GenerateCommand, ImpulseCommand, InitArgs,
+    LoginArgs, LogoutArgs, LogsArgs, McpCommand, OutputMode, ProjectArgs, ProjectCommand,
+    ProjectUpdateCommand, ResourceCommand, RunArgs, SecretsArgs, ShuttleArgs, TableArgs,
+    TemplateLocation,
 };
 use crate::builder::{
     cargo_build, find_first_shuttle_package, gather_rust_build_args, BuiltService,
@@ -170,7 +172,16 @@ impl Shuttle {
         args: ShuttleArgs,
         provided_path_to_init: bool,
     ) -> Result<CommandOutput> {
-        self.output_mode = args.output_mode;
+        self.output_mode = args.output_mode.clone();
+
+        if matches!(args.cmd, Command::Impulse(..)) {
+            if args.api_url.is_none() {
+                // const IMPULSE_API_URL: &str = "";
+                // eprintln!("WARN: Using API url {}", IMPULSE_API_URL);
+                // args.api_url = Some(IMPULSE_API_URL.to_owned());
+                bail!("Set --api-url to point to the impulse API!");
+            }
+        }
 
         // Set up the API client for all commands that call the API
         if matches!(
@@ -188,6 +199,7 @@ impl Shuttle {
         ) {
             let api_url = args
                 .api_url
+                .clone()
                 // calculate env-specific url if no explicit url given but an env was given
                 .or_else(|| args.api_env.as_ref().map(|env| other_env_api_url(env)))
                 // add /admin prefix if in admin mode
@@ -372,6 +384,9 @@ impl Shuttle {
                 McpCommand::Start => shuttle_mcp::run_mcp_server()
                     .await
                     .map(|_| CommandOutput::None),
+            },
+            Command::Impulse(ref cmd) => match cmd {
+                ImpulseCommand::Build { .. } => impulse::impulse_build(args),
             },
         }
     }

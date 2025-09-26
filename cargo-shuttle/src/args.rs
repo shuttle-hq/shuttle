@@ -173,6 +173,18 @@ pub enum Command {
     /// Commands for the Shuttle MCP server
     #[command(subcommand)]
     Mcp(McpCommand),
+    /// Commands for the Shuttle MCP server
+    #[command(subcommand, visible_alias = "imp")]
+    Impulse(ImpulseCommand),
+}
+
+#[derive(Subcommand)]
+pub enum ImpulseCommand {
+    #[command(visible_alias = "b")]
+    Build {
+        // #[arg(long)]
+        // nixpacks_binary: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]

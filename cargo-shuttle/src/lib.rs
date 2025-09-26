@@ -1,6 +1,7 @@
 mod args;
 pub mod builder;
 pub mod config;
+mod impulse;
 mod init;
 mod provisioner_server;
 mod util;
@@ -61,8 +62,8 @@ use zip::write::FileOptions;
 
 use crate::args::{
     BuildArgs, CertificateCommand, ConfirmationArgs, DeployArgs, DeploymentCommand,
-    GenerateCommand, InitArgs, LoginArgs, LogoutArgs, LogsArgs, McpCommand, OutputMode,
-    ProjectCommand, ProjectUpdateCommand, ResourceCommand, SecretsArgs, TableArgs,
+    GenerateCommand, ImpulseCommand, InitArgs, LoginArgs, LogoutArgs, LogsArgs, McpCommand,
+    OutputMode, ProjectCommand, ProjectUpdateCommand, ResourceCommand, SecretsArgs, TableArgs,
     TemplateLocation,
 };
 pub use crate::args::{BuildArgsShared, Command, ProjectArgs, RunArgs, ShuttleArgs};
@@ -157,7 +158,16 @@ impl Shuttle {
     }
 
     pub async fn run(mut self, args: ShuttleArgs, provided_path_to_init: bool) -> Result<()> {
-        self.output_mode = args.output_mode;
+        self.output_mode = args.output_mode.clone();
+
+        if matches!(args.cmd, Command::Impulse(..)) {
+            if args.api_url.is_none() {
+                // const IMPULSE_API_URL: &str = "";
+                // eprintln!("WARN: Using API url {}", IMPULSE_API_URL);
+                // args.api_url = Some(IMPULSE_API_URL.to_owned());
+                bail!("Set --api-url to point to the impulse API!");
+            }
+        }
 
         // Set up the API client for all commands that call the API
         if matches!(
@@ -175,6 +185,7 @@ impl Shuttle {
         ) {
             let api_url = args
                 .api_url
+                .clone()
                 // calculate env-specific url if no explicit url given but an env was given
                 .or_else(|| args.api_env.as_ref().map(|env| other_env_api_url(env)))
                 // add /admin prefix if in admin mode
@@ -311,6 +322,9 @@ impl Shuttle {
             Command::Upgrade { preview } => update_cargo_shuttle(preview).await,
             Command::Mcp(cmd) => match cmd {
                 McpCommand::Start => shuttle_mcp::run_mcp_server().await,
+            },
+            Command::Impulse(ref cmd) => match cmd {
+                ImpulseCommand::Build { .. } => impulse::impulse_build(args),
             },
         }
     }

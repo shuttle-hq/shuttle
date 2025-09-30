@@ -43,4 +43,3 @@ pub async fn project_create(params: ProjectCreateArgs) -> Result<String, String>
 
     execute_command("shuttle", args, &params.cwd).await
 }
-

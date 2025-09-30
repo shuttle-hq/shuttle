@@ -31,3 +31,22 @@ pub async fn project_list() -> Result<String, String> {
 
     execute_command("shuttle", args, ".").await
 }
+
+#[derive(Debug, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
+pub struct ProjectCreateArgs {
+    #[schemars(description = "Specify the working directory")]
+    cwd: String,
+    #[schemars(description = "The name of the project to create")]
+    name: String,
+}
+
+pub async fn project_create(params: ProjectCreateArgs) -> Result<String, String> {
+    let args = vec![
+        "project".to_string(),
+        "create".to_string(),
+        "--name".to_string(),
+        params.name,
+    ];
+
+    execute_command("shuttle", args, &params.cwd).await
+}

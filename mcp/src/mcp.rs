@@ -69,6 +69,15 @@ impl ShuttleMcpServer {
     }
 
     #[instrument(skip(self))]
+    #[tool(description = "Create a project on Shuttle")]
+    async fn project_create(
+        &self,
+        Parameters(args): Parameters<ProjectCreateArgs>,
+    ) -> Result<String, String> {
+        run_tool(project_create(args)).await
+    }
+
+    #[instrument(skip(self))]
     #[tool(description = "Search Shuttle documentation")]
     async fn search_docs(
         &self,

@@ -1,4 +1,4 @@
-use crate::utils::execute_command;
+use crate::utils::{execute_command, find_project_id};
 
 #[derive(Debug, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
 pub struct DeployArgs {
@@ -39,6 +39,11 @@ pub struct DeploymentStatusArgs {
 }
 
 pub async fn deploy(params: DeployArgs) -> Result<String, String> {
+    // Check if project exists
+    if find_project_id(&params.cwd).await.is_err() {
+        return Err("No Shuttle project found in the current codebase. Please create a project first using the project_create tool, then try deploying again.".to_string());
+    }
+
     let mut args = vec!["deploy".to_string()];
 
     if let Some(secrets) = params.secrets_file {

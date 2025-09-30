@@ -56,38 +56,32 @@ struct ShuttleConfig {
     id: String,
 }
 
-/// Find the project ID by searching for .shuttle/config.toml in the git root
 pub async fn find_project_id(cwd: &str) -> Result<String, String> {
-    // Start from the working directory and search upward for .git directory
     let mut current_dir = PathBuf::from(cwd);
 
-    // Canonicalize the path to handle relative paths properly
-    current_dir = current_dir
-        .canonicalize()
-        .map_err(|e| format!("Invalid working directory: {}", e))?;
+    current_dir = current_dir.canonicalize().map_err(|_| {
+        "The specified working directory does not exist or is inaccessible".to_string()
+    })?;
 
-    let git_root = loop {
-        if current_dir.join(".git").exists() {
-            break current_dir;
+    loop {
+        let config_path = current_dir.join(".shuttle").join("config.toml");
+
+        if config_path.exists() {
+            let content = tokio::fs::read_to_string(&config_path).await.map_err(|_| {
+                "Unable to read the Shuttle configuration file. Check file permissions".to_string()
+            })?;
+
+            let config: ShuttleConfig = toml::from_str(&content).map_err(|_| {
+                "The Shuttle configuration file is corrupted or invalid".to_string()
+            })?;
+
+            return Ok(config.id);
         }
 
         if let Some(parent) = current_dir.parent() {
             current_dir = parent.to_path_buf();
         } else {
-            return Err("No .git directory found".to_string());
+            return Err("No Shuttle project found. Please create a project first".to_string());
         }
-    };
-
-    // Look for .shuttle/config.toml in the git root
-    let config_path = git_root.join(".shuttle").join("config.toml");
-
-    let content = tokio::fs::read_to_string(&config_path)
-        .await
-        .map_err(|_| "No project found".to_string())?;
-
-    // Parse the TOML file
-    let config: ShuttleConfig = toml::from_str(&content)
-        .map_err(|e| format!("Failed to parse .shuttle/config.toml: {}", e))?;
-
-    Ok(config.id)
+    }
 }

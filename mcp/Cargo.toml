@@ -15,5 +15,6 @@ rmcp-macros = { workspace = true }
 schemars = { workspace = true }
 serde = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
+toml = { workspace = true }
 tracing = { workspace = true }
 urlencoding = { workspace = true }

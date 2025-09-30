@@ -4110,6 +4110,7 @@ dependencies = [
  "schemars 1.0.4",
  "serde",
  "tokio",
+ "toml 0.9.5",
  "tracing",
  "urlencoding",
 ]

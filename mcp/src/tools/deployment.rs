@@ -41,7 +41,7 @@ pub struct DeploymentStatusArgs {
 pub async fn deploy(params: DeployArgs) -> Result<String, String> {
     // Check if project exists
     if find_project_id(&params.cwd).await.is_err() {
-        return Err("No Shuttle project found in the current codebase. Please create a project first using the project_create tool, then try deploying again.".to_string());
+        return Err("No Shuttle project found in the current codebase. Please create a project first using the project_create tool and link the project using the project_link tool then try deploying again.".to_string());
     }
 
     let mut args = vec!["deploy".to_string()];

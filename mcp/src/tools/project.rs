@@ -50,3 +50,22 @@ pub async fn project_create(params: ProjectCreateArgs) -> Result<String, String>
 
     execute_command("shuttle", args, &params.cwd).await
 }
+
+#[derive(Debug, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
+pub struct ProjectLinkArgs {
+    #[schemars(description = "Specify the working directory")]
+    cwd: String,
+    #[schemars(description = "The ID of the project to link")]
+    project_id: String,
+}
+
+pub async fn project_link(params: ProjectLinkArgs) -> Result<String, String> {
+    let args = vec![
+        "project".to_string(),
+        "link".to_string(),
+        "--id".to_string(),
+        params.project_id,
+    ];
+
+    execute_command("shuttle", args, &params.cwd).await
+}

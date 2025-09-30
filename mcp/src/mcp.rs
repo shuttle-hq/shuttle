@@ -78,15 +78,6 @@ impl ShuttleMcpServer {
     }
 
     #[instrument(skip(self))]
-    #[tool(description = "Link an existing Shuttle project to the current directory")]
-    async fn project_link(
-        &self,
-        Parameters(args): Parameters<ProjectLinkArgs>,
-    ) -> Result<String, String> {
-        run_tool(project_link(args)).await
-    }
-
-    #[instrument(skip(self))]
     #[tool(description = "Search Shuttle documentation")]
     async fn search_docs(
         &self,

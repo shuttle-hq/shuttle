@@ -48,7 +48,14 @@ pub async fn project_create(params: ProjectCreateArgs) -> Result<String, String>
         params.name,
     ];
 
-    execute_command("shuttle", args, &params.cwd).await
+    let result = execute_command("shuttle", args, &params.cwd).await?;
+
+    let output = format!(
+        "{}\n\nNext step: Run the 'project_link' MCP tool to connect this project to your local directory.",
+        result
+    );
+
+    Ok(output)
 }
 
 #[derive(Debug, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]

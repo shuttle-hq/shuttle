@@ -51,3 +51,17 @@ pub struct LinkGithubRepoRequest {
 pub struct UpdateGithubRepoBranchRequest {
     pub branch: String,
 }
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[typeshare::typeshare]
+pub struct GithubInstallationGenerateRepoRequest {
+    pub installation_id: u32, // TODO: change to u64 when typeshare supports it
+    pub template_owner: String,
+    pub template_name: String,
+    pub owner: String,
+    pub repo_name: String,
+    pub description: Option<String>,
+    pub include_all_branches: Option<bool>,
+    pub private: Option<bool>,
+}

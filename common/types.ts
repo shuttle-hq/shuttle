@@ -220,6 +220,17 @@ export interface GithubInstallation {
 	gh_account_type: string;
 }
 
+export interface GithubInstallationGenerateRepoRequest {
+	installation_id: number;
+	template_owner: string;
+	template_name: string;
+	owner: string;
+	repo_name: string;
+	description?: string;
+	include_all_branches?: boolean;
+	private?: boolean;
+}
+
 export interface GithubInstallationRepo {
 	installation_id: number;
 	repo_id: number;

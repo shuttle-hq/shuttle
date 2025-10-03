@@ -2,10 +2,9 @@ use std::{
     ffi::OsString,
     fs::create_dir_all,
     io::{self, ErrorKind},
-    path::PathBuf,
+    path::{Path, PathBuf},
 };
 
-use anyhow::{bail, Context};
 use clap::{
     builder::{OsStringValueParser, PossibleValue, TypedValueParser},
     Args, Parser, Subcommand, ValueEnum,
@@ -83,28 +82,35 @@ pub struct ProjectArgs {
 }
 
 impl ProjectArgs {
-    pub fn workspace_path(&self) -> anyhow::Result<PathBuf> {
+    pub fn working_directory(&self) -> &Path {
+        self.working_directory.as_path()
+    }
+
+    pub fn workspace_path(&self) -> PathBuf {
+        self.cargo_workspace_path()
+            .unwrap_or(self.working_directory.clone())
+    }
+
+    fn cargo_workspace_path(&self) -> anyhow::Result<PathBuf> {
         cargo_metadata(self.working_directory.as_path()).map(|meta| meta.workspace_root.into())
     }
 
-    pub fn project_name(&self) -> anyhow::Result<String> {
-        let workspace_path = self.workspace_path()?;
-        // This second call to cargo metadata in the workspace root seems superfluous,
-        // but it does give a different output if the previous one was run in a workspace member.
-        let meta = cargo_metadata(workspace_path.as_path())?;
-
-        let package_name = if let Some(root_package) = meta.root_package() {
-            root_package.name.to_string()
+    /// Try to use the workspace root package name if it exists, else use the name of the
+    pub fn local_project_name(&self) -> String {
+        if let Some(name) = cargo_metadata(self.working_directory.as_path())
+            .ok()
+            .and_then(|meta| meta.root_package().map(|rp| rp.to_owned()))
+            .map(|rp| rp.name.to_string())
+        {
+            name
         } else {
-            workspace_path
+            self.workspace_path()
                 .file_name()
-                .context("failed to get project name from workspace path")?
+                .expect("workspace path to have name")
                 .to_os_string()
                 .into_string()
-                .expect("workspace directory name should be valid unicode")
-        };
-
-        Ok(package_name)
+                .expect("workspace path name to be valid unicode")
+        }
     }
 }
 
@@ -494,7 +500,7 @@ pub struct TemplateLocation {
 impl InitArgs {
     pub fn git_template(&self) -> anyhow::Result<Option<TemplateLocation>> {
         if self.from.is_some() && self.template.is_some() {
-            bail!("Template and From args can not be set at the same time.");
+            anyhow::bail!("Template and From args can not be set at the same time.");
         }
         Ok(if let Some(from) = self.from.clone() {
             Some(TemplateLocation {
@@ -674,7 +680,7 @@ mod tests {
         };
 
         assert_eq!(
-            project_args.workspace_path().unwrap(),
+            project_args.workspace_path(),
             path_from_workspace_root("examples/axum/hello-world/")
         );
     }
@@ -687,10 +693,7 @@ mod tests {
             id: None,
         };
 
-        assert_eq!(
-            project_args.project_name().unwrap().to_string(),
-            "hello-world"
-        );
+        assert_eq!(project_args.local_project_name().to_string(), "hello-world");
     }
 
     #[test]
@@ -703,9 +706,6 @@ mod tests {
             id: None,
         };
 
-        assert_eq!(
-            project_args.project_name().unwrap().to_string(),
-            "workspace"
-        );
+        assert_eq!(project_args.local_project_name().to_string(), "workspace");
     }
 }

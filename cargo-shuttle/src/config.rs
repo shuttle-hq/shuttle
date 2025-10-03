@@ -169,6 +169,25 @@ impl RequestContext {
             InternalProjectConfig { id: Some(id) };
     }
 
+    pub fn remove_project_id(&mut self) {
+        *self.project_internal.as_mut().unwrap().as_mut().unwrap() =
+            InternalProjectConfig { id: None };
+    }
+
+    pub fn linked_project_id(&self, project_args: &ProjectArgs) -> Option<String> {
+        let workspace_path = project_args
+            .workspace_path()
+            .unwrap_or(project_args.working_directory.clone());
+
+        let local_manager =
+            LocalConfigManager::new(workspace_path, ".shuttle/config.toml".to_string());
+        let mut config = Config::new(local_manager);
+        config.open().ok()?;
+        let content: &InternalProjectConfig = config.as_ref().unwrap();
+
+        content.id.clone()
+    }
+
     pub fn save_local_internal(&mut self) -> Result<()> {
         self.project_internal.as_ref().unwrap().save()?;
 

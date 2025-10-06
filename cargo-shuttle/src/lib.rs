@@ -778,6 +778,7 @@ impl Shuttle {
             (true, false) => (),
             // we still don't know the project id, so ask the user interactively
             (false, _) => {
+                // TODO: ensure linking only happens when working directory is resolved to a valid workspace (rust project)
                 trace!("no project id found");
                 self.project_link_interactive().await?;
             }

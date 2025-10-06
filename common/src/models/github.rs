@@ -65,3 +65,10 @@ pub struct GithubInstallationGenerateRepoRequest {
     pub include_all_branches: Option<bool>,
     pub private: Option<bool>,
 }
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[typeshare::typeshare]
+pub struct CreateDeploymentFromGithubRequest {
+    pub branch: String,
+}

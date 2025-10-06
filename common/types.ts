@@ -109,6 +109,10 @@ export interface CreateAccountRequest {
 	account_tier: AccountTier;
 }
 
+export interface CreateDeploymentFromGithubRequest {
+	branch: string;
+}
+
 /** Holds the data for building a database connection string. */
 export interface DatabaseInfo {
 	engine: string;

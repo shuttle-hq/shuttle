@@ -72,3 +72,18 @@ pub struct GithubInstallationGenerateRepoRequest {
 pub struct CreateDeploymentFromGithubRequest {
     pub branch: String,
 }
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[typeshare::typeshare]
+pub struct GetGithubRepoBranchesResponse {
+    pub branches: Vec<GithubBranch>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[typeshare::typeshare]
+pub struct GithubBranch {
+    pub name: String,
+    pub protected: bool,
+}

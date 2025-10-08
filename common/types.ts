@@ -217,6 +217,15 @@ export interface GenericOtelConfig {
 	metrics: boolean;
 }
 
+export interface GithubBranch {
+	name: string;
+	protected: boolean;
+}
+
+export interface GetGithubRepoBranchesResponse {
+	branches: GithubBranch[];
+}
+
 export interface GithubInstallation {
 	installation_id: number;
 	gh_account_id: number;

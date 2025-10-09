@@ -1,6 +1,9 @@
 use std::{fs::canonicalize, process::exit, time::Duration};
 
-use cargo_shuttle::{Command, ProjectArgs, RunArgs, Shuttle, ShuttleArgs};
+use cargo_shuttle::{
+    args::{Command, ProjectArgs, RunArgs, ShuttleArgs},
+    Shuttle,
+};
 use portpicker::pick_unused_port;
 use tokio::time::sleep;
 

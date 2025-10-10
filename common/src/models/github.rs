@@ -87,3 +87,15 @@ pub struct GithubBranch {
     pub name: String,
     pub protected: bool,
 }
+
+/// Internal
+#[derive(Deserialize, Serialize)]
+pub struct GithubDeployerDeployRequest {
+    pub personal_token: String,
+    pub owner: String,
+    pub repo: String,
+    pub commit_ref: String,
+    pub commit_msg: Option<String>,
+    pub branch: String,
+    pub project_id: String,
+}

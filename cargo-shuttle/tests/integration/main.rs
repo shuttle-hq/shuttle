@@ -2,7 +2,10 @@ mod builder;
 mod init;
 mod run;
 
-use cargo_shuttle::{Command, ProjectArgs, Shuttle, ShuttleArgs};
+use cargo_shuttle::{
+    args::{Command, ProjectArgs, ShuttleArgs},
+    Shuttle,
+};
 use std::path::Path;
 
 /// Creates a CLI instance with some reasonable defaults set
@@ -29,6 +32,7 @@ async fn shuttle_command(cmd: Command, working_directory: &str) -> anyhow::Resul
             false,
         )
         .await
+        .map(|_| ())
 }
 
 #[tokio::test]

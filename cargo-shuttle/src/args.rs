@@ -11,7 +11,10 @@ use clap::{
     Args, Parser, Subcommand, ValueEnum,
 };
 use clap_complete::Shell;
-use shuttle_common::{constants::EXAMPLES_REPO, models::resource::ResourceType};
+use shuttle_common::{
+    constants::EXAMPLES_REPO,
+    models::{deployment::BuildMeta, resource::ResourceType},
+};
 
 use crate::util::cargo_metadata;
 
@@ -356,6 +359,10 @@ pub struct DeployArgs {
 
     #[command(flatten)]
     pub secret_args: SecretsArgs,
+
+    /// Use these build meta fields instead of discovering them
+    #[arg(skip)]
+    pub _build_meta: Option<BuildMeta>,
 }
 #[derive(Args, Default)]
 pub struct DeploymentTrackingArgs {

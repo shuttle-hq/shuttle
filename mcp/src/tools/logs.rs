@@ -19,10 +19,10 @@ pub struct LogsArgs {
     deployment_id: Option<String>,
     #[schemars(description = "View logs from the most recent deployment")]
     latest: Option<bool>,
-    #[schemars(description = "Specify the name of the project")]
-    name: Option<String>,
-    #[schemars(description = "Specify the id of the project")]
-    project_id: Option<String>,
+    #[schemars(
+        description = "Specify the id of the project. Get the project ID by running the project_list tool or create a new project with project_create if none exists"
+    )]
+    project_id: String,
     #[schemars(description = "Maximum number of lines to return")]
     lines: Option<u32>,
 }
@@ -38,15 +38,8 @@ pub async fn logs(params: LogsArgs) -> Result<String, String> {
         args.push("--latest".to_string());
     }
 
-    if let Some(name) = params.name {
-        args.push("--name".to_string());
-        args.push(name);
-    }
-
-    if let Some(id) = params.project_id {
-        args.push("--id".to_string());
-        args.push(id);
-    }
+    args.push("--id".to_string());
+    args.push(params.project_id);
 
     let output = execute_command("shuttle", args, &params.cwd).await?;
 

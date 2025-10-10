@@ -2,7 +2,7 @@ use std::fs::read_to_string;
 use std::path::Path;
 use std::process::Command;
 
-use cargo_shuttle::{Shuttle, ShuttleArgs};
+use cargo_shuttle::{args::ShuttleArgs, Shuttle};
 use clap::Parser;
 use indoc::indoc;
 use tempfile::Builder;

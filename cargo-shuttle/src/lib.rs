@@ -130,6 +130,7 @@ impl Binary {
     }
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Default)]
 pub enum CommandOutput {
     // Project(ProjectResponse),

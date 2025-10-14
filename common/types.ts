@@ -109,6 +109,10 @@ export interface CreateAccountRequest {
 	account_tier: AccountTier;
 }
 
+export interface CreateDeploymentFromGithubRequest {
+	branch: string;
+}
+
 /** Holds the data for building a database connection string. */
 export interface DatabaseInfo {
 	engine: string;
@@ -151,6 +155,7 @@ export interface DeploymentResponse {
 	uris: string[];
 	build_id?: string;
 	build_meta?: BuildMeta;
+	redeployment_of?: string;
 }
 
 export interface DeploymentListResponse {
@@ -212,10 +217,60 @@ export interface GenericOtelConfig {
 	metrics: boolean;
 }
 
+export interface GithubBranch {
+	name: string;
+	protected: boolean;
+}
+
+export interface GetGithubRepoBranchesResponse {
+	branches: GithubBranch[];
+}
+
+export interface GithubInstallation {
+	installation_id: number;
+	gh_account_id: number;
+	gh_account_name: string;
+	gh_account_type: string;
+}
+
+export interface GithubInstallationGenerateRepoRequest {
+	installation_id: number;
+	template_owner: string;
+	template_name: string;
+	owner: string;
+	repo_name: string;
+	description?: string;
+	include_all_branches?: boolean;
+	private?: boolean;
+}
+
+export interface GithubInstallationRepo {
+	installation_id: number;
+	repo_id: number;
+	owner: string;
+	name: string;
+}
+
+export interface GithubInstallationsResponse {
+	accounts: GithubInstallation[];
+	repos: GithubInstallationRepo[];
+}
+
+export interface GithubRepoLink {
+	project_id: string;
+	repo: GithubInstallationRepo;
+	branch?: string;
+}
+
 export interface GrafanaCloudConfig {
 	token: string;
 	endpoint: string;
 	instance_id: string;
+}
+
+export interface LinkGithubRepoRequest {
+	installation_id: number;
+	repo_id: number;
 }
 
 export interface LogItem {
@@ -263,6 +318,7 @@ export interface ProjectResponse {
 	deployment_state?: DeploymentState;
 	/** URIs where running deployments can be reached */
 	uris: string[];
+	repo_link?: GithubRepoLink;
 }
 
 export interface ProjectListResponse {
@@ -442,8 +498,55 @@ export interface TelemetryConfigResponse {
 	generic?: TelemetrySinkStatus;
 }
 
+export interface TemplateDefinition {
+	/** Title of the template */
+	title: string;
+	/** A short description of the template */
+	description: string;
+	/** Path relative to the repo root */
+	path?: string;
+	/** List of areas where this template is useful. Examples: "Web app", "Discord bot", "Monitoring", "Automation", "Utility" */
+	use_cases: string[];
+	/** List of keywords that describe the template. Examples: "axum", "serenity", "typescript", "saas", "fullstack", "database" */
+	tags: string[];
+	/** URL to a live instance of the template (if relevant) */
+	live_demo?: string;
+	/** True if the template has a replicated GitHub template repo, under shuttle-hq/[template-name] if `repo` is not specified */
+	has_template_repo?: boolean;
+	/** Key names of required secrets to run the template */
+	required_secrets?: string[];
+	/** If this template is available in the `shuttle init --template` short-hand options, add that name here */
+	template?: string;
+	/** GitHub username of the author of the community template */
+	author?: string;
+	/** URL to the repo of the community template */
+	repo?: string;
+}
+
+/** Schema used in `examples/templates.toml` and services that parse it */
+export interface TemplatesSchema {
+	/** Version of this schema */
+	version: number;
+	/** Mapping of tag names to logo URLs */
+	logos: Record<string, string>;
+	/** Very basic templates, typically Hello World */
+	starters: Record<string, TemplateDefinition>;
+	/** Non-starter templates */
+	templates: Record<string, TemplateDefinition>;
+	/** Examples not meant to be templates */
+	examples: Record<string, TemplateDefinition>;
+	/** Examples with attached tutorials */
+	tutorials: Record<string, TemplateDefinition>;
+	/** Templates made by community members */
+	community_templates: Record<string, TemplateDefinition>;
+}
+
 export interface UpdateAccountTierRequest {
 	account_tier: AccountTier;
+}
+
+export interface UpdateGithubRepoBranchRequest {
+	branch: string;
 }
 
 export interface UploadArchiveResponse {

@@ -7,6 +7,8 @@ use crossterm::style::Stylize;
 #[cfg(feature = "display")]
 use std::fmt::Write;
 
+use crate::models::github::GithubRepoLink;
+
 use super::deployment::DeploymentState;
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
@@ -34,6 +36,7 @@ pub struct ProjectResponse {
     pub deployment_state: Option<DeploymentState>,
     /// URIs where running deployments can be reached
     pub uris: Vec<String>,
+    pub repo_link: Option<GithubRepoLink>,
 }
 
 impl ProjectResponse {
@@ -61,8 +64,6 @@ impl ProjectResponse {
         for uri in &self.uris {
             writeln!(&mut s, "    - {uri}").unwrap();
         }
-
-        // Display compute tier information if configured
         if let Some(compute_tier) = &self.compute_tier {
             writeln!(
                 &mut s,
@@ -70,6 +71,17 @@ impl ProjectResponse {
                 compute_tier.to_fancy_string()
             )
             .unwrap_or_default();
+        }
+        if let Some(repo_link) = &self.repo_link {
+            writeln!(
+                &mut s,
+                "  Linked to repository: {}/{}",
+                repo_link.repo.owner, repo_link.repo.name,
+            )
+            .unwrap_or_default();
+            if let Some(branch) = &repo_link.branch {
+                writeln!(&mut s, "    Branch for deployments: {}", branch).unwrap_or_default();
+            }
         }
 
         s

@@ -498,6 +498,49 @@ export interface TelemetryConfigResponse {
 	generic?: TelemetrySinkStatus;
 }
 
+export interface TemplateDefinition {
+	/** Title of the template */
+	title: string;
+	/** A short description of the template */
+	description: string;
+	/** Path relative to the repo root */
+	path?: string;
+	/** List of areas where this template is useful. Examples: "Web app", "Discord bot", "Monitoring", "Automation", "Utility" */
+	use_cases: string[];
+	/** List of keywords that describe the template. Examples: "axum", "serenity", "typescript", "saas", "fullstack", "database" */
+	tags: string[];
+	/** URL to a live instance of the template (if relevant) */
+	live_demo?: string;
+	/** True if the template has a replicated GitHub template repo, under shuttle-hq/[template-name] if `repo` is not specified */
+	has_template_repo?: boolean;
+	/** Key names of required secrets to run the template */
+	required_secrets?: string[];
+	/** If this template is available in the `shuttle init --template` short-hand options, add that name here */
+	template?: string;
+	/** GitHub username of the author of the community template */
+	author?: string;
+	/** URL to the repo of the community template */
+	repo?: string;
+}
+
+/** Schema used in `examples/templates.toml` and services that parse it */
+export interface TemplatesSchema {
+	/** Version of this schema */
+	version: number;
+	/** Mapping of tag names to logo URLs */
+	logos: Record<string, string>;
+	/** Very basic templates, typically Hello World */
+	starters: Record<string, TemplateDefinition>;
+	/** Non-starter templates */
+	templates: Record<string, TemplateDefinition>;
+	/** Examples not meant to be templates */
+	examples: Record<string, TemplateDefinition>;
+	/** Examples with attached tutorials */
+	tutorials: Record<string, TemplateDefinition>;
+	/** Templates made by community members */
+	community_templates: Record<string, TemplateDefinition>;
+}
+
 export interface UpdateAccountTierRequest {
 	account_tier: AccountTier;
 }

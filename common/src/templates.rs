@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 
 /// Schema used in `examples/templates.toml` and services that parse it
 #[derive(Debug, Serialize, Deserialize)]
+#[typeshare::typeshare]
 pub struct TemplatesSchema {
     /// Version of this schema
     pub version: u32,
@@ -22,6 +23,7 @@ pub struct TemplatesSchema {
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]
+#[typeshare::typeshare]
 pub struct TemplateDefinition {
     /// Title of the template
     pub title: String,
@@ -35,6 +37,10 @@ pub struct TemplateDefinition {
     pub tags: Vec<String>,
     /// URL to a live instance of the template (if relevant)
     pub live_demo: Option<String>,
+    /// True if the template has a replicated GitHub template repo, under shuttle-hq/[template-name] if `repo` is not specified
+    pub has_template_repo: Option<bool>,
+    /// Key names of required secrets to run the template
+    pub required_secrets: Option<Vec<String>>,
 
     /// If this template is available in the `shuttle init --template` short-hand options, add that name here
     pub template: Option<String>,

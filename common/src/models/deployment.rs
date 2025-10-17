@@ -95,6 +95,7 @@ pub struct DeploymentResponse {
     pub build_id: Option<String>,
     pub build_meta: Option<BuildMeta>,
     pub redeployment_of: Option<String>,
+    pub description: Option<String>,
 }
 
 #[cfg(feature = "display")]

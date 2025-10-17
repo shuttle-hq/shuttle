@@ -156,6 +156,7 @@ export interface DeploymentResponse {
 	build_id?: string;
 	build_meta?: BuildMeta;
 	redeployment_of?: string;
+	description?: string;
 }
 
 export interface DeploymentListResponse {

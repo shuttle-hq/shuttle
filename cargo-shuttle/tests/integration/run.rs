@@ -1,27 +1,10 @@
-use std::{fs::canonicalize, process::exit, time::Duration};
+use std::{process::exit, time::Duration};
 
-use cargo_shuttle::{
-    args::{Command, ProjectArgs, RunArgs, ShuttleArgs},
-    Shuttle,
-};
 use portpicker::pick_unused_port;
 use tokio::time::sleep;
 
 /// Runs `shuttle run` in specified directory
 async fn shuttle_run(working_directory: &str, external: bool) -> String {
-    let working_directory = match canonicalize(working_directory) {
-        Ok(wd) => wd,
-        Err(e) => {
-            // DEBUG CI (no such file): SLEEP AND TRY AGAIN?
-            println!(
-                "Did not find directory: {} !!! because {:?}",
-                working_directory, e
-            );
-            sleep(Duration::from_millis(500)).await;
-            canonicalize(working_directory).unwrap()
-        }
-    };
-
     let port = pick_unused_port().unwrap();
 
     let url = if !external {
@@ -30,63 +13,50 @@ async fn shuttle_run(working_directory: &str, external: bool) -> String {
         format!("http://0.0.0.0:{port}")
     };
 
-    let runner = Shuttle::new(cargo_shuttle::Binary::Shuttle, None)
-        .unwrap()
-        .run(
-            ShuttleArgs {
-                api_url: Some("http://shuttle.invalid:80".to_string()),
-                admin: false,
-                api_env: None,
-                project_args: ProjectArgs {
-                    working_directory: working_directory.clone(),
-                    name: None,
-                    id: None,
-                },
-                offline: false,
-                debug: false,
-                output_mode: Default::default(),
-                cmd: Command::Run(RunArgs {
-                    port,
-                    external,
-                    ..Default::default()
-                }),
-            },
-            false,
-        );
+    let bin_path = assert_cmd::cargo::cargo_bin("shuttle");
+    let mut command = std::process::Command::new(bin_path);
+    command.args([
+        "shuttle",
+        "--wd",
+        working_directory,
+        "--offline",
+        "run",
+        "--port",
+        &port.to_string(),
+    ]);
+    if external {
+        command.arg("--external");
+    }
+    let mut runner = command.spawn().unwrap();
 
     tokio::spawn({
-        let working_directory = working_directory.clone();
+        let working_directory = working_directory.to_owned();
         async move {
             sleep(Duration::from_secs(10 * 60)).await;
 
             println!(
                 "run test for '{}' took too long. Did it fail to shutdown?",
-                working_directory.display()
+                working_directory
             );
             exit(1);
         }
     });
 
-    let runner_handle = tokio::spawn(runner);
-
     // Wait for service to be responsive
     let mut counter = 0;
     let client = reqwest::Client::new();
     while client.get(url.clone()).send().await.is_err() {
-        if runner_handle.is_finished() {
+        if runner.try_wait().unwrap().is_some() {
             println!(
                 "run test for '{}' exited early. Did it fail to compile/run?",
-                working_directory.clone().display()
+                working_directory
             );
             exit(1);
         }
 
         // reduce spam
         if counter == 0 {
-            println!(
-                "waiting for '{}' to start up...",
-                working_directory.display()
-            );
+            println!("waiting for '{}' to start up...", working_directory);
         }
         counter = (counter + 1) % 10;
 

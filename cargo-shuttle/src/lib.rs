@@ -387,15 +387,14 @@ impl Shuttle {
         provided_path_to_init: bool,
         offline: bool,
     ) -> Result<()> {
-        // Turns the template or git args (if present) to a repo+folder.
         let git_template = args.git_template()?;
         let no_git = args.no_git;
+        let should_link = project_args.id.is_some();
 
         let needs_name = project_args.name.is_none();
         let needs_template = git_template.is_none();
         let needs_path = !provided_path_to_init;
         let needs_login = self.ctx.api_key().is_err() && args.login_args.api_key.is_none();
-        let should_link = project_args.id.is_some();
         let interactive = needs_name || needs_template || needs_path || needs_login;
 
         let theme = ColorfulTheme::default();
@@ -416,7 +415,7 @@ impl Shuttle {
             let name: String = if let Some(name) = project_args.name.clone() {
                 name
             } else {
-                // not using `validate_with` due to being blocking.
+                // not using `validate_with` due to being blocking, whereas name validation requests are async
                 Input::with_theme(&theme)
                     .with_prompt("Project name")
                     .interact()?

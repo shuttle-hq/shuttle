@@ -501,6 +501,7 @@ pub struct TemplateLocation {
 }
 
 impl InitArgs {
+    /// Turns the template arg or git args to a repo+folder, if present.
     pub fn git_template(&self) -> anyhow::Result<Option<TemplateLocation>> {
         if self.from.is_some() && self.template.is_some() {
             anyhow::bail!("Template and From args can not be set at the same time.");

@@ -2,8 +2,6 @@ use std::fs::read_to_string;
 use std::path::Path;
 use std::process::Command;
 
-use cargo_shuttle::{args::ShuttleArgs, Shuttle};
-use clap::Parser;
 use indoc::indoc;
 use tempfile::Builder;
 
@@ -12,30 +10,28 @@ const EXPECT_TIMEOUT_MS: u64 = 10000;
 const TEST_API_KEY: &str = "0000000000000000";
 
 #[tokio::test]
-async fn non_interactive_basic_init() {
+async fn basic_init() {
     let temp_dir = Builder::new().prefix("basic-init").tempdir().unwrap();
     // Sleep to give time for the directory to finish creating
     tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
     let temp_dir_path = temp_dir.path().to_owned();
 
-    let args = ShuttleArgs::parse_from([
-        "shuttle",
-        "init",
-        "--offline",
-        "--api-key",
-        TEST_API_KEY,
-        "--force-name",
-        "--name",
-        "my-project",
-        "--template",
-        "none",
-        temp_dir_path.to_str().unwrap(),
-    ]);
-    Shuttle::new(cargo_shuttle::Binary::Shuttle, None)
-        .unwrap()
-        .run(args, true)
-        .await
-        .unwrap();
+    let bin_path = assert_cmd::cargo::cargo_bin("shuttle");
+    let mut command = Command::new(bin_path);
+    command
+        .args([
+            "shuttle",
+            "init",
+            "--offline",
+            "--force-name",
+            "--name",
+            "my-project",
+            "--template",
+            "none",
+            temp_dir_path.to_str().unwrap(),
+        ])
+        .env("SHUTTLE_API_KEY", TEST_API_KEY);
+    assert!(command.spawn().unwrap().wait().unwrap().success());
 
     let cargo_toml = read_to_string(temp_dir_path.join("Cargo.toml")).unwrap();
     assert!(cargo_toml.contains("name = \"my-project\""));
@@ -45,30 +41,28 @@ async fn non_interactive_basic_init() {
 }
 
 #[tokio::test]
-async fn non_interactive_rocket_init() {
+async fn rocket_init() {
     let temp_dir = Builder::new().prefix("rocket-init").tempdir().unwrap();
     // Sleep to give time for the directory to finish creating
     tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
     let temp_dir_path = temp_dir.path().to_owned();
 
-    let args = ShuttleArgs::parse_from([
-        "shuttle",
-        "init",
-        "--offline",
-        "--api-key",
-        TEST_API_KEY,
-        "--force-name",
-        "--name",
-        "my-project",
-        "--template",
-        "rocket",
-        temp_dir_path.to_str().unwrap(),
-    ]);
-    Shuttle::new(cargo_shuttle::Binary::Shuttle, None)
-        .unwrap()
-        .run(args, true)
-        .await
-        .unwrap();
+    let bin_path = assert_cmd::cargo::cargo_bin("shuttle");
+    let mut command = Command::new(bin_path);
+    command
+        .args([
+            "shuttle",
+            "init",
+            "--offline",
+            "--force-name",
+            "--name",
+            "my-project",
+            "--template",
+            "rocket",
+            temp_dir_path.to_str().unwrap(),
+        ])
+        .env("SHUTTLE_API_KEY", TEST_API_KEY);
+    assert!(command.spawn().unwrap().wait().unwrap().success());
 
     assert_valid_rocket_project(temp_dir_path.as_path(), "my-project");
 
@@ -76,32 +70,30 @@ async fn non_interactive_rocket_init() {
 }
 
 #[tokio::test]
-async fn non_interactive_init_with_from_url() {
+async fn init_with_from_url() {
     let temp_dir = Builder::new().prefix("basic-init-from").tempdir().unwrap();
     // Sleep to give time for the directory to finish creating
     tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
     let temp_dir_path = temp_dir.path().to_owned();
 
-    let args = ShuttleArgs::parse_from([
-        "shuttle",
-        "init",
-        "--offline",
-        "--api-key",
-        TEST_API_KEY,
-        "--force-name",
-        "--name",
-        "my-project",
-        "--from",
-        "https://github.com/shuttle-hq/shuttle-examples",
-        "--subfolder",
-        "tower/hello-world",
-        temp_dir_path.to_str().unwrap(),
-    ]);
-    Shuttle::new(cargo_shuttle::Binary::Shuttle, None)
-        .unwrap()
-        .run(args, true)
-        .await
-        .unwrap();
+    let bin_path = assert_cmd::cargo::cargo_bin("shuttle");
+    let mut command = Command::new(bin_path);
+    command
+        .args([
+            "shuttle",
+            "init",
+            "--offline",
+            "--force-name",
+            "--name",
+            "my-project",
+            "--from",
+            "https://github.com/shuttle-hq/shuttle-examples",
+            "--subfolder",
+            "tower/hello-world",
+            temp_dir_path.to_str().unwrap(),
+        ])
+        .env("SHUTTLE_API_KEY", TEST_API_KEY);
+    assert!(command.spawn().unwrap().wait().unwrap().success());
 
     let cargo_toml = read_to_string(temp_dir_path.join("Cargo.toml")).unwrap();
     assert!(cargo_toml.contains("name = \"my-project\""));
@@ -111,32 +103,30 @@ async fn non_interactive_init_with_from_url() {
 }
 
 #[tokio::test]
-async fn non_interactive_init_with_from_gh() {
+async fn init_with_from_gh() {
     let temp_dir = Builder::new().prefix("basic-init-from").tempdir().unwrap();
     // Sleep to give time for the directory to finish creating
     tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
     let temp_dir_path = temp_dir.path().to_owned();
 
-    let args = ShuttleArgs::parse_from([
-        "shuttle",
-        "init",
-        "--offline",
-        "--api-key",
-        TEST_API_KEY,
-        "--force-name",
-        "--name",
-        "my-project",
-        "--from",
-        "gh:shuttle-hq/shuttle-examples",
-        "--subfolder",
-        "tower/hello-world",
-        temp_dir_path.to_str().unwrap(),
-    ]);
-    Shuttle::new(cargo_shuttle::Binary::Shuttle, None)
-        .unwrap()
-        .run(args, true)
-        .await
-        .unwrap();
+    let bin_path = assert_cmd::cargo::cargo_bin("shuttle");
+    let mut command = Command::new(bin_path);
+    command
+        .args([
+            "shuttle",
+            "init",
+            "--offline",
+            "--force-name",
+            "--name",
+            "my-project",
+            "--from",
+            "gh:shuttle-hq/shuttle-examples",
+            "--subfolder",
+            "tower/hello-world",
+            temp_dir_path.to_str().unwrap(),
+        ])
+        .env("SHUTTLE_API_KEY", TEST_API_KEY);
+    assert!(command.spawn().unwrap().wait().unwrap().success());
 
     let cargo_toml = read_to_string(temp_dir_path.join("Cargo.toml")).unwrap();
     assert!(cargo_toml.contains("name = \"my-project\""));
@@ -146,32 +136,30 @@ async fn non_interactive_init_with_from_gh() {
 }
 
 #[tokio::test]
-async fn non_interactive_init_with_from_repo_name() {
+async fn init_with_from_repo_name() {
     let temp_dir = Builder::new().prefix("basic-init-from").tempdir().unwrap();
     // Sleep to give time for the directory to finish creating
     tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
     let temp_dir_path = temp_dir.path().to_owned();
 
-    let args = ShuttleArgs::parse_from([
-        "shuttle",
-        "init",
-        "--offline",
-        "--api-key",
-        TEST_API_KEY,
-        "--force-name",
-        "--name",
-        "my-project",
-        "--from",
-        "shuttle-hq/shuttle-examples",
-        "--subfolder",
-        "tower/hello-world",
-        temp_dir_path.to_str().unwrap(),
-    ]);
-    Shuttle::new(cargo_shuttle::Binary::Shuttle, None)
-        .unwrap()
-        .run(args, true)
-        .await
-        .unwrap();
+    let bin_path = assert_cmd::cargo::cargo_bin("shuttle");
+    let mut command = Command::new(bin_path);
+    command
+        .args([
+            "shuttle",
+            "init",
+            "--offline",
+            "--force-name",
+            "--name",
+            "my-project",
+            "--from",
+            "shuttle-hq/shuttle-examples",
+            "--subfolder",
+            "tower/hello-world",
+            temp_dir_path.to_str().unwrap(),
+        ])
+        .env("SHUTTLE_API_KEY", TEST_API_KEY);
+    assert!(command.spawn().unwrap().wait().unwrap().success());
 
     let cargo_toml = read_to_string(temp_dir_path.join("Cargo.toml")).unwrap();
     assert!(cargo_toml.contains("name = \"my-project\""));
@@ -181,32 +169,30 @@ async fn non_interactive_init_with_from_repo_name() {
 }
 
 #[tokio::test]
-async fn non_interactive_init_with_from_local_path() {
+async fn init_with_from_local_path() {
     let temp_dir = Builder::new().prefix("basic-init-from").tempdir().unwrap();
     // Sleep to give time for the directory to finish creating
     tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
     let temp_dir_path = temp_dir.path().to_owned();
 
-    let args = ShuttleArgs::parse_from([
-        "shuttle",
-        "init",
-        "--offline",
-        "--api-key",
-        TEST_API_KEY,
-        "--force-name",
-        "--name",
-        "my-project",
-        "--from",
-        "../examples", // cargo runs the test from the cargo-shuttle folder.
-        "--subfolder",
-        "tower/hello-world",
-        temp_dir_path.to_str().unwrap(),
-    ]);
-    Shuttle::new(cargo_shuttle::Binary::Shuttle, None)
-        .unwrap()
-        .run(args, true)
-        .await
-        .unwrap();
+    let bin_path = assert_cmd::cargo::cargo_bin("shuttle");
+    let mut command = Command::new(bin_path);
+    command
+        .args([
+            "shuttle",
+            "init",
+            "--offline",
+            "--force-name",
+            "--name",
+            "my-project",
+            "--from",
+            "../examples", // cargo runs the test from the cargo-shuttle folder.
+            "--subfolder",
+            "tower/hello-world",
+            temp_dir_path.to_str().unwrap(),
+        ])
+        .env("SHUTTLE_API_KEY", TEST_API_KEY);
+    assert!(command.spawn().unwrap().wait().unwrap().success());
 
     let cargo_toml = read_to_string(temp_dir_path.join("Cargo.toml")).unwrap();
     assert!(cargo_toml.contains("name = \"my-project\""));
@@ -216,32 +202,30 @@ async fn non_interactive_init_with_from_local_path() {
 }
 
 #[tokio::test]
-async fn non_interactive_init_from_local_path_with_workspace() {
+async fn init_from_local_path_with_workspace() {
     let temp_dir = Builder::new().prefix("basic-init-from").tempdir().unwrap();
     // Sleep to give time for the directory to finish creating
     tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
     let temp_dir_path = temp_dir.path().to_owned();
 
-    let args = ShuttleArgs::parse_from([
-        "shuttle",
-        "init",
-        "--offline",
-        "--api-key",
-        TEST_API_KEY,
-        "--force-name",
-        "--name",
-        "my-project",
-        "--from",
-        "../examples", // cargo runs the test from the cargo-shuttle folder.
-        "--subfolder",
-        "rocket/workspace",
-        temp_dir_path.to_str().unwrap(),
-    ]);
-    Shuttle::new(cargo_shuttle::Binary::Shuttle, None)
-        .unwrap()
-        .run(args, true)
-        .await
-        .unwrap();
+    let bin_path = assert_cmd::cargo::cargo_bin("shuttle");
+    let mut command = Command::new(bin_path);
+    command
+        .args([
+            "shuttle",
+            "init",
+            "--offline",
+            "--force-name",
+            "--name",
+            "my-project",
+            "--from",
+            "../examples", // cargo runs the test from the cargo-shuttle folder.
+            "--subfolder",
+            "rocket/workspace",
+            temp_dir_path.to_str().unwrap(),
+        ])
+        .env("SHUTTLE_API_KEY", TEST_API_KEY);
+    assert!(command.spawn().unwrap().wait().unwrap().success());
 
     let cargo_toml = read_to_string(temp_dir_path.join("Cargo.toml")).unwrap();
     assert!(!cargo_toml.contains("name = "));
@@ -261,13 +245,9 @@ fn interactive_rocket_init() -> Result<(), Box<dyn std::error::Error>> {
 
     let bin_path = assert_cmd::cargo::cargo_bin("shuttle");
     let mut command = Command::new(bin_path);
-    command.args([
-        "--offline",
-        "init",
-        "--force-name",
-        "--api-key",
-        TEST_API_KEY,
-    ]);
+    command
+        .args(["--offline", "init", "--force-name"])
+        .env("SHUTTLE_API_KEY", TEST_API_KEY);
     let mut session = rexpect::session::spawn_command(command, Some(EXPECT_TIMEOUT_MS))?;
 
     session.exp_string("Project name")?;
@@ -297,13 +277,9 @@ fn interactive_rocket_init_manually_choose_template() -> Result<(), Box<dyn std:
 
     let bin_path = assert_cmd::cargo::cargo_bin("shuttle");
     let mut command = Command::new(bin_path);
-    command.args([
-        "--offline",
-        "init",
-        "--force-name",
-        "--api-key",
-        TEST_API_KEY,
-    ]);
+    command
+        .args(["--offline", "init", "--force-name"])
+        .env("SHUTTLE_API_KEY", TEST_API_KEY);
     let mut session = rexpect::session::spawn_command(command, Some(EXPECT_TIMEOUT_MS))?;
 
     session.exp_string("Project name")?;
@@ -333,15 +309,9 @@ fn interactive_rocket_init_dont_prompt_framework() -> Result<(), Box<dyn std::er
 
     let bin_path = assert_cmd::cargo::cargo_bin("shuttle");
     let mut command = Command::new(bin_path);
-    command.args([
-        "--offline",
-        "init",
-        "--force-name",
-        "--api-key",
-        TEST_API_KEY,
-        "--template",
-        "rocket",
-    ]);
+    command
+        .args(["--offline", "init", "--force-name", "--template", "rocket"])
+        .env("SHUTTLE_API_KEY", TEST_API_KEY);
     let mut session = rexpect::session::spawn_command(command, Some(EXPECT_TIMEOUT_MS))?;
 
     session.exp_string("Project name")?;
@@ -369,15 +339,9 @@ fn interactive_rocket_init_dont_prompt_name() -> Result<(), Box<dyn std::error::
 
     let bin_path = assert_cmd::cargo::cargo_bin("shuttle");
     let mut command = Command::new(bin_path);
-    command.args([
-        "--offline",
-        "init",
-        "--force-name",
-        "--api-key",
-        TEST_API_KEY,
-        "--name",
-        "my-project",
-    ]);
+    command
+        .args(["--offline", "init", "--force-name", "--name", "my-project"])
+        .env("SHUTTLE_API_KEY", TEST_API_KEY);
     let mut session = rexpect::session::spawn_command(command, Some(EXPECT_TIMEOUT_MS))?;
 
     session.exp_string("Where should we create this project?")?;
@@ -407,17 +371,17 @@ fn interactive_rocket_init_prompt_path_dirty_dir() -> Result<(), Box<dyn std::er
 
     let bin_path = assert_cmd::cargo::cargo_bin("shuttle");
     let mut command = Command::new(bin_path);
-    command.args([
-        "--offline",
-        "init",
-        "--api-key",
-        TEST_API_KEY,
-        "--force-name",
-        "--name",
-        "my-project",
-        "-t",
-        "rocket",
-    ]);
+    command
+        .args([
+            "--offline",
+            "init",
+            "--force-name",
+            "--name",
+            "my-project",
+            "-t",
+            "rocket",
+        ])
+        .env("SHUTTLE_API_KEY", TEST_API_KEY);
     let mut session = rexpect::session::spawn_command(command, Some(EXPECT_TIMEOUT_MS))?;
 
     session.exp_string("Where should we create this project?")?;

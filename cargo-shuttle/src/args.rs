@@ -96,7 +96,10 @@ impl ProjectArgs {
         cargo_metadata(self.working_directory.as_path()).map(|meta| meta.workspace_root.into())
     }
 
-    /// Try to use the workspace root package name if it exists, else use the name of the
+    /// Try to use the workspace root package name if it exists,
+    ///     else the name of the cargo workspace root dir,
+    ///     else the name of the working dir.
+    /// Errors on invalid dir names.
     pub fn local_project_name(&self) -> anyhow::Result<String> {
         Ok(
             if let Some(name) = cargo_metadata(self.working_directory.as_path())
@@ -711,5 +714,16 @@ mod tests {
         };
 
         assert_eq!(project_args.local_project_name().unwrap(), "workspace");
+    }
+
+    #[test]
+    fn project_name_in_non_rust_dir() {
+        let project_args = ProjectArgs {
+            working_directory: "/home".into(),
+            name: None,
+            id: None,
+        };
+
+        assert_eq!(project_args.local_project_name().unwrap(), "home");
     }
 }

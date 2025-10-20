@@ -4,7 +4,7 @@ use portpicker::pick_unused_port;
 use tokio::time::sleep;
 
 /// Runs `shuttle run` in specified directory
-async fn shuttle_run(working_directory: &str, external: bool) -> String {
+async fn shuttle_run(working_directory: &str, external: bool) -> (String, std::process::Child) {
     let port = pick_unused_port().unwrap();
 
     let url = if !external {
@@ -27,7 +27,7 @@ async fn shuttle_run(working_directory: &str, external: bool) -> String {
     if external {
         command.arg("--external");
     }
-    let mut runner = command.spawn().unwrap();
+    let mut child = command.spawn().unwrap();
 
     tokio::spawn({
         let working_directory = working_directory.to_owned();
@@ -46,7 +46,7 @@ async fn shuttle_run(working_directory: &str, external: bool) -> String {
     let mut counter = 0;
     let client = reqwest::Client::new();
     while client.get(url.clone()).send().await.is_err() {
-        if runner.try_wait().unwrap().is_some() {
+        if child.try_wait().unwrap().is_some() {
             println!(
                 "run test for '{}' exited early. Did it fail to compile/run?",
                 working_directory
@@ -63,12 +63,12 @@ async fn shuttle_run(working_directory: &str, external: bool) -> String {
         sleep(Duration::from_millis(500)).await;
     }
 
-    url
+    (url, child)
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn axum_hello_world() {
-    let url = shuttle_run("../examples/axum/hello-world", false).await;
+    let (url, mut child) = shuttle_run("../examples/axum/hello-world", false).await;
 
     let request_text = reqwest::Client::new()
         .get(url)
@@ -80,6 +80,8 @@ async fn axum_hello_world() {
         .unwrap();
 
     assert_eq!(request_text, "Hello, world!");
+
+    child.kill().unwrap();
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -90,7 +92,7 @@ async fn rocket_secrets() {
     )
     .unwrap();
 
-    let url = shuttle_run("../examples/rocket/secrets", false).await;
+    let (url, mut child) = shuttle_run("../examples/rocket/secrets", false).await;
 
     let request_text = reqwest::Client::new()
         .get(format!("{url}/secret"))
@@ -102,6 +104,8 @@ async fn rocket_secrets() {
         .unwrap();
 
     assert_eq!(request_text, "the contents of my API key");
+
+    child.kill().unwrap();
 }
 
 // These examples use a shared Postgres. Thus local runs should create a docker containers.
@@ -110,7 +114,7 @@ mod needs_docker {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn rocket_postgres() {
-        let url = shuttle_run("../examples/rocket/postgres", false).await;
+        let (url, mut child) = shuttle_run("../examples/rocket/postgres", false).await;
         let client = reqwest::Client::new();
 
         let post_text = client
@@ -135,5 +139,7 @@ mod needs_docker {
             .unwrap();
 
         assert_eq!(request_text, "{\"id\":1,\"note\":\"Deploy to shuttle\"}");
+
+        child.kill().unwrap();
     }
 }

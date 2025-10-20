@@ -9,6 +9,7 @@ use tempfile::Builder;
 
 // quite high timeout since the template is being cloned over network
 const EXPECT_TIMEOUT_MS: u64 = 10000;
+const TEST_API_KEY: &str = "0000000000000000";
 
 #[tokio::test]
 async fn non_interactive_basic_init() {
@@ -22,7 +23,7 @@ async fn non_interactive_basic_init() {
         "init",
         "--offline",
         "--api-key",
-        "dh9z58jttoes3qvt",
+        TEST_API_KEY,
         "--force-name",
         "--name",
         "my-project",
@@ -55,7 +56,7 @@ async fn non_interactive_rocket_init() {
         "init",
         "--offline",
         "--api-key",
-        "dh9z58jttoes3qvt",
+        TEST_API_KEY,
         "--force-name",
         "--name",
         "my-project",
@@ -86,7 +87,7 @@ async fn non_interactive_init_with_from_url() {
         "init",
         "--offline",
         "--api-key",
-        "dh9z58jttoes3qvt",
+        TEST_API_KEY,
         "--force-name",
         "--name",
         "my-project",
@@ -121,7 +122,7 @@ async fn non_interactive_init_with_from_gh() {
         "init",
         "--offline",
         "--api-key",
-        "dh9z58jttoes3qvt",
+        TEST_API_KEY,
         "--force-name",
         "--name",
         "my-project",
@@ -156,7 +157,7 @@ async fn non_interactive_init_with_from_repo_name() {
         "init",
         "--offline",
         "--api-key",
-        "dh9z58jttoes3qvt",
+        TEST_API_KEY,
         "--force-name",
         "--name",
         "my-project",
@@ -191,7 +192,7 @@ async fn non_interactive_init_with_from_local_path() {
         "init",
         "--offline",
         "--api-key",
-        "dh9z58jttoes3qvt",
+        TEST_API_KEY,
         "--force-name",
         "--name",
         "my-project",
@@ -226,7 +227,7 @@ async fn non_interactive_init_from_local_path_with_workspace() {
         "init",
         "--offline",
         "--api-key",
-        "dh9z58jttoes3qvt",
+        TEST_API_KEY,
         "--force-name",
         "--name",
         "my-project",
@@ -265,7 +266,7 @@ fn interactive_rocket_init() -> Result<(), Box<dyn std::error::Error>> {
         "init",
         "--force-name",
         "--api-key",
-        "dh9z58jttoes3qvt",
+        TEST_API_KEY,
     ]);
     let mut session = rexpect::session::spawn_command(command, Some(EXPECT_TIMEOUT_MS))?;
 
@@ -301,7 +302,7 @@ fn interactive_rocket_init_manually_choose_template() -> Result<(), Box<dyn std:
         "init",
         "--force-name",
         "--api-key",
-        "dh9z58jttoes3qvt",
+        TEST_API_KEY,
     ]);
     let mut session = rexpect::session::spawn_command(command, Some(EXPECT_TIMEOUT_MS))?;
 
@@ -337,7 +338,7 @@ fn interactive_rocket_init_dont_prompt_framework() -> Result<(), Box<dyn std::er
         "init",
         "--force-name",
         "--api-key",
-        "dh9z58jttoes3qvt",
+        TEST_API_KEY,
         "--template",
         "rocket",
     ]);
@@ -373,7 +374,7 @@ fn interactive_rocket_init_dont_prompt_name() -> Result<(), Box<dyn std::error::
         "init",
         "--force-name",
         "--api-key",
-        "dh9z58jttoes3qvt",
+        TEST_API_KEY,
         "--name",
         "my-project",
     ]);
@@ -410,7 +411,7 @@ fn interactive_rocket_init_prompt_path_dirty_dir() -> Result<(), Box<dyn std::er
         "--offline",
         "init",
         "--api-key",
-        "dh9z58jttoes3qvt",
+        TEST_API_KEY,
         "--force-name",
         "--name",
         "my-project",

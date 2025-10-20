@@ -1446,7 +1446,7 @@ impl Shuttle {
         mut run_args: RunArgs,
         debug: bool,
     ) -> Result<()> {
-        let project_name = project_args.local_project_name();
+        let project_name = project_args.local_project_name()?;
         let project_directory = self.ctx.project_directory();
 
         trace!("starting a local run with args: {run_args:?}");
@@ -1725,7 +1725,7 @@ impl Shuttle {
         project_args: &ProjectArgs,
         build_args: &BuildArgsShared,
     ) -> Result<()> {
-        let project_name = project_args.local_project_name();
+        let project_name = project_args.local_project_name()?;
         let project_directory = self.ctx.project_directory();
 
         let metadata = cargo_metadata(project_directory)?;

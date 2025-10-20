@@ -5,6 +5,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use anyhow::Context;
 use clap::{
     builder::{OsStringValueParser, PossibleValue, TypedValueParser},
     Args, Parser, Subcommand, ValueEnum,
@@ -96,21 +97,23 @@ impl ProjectArgs {
     }
 
     /// Try to use the workspace root package name if it exists, else use the name of the
-    pub fn local_project_name(&self) -> String {
-        if let Some(name) = cargo_metadata(self.working_directory.as_path())
-            .ok()
-            .and_then(|meta| meta.root_package().map(|rp| rp.to_owned()))
-            .map(|rp| rp.name.to_string())
-        {
-            name
-        } else {
-            self.workspace_path()
-                .file_name()
-                .expect("workspace path to have name")
-                .to_os_string()
-                .into_string()
-                .expect("workspace path name to be valid unicode")
-        }
+    pub fn local_project_name(&self) -> anyhow::Result<String> {
+        Ok(
+            if let Some(name) = cargo_metadata(self.working_directory.as_path())
+                .ok()
+                .and_then(|meta| meta.root_package().map(|rp| rp.to_owned()))
+                .map(|rp| rp.name.to_string())
+            {
+                name
+            } else {
+                self.workspace_path()
+                    .file_name()
+                    .context("expected workspace path to have name")?
+                    .to_os_string()
+                    .into_string()
+                    .map_err(|_| anyhow::anyhow!("workspace path name is not valid unicode"))?
+            },
+        )
     }
 }
 
@@ -693,7 +696,7 @@ mod tests {
             id: None,
         };
 
-        assert_eq!(project_args.local_project_name().to_string(), "hello-world");
+        assert_eq!(project_args.local_project_name().unwrap(), "hello-world");
     }
 
     #[test]
@@ -706,6 +709,6 @@ mod tests {
             id: None,
         };
 
-        assert_eq!(project_args.local_project_name().to_string(), "workspace");
+        assert_eq!(project_args.local_project_name().unwrap(), "workspace");
     }
 }

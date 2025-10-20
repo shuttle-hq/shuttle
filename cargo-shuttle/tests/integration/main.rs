@@ -2,54 +2,37 @@ mod builder;
 mod init;
 mod run;
 
-use cargo_shuttle::{
-    args::{Command, ProjectArgs, ShuttleArgs},
-    Shuttle,
-};
-use std::path::Path;
-
-/// Creates a CLI instance with some reasonable defaults set
-async fn shuttle_command(cmd: Command, working_directory: &str) -> anyhow::Result<()> {
-    let working_directory = Path::new(working_directory).to_path_buf();
-
-    Shuttle::new(cargo_shuttle::Binary::Shuttle, None)
-        .unwrap()
-        .run(
-            ShuttleArgs {
-                api_url: Some("http://shuttle.invalid:80".to_string()),
-                admin: false,
-                api_env: None,
-                project_args: ProjectArgs {
-                    working_directory,
-                    name: None,
-                    id: None,
-                },
-                offline: false,
-                debug: false,
-                output_mode: Default::default(),
-                cmd,
-            },
-            false,
-        )
-        .await
-        .map(|_| ())
-}
-
 #[tokio::test]
-#[should_panic(expected = "failed to start `cargo metadata`: No such file or directory")]
 async fn fails_if_working_directory_does_not_exist() {
-    shuttle_command(
-        Command::Logs(Default::default()),
-        "/path_that_does_not_exist",
-    )
-    .await
-    .unwrap();
+    let bin_path = assert_cmd::cargo::cargo_bin("shuttle");
+    let mut command = std::process::Command::new(bin_path);
+    command.args(["--wd", "/path_that_does_not_exist", "account"]);
+    let mut session = rexpect::session::spawn_command(command, Some(500)).unwrap();
+
+    session.exp_string("invalid value").unwrap();
+    session.exp_string(
+        "could not turn \"/path_that_does_not_exist\" into a real path: No such file or directory (os error 2)"
+    ).unwrap();
 }
 
 #[tokio::test]
-#[should_panic(expected = "could not find `Cargo.toml` in `/` or any parent directory")]
-async fn fails_if_working_directory_not_part_of_cargo_workspace() {
-    shuttle_command(Command::Logs(Default::default()), "/")
-        .await
+async fn fails_if_local_project_name_in_root() {
+    let bin_path = assert_cmd::cargo::cargo_bin("shuttle");
+    let mut command = std::process::Command::new(bin_path);
+    command.args(["--wd", "/", "run"]);
+    let mut session = rexpect::session::spawn_command(command, Some(500)).unwrap();
+
+    session
+        .exp_string("expected workspace path to have name")
         .unwrap();
+}
+
+#[tokio::test]
+async fn fails_if_no_project_id_found() {
+    let bin_path = assert_cmd::cargo::cargo_bin("shuttle");
+    let mut command = std::process::Command::new(bin_path);
+    command.args(["--api-url", "http://shuttle.invalid", "--wd", "/", "logs"]);
+    let mut session = rexpect::session::spawn_command(command, Some(500)).unwrap();
+
+    session.exp_string("error sending request for url").unwrap();
 }

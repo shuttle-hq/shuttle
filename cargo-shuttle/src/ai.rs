@@ -13,6 +13,8 @@ pub enum AiPlatform {
     Cursor,
     Claude,
     Windsurf,
+    Gemini,
+    Codex,
 }
 
 impl AiPlatform {
@@ -22,6 +24,8 @@ impl AiPlatform {
             AiPlatform::Cursor => ".cursor/rules/shuttle.mdc",
             AiPlatform::Claude => "CLAUDE.md",
             AiPlatform::Windsurf => ".windsurf/rules/shuttle.md",
+            AiPlatform::Gemini => "GEMINI.md",
+            AiPlatform::Codex => "AGENTS.md",
         }
     }
 
@@ -31,12 +35,20 @@ impl AiPlatform {
             AiPlatform::Cursor => "Cursor",
             AiPlatform::Claude => "Claude Code",
             AiPlatform::Windsurf => "Windsurf",
+            AiPlatform::Gemini => "Gemini CLI",
+            AiPlatform::Codex => "Codex CLI",
         }
     }
 
     /// Get all available platforms
     fn all() -> Vec<AiPlatform> {
-        vec![AiPlatform::Cursor, AiPlatform::Claude, AiPlatform::Windsurf]
+        vec![
+            AiPlatform::Cursor,
+            AiPlatform::Claude,
+            AiPlatform::Windsurf,
+            AiPlatform::Gemini,
+            AiPlatform::Codex,
+        ]
     }
 }
 
@@ -49,6 +61,10 @@ pub fn handle_ai_rules(args: &AiRulesArgs, working_directory: &Path) -> Result<(
         AiPlatform::Claude
     } else if args.windsurf {
         AiPlatform::Windsurf
+    } else if args.gemini {
+        AiPlatform::Gemini
+    } else if args.codex {
+        AiPlatform::Codex
     } else {
         // Interactive mode - prompt user to select platform
         select_platform_interactive()?
@@ -57,7 +73,7 @@ pub fn handle_ai_rules(args: &AiRulesArgs, working_directory: &Path) -> Result<(
     // Write the rules file
     let file_path = working_directory.join(platform.file_path());
     let file_existed = file_path.exists();
-    let should_append = matches!(platform, AiPlatform::Claude) && file_existed;
+    let should_append = matches!(platform, AiPlatform::Claude | AiPlatform::Gemini | AiPlatform::Codex) && file_existed;
 
     let was_written = write_rules_file(platform, working_directory)?;
 
@@ -101,8 +117,8 @@ fn select_platform_interactive() -> Result<AiPlatform> {
 fn write_rules_file(platform: AiPlatform, working_directory: &Path) -> Result<bool> {
     let file_path = working_directory.join(platform.file_path());
 
-    // For Claude platform, append to existing CLAUDE.md instead of overwriting
-    let should_append = matches!(platform, AiPlatform::Claude) && file_path.exists();
+    // For top-level markdown platforms (Claude, Gemini, Codex), append to existing file instead of overwriting
+    let should_append = matches!(platform, AiPlatform::Claude | AiPlatform::Gemini | AiPlatform::Codex) && file_path.exists();
 
     // Check if file already exists
     if file_path.exists() {
@@ -131,7 +147,7 @@ fn write_rules_file(platform: AiPlatform, working_directory: &Path) -> Result<bo
 
     // Write or append the content
     if should_append {
-        // For Claude, append the AI rules to existing CLAUDE.md
+        // For top-level markdown files (Claude, Gemini, Codex), append the AI rules to existing file
         let existing_content = fs::read_to_string(&file_path)
             .context(format!("Failed to read existing file: {}", file_path.display()))?;
 

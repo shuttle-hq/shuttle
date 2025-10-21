@@ -193,16 +193,24 @@ pub enum AiCommand {
 #[derive(Parser, Clone, Debug)]
 pub struct AiRulesArgs {
     /// Generate rules for Cursor AI
-    #[arg(long, conflicts_with_all = ["claude", "windsurf"])]
+    #[arg(long, conflicts_with_all = ["claude", "windsurf", "gemini", "codex"])]
     pub cursor: bool,
 
     /// Generate rules for Claude Code
-    #[arg(long, conflicts_with_all = ["cursor", "windsurf"])]
+    #[arg(long, conflicts_with_all = ["cursor", "windsurf", "gemini", "codex"])]
     pub claude: bool,
 
     /// Generate rules for Windsurf AI
-    #[arg(long, conflicts_with_all = ["cursor", "claude"])]
+    #[arg(long, conflicts_with_all = ["cursor", "claude", "gemini", "codex"])]
     pub windsurf: bool,
+
+    /// Generate rules for Gemini CLI
+    #[arg(long, conflicts_with_all = ["cursor", "claude", "windsurf", "codex"])]
+    pub gemini: bool,
+
+    /// Generate rules for Codex CLI
+    #[arg(long, conflicts_with_all = ["cursor", "claude", "windsurf", "gemini"])]
+    pub codex: bool,
 }
 
 #[derive(Subcommand)]

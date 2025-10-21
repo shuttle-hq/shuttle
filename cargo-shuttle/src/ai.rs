@@ -55,13 +55,28 @@ pub fn handle_ai_rules(args: &AiRulesArgs, working_directory: &Path) -> Result<(
     };
 
     // Write the rules file
-    write_rules_file(platform, working_directory)?;
+    let file_path = working_directory.join(platform.file_path());
+    let file_existed = file_path.exists();
+    let should_append = matches!(platform, AiPlatform::Claude) && file_existed;
 
-    println!(
-        "✓ Successfully generated {} rules at: {}",
-        platform.display_name(),
-        platform.file_path()
-    );
+    let was_written = write_rules_file(platform, working_directory)?;
+
+    if was_written {
+        let action = if should_append {
+            "appended to"
+        } else if file_existed {
+            "updated"
+        } else {
+            "generated"
+        };
+
+        println!(
+            "✓ Successfully {} {} rules at: {}",
+            action,
+            platform.display_name(),
+            platform.file_path()
+        );
+    }
 
     Ok(())
 }
@@ -81,24 +96,30 @@ fn select_platform_interactive() -> Result<AiPlatform> {
     Ok(platforms[selection])
 }
 
-/// Write the rules file to the appropriate location
-fn write_rules_file(platform: AiPlatform, working_directory: &Path) -> Result<()> {
+/// Write the rules file to the appropriate location.
+/// Returns Ok(true) if the file was written, Ok(false) if the user aborted.
+fn write_rules_file(platform: AiPlatform, working_directory: &Path) -> Result<bool> {
     let file_path = working_directory.join(platform.file_path());
+
+    // For Claude platform, append to existing CLAUDE.md instead of overwriting
+    let should_append = matches!(platform, AiPlatform::Claude) && file_path.exists();
 
     // Check if file already exists
     if file_path.exists() {
-        let overwrite = Confirm::with_theme(&ColorfulTheme::default())
+        let action = if should_append { "append to" } else { "overwrite" };
+        let confirm = Confirm::with_theme(&ColorfulTheme::default())
             .with_prompt(format!(
-                "File {} already exists. Overwrite?",
-                platform.file_path()
+                "File {} already exists. {} it?",
+                platform.file_path(),
+                action.chars().next().unwrap().to_uppercase().to_string() + &action[1..]
             ))
             .default(false)
             .interact()
             .context("Failed to get confirmation")?;
 
-        if !overwrite {
+        if !confirm {
             println!("Aborted.");
-            return Ok(());
+            return Ok(false);
         }
     }
 
@@ -108,9 +129,22 @@ fn write_rules_file(platform: AiPlatform, working_directory: &Path) -> Result<()
             .context(format!("Failed to create directory: {}", parent.display()))?;
     }
 
-    // Write the content
-    fs::write(&file_path, AI_RULES_CONTENT)
-        .context(format!("Failed to write file: {}", file_path.display()))?;
+    // Write or append the content
+    if should_append {
+        // For Claude, append the AI rules to existing CLAUDE.md
+        let existing_content = fs::read_to_string(&file_path)
+            .context(format!("Failed to read existing file: {}", file_path.display()))?;
 
-    Ok(())
+        // Add separator and append new content
+        let combined_content = format!("{}\n\n{}", existing_content.trim_end(), AI_RULES_CONTENT);
+
+        fs::write(&file_path, combined_content)
+            .context(format!("Failed to append to file: {}", file_path.display()))?;
+    } else {
+        // For other platforms or new files, write/overwrite the content
+        fs::write(&file_path, AI_RULES_CONTENT)
+            .context(format!("Failed to write file: {}", file_path.display()))?;
+    }
+
+    Ok(true)
 }

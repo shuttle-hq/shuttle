@@ -1,7 +1,3 @@
----
-alwaysApply: true
----
-
 # Shuttle Development Rules
 
 ## Core Setup

@@ -273,14 +273,18 @@ impl Shuttle {
             }
             Command::Feedback => open_gh_issue().map(|_| CommandOutput::None),
             Command::Run(run_args) => {
-                self.ctx.load_local_config(&args.project_args)?;
-                self.local_run(run_args, args.debug)
+                self.ctx
+                    .load_local_config(&args.project_args.workspace_path())?;
+                self.local_run(&args.project_args, run_args, args.debug)
                     .await
                     .map(|_| CommandOutput::None)
             }
             Command::Build(build_args) => {
-                self.ctx.load_local_config(&args.project_args)?;
-                self.build(&build_args).await.map(|_| CommandOutput::None)
+                self.ctx
+                    .load_local_config(&args.project_args.workspace_path())?;
+                self.build(&args.project_args, &build_args)
+                    .await
+                    .map(|_| CommandOutput::None)
             }
             Command::Deploy(deploy_args) => self.deploy(deploy_args).await,
             Command::Logs(logs_args) => self.logs(logs_args).await.map(|_| CommandOutput::None),
@@ -383,15 +387,14 @@ impl Shuttle {
         provided_path_to_init: bool,
         offline: bool,
     ) -> Result<()> {
-        // Turns the template or git args (if present) to a repo+folder.
         let git_template = args.git_template()?;
         let no_git = args.no_git;
+        let should_link = project_args.id.is_some();
 
         let needs_name = project_args.name.is_none();
         let needs_template = git_template.is_none();
         let needs_path = !provided_path_to_init;
         let needs_login = self.ctx.api_key().is_err() && args.login_args.api_key.is_none();
-        let should_link = project_args.id.is_some();
         let interactive = needs_name || needs_template || needs_path || needs_login;
 
         let theme = ColorfulTheme::default();
@@ -412,7 +415,7 @@ impl Shuttle {
             let name: String = if let Some(name) = project_args.name.clone() {
                 name
             } else {
-                // not using `validate_with` due to being blocking.
+                // not using `validate_with` due to being blocking, whereas name validation requests are async
                 Input::with_theme(&theme)
                     .with_prompt("Project name")
                     .interact()?
@@ -716,7 +719,7 @@ impl Shuttle {
     ) -> Result<()> {
         trace!("project arguments: {project_args:?}");
 
-        self.ctx.load_local_config(project_args)?;
+        self.ctx.load_local_config(&project_args.workspace_path())?;
         // load project id from args if given or from internal config file if present
         self.ctx.load_local_internal_config(project_args)?;
 
@@ -774,6 +777,7 @@ impl Shuttle {
             (true, false) => (),
             // we still don't know the project id, so ask the user interactively
             (false, _) => {
+                // TODO: ensure linking only happens when working directory is resolved to a valid workspace (rust project)
                 trace!("no project id found");
                 self.project_link_interactive().await?;
             }
@@ -1392,7 +1396,7 @@ impl Shuttle {
         Ok(Some(secrets))
     }
 
-    async fn build(&self, build_args: &BuildArgs) -> Result<()> {
+    async fn build(&self, project_args: &ProjectArgs, build_args: &BuildArgs) -> Result<()> {
         eprintln!("WARN: The build command is EXPERIMENTAL. Please submit feedback on GitHub or Discord if you encounter issues.");
         if let Some(path) = build_args.output_archive.as_ref() {
             let archive = self.make_archive()?;
@@ -1400,7 +1404,8 @@ impl Shuttle {
             fs::write(path, archive).context("writing archive")?;
             Ok(())
         } else if build_args.inner.docker {
-            self.local_docker_build(&build_args.inner).await
+            self.local_docker_build(project_args, &build_args.inner)
+                .await
         } else {
             self.local_build(&build_args.inner).await.map(|_| ())
         }
@@ -1434,8 +1439,13 @@ impl Shuttle {
         };
     }
 
-    async fn local_run(&self, mut run_args: RunArgs, debug: bool) -> Result<()> {
-        let project_name = self.ctx.project_name().to_owned();
+    async fn local_run(
+        &self,
+        project_args: &ProjectArgs,
+        mut run_args: RunArgs,
+        debug: bool,
+    ) -> Result<()> {
+        let project_name = project_args.local_project_name()?;
         let project_directory = self.ctx.project_directory();
 
         trace!("starting a local run with args: {run_args:?}");
@@ -1468,7 +1478,8 @@ impl Shuttle {
 
             Some((service, runtime_executable))
         } else {
-            self.local_docker_build(&run_args.build_args).await?;
+            self.local_docker_build(project_args, &run_args.build_args)
+                .await?;
             None
         };
 
@@ -1708,8 +1719,12 @@ impl Shuttle {
         Ok(())
     }
 
-    async fn local_docker_build(&self, build_args: &BuildArgsShared) -> Result<()> {
-        let project_name = self.ctx.project_name().to_owned();
+    async fn local_docker_build(
+        &self,
+        project_args: &ProjectArgs,
+        build_args: &BuildArgsShared,
+    ) -> Result<()> {
+        let project_name = project_args.local_project_name()?;
         let project_directory = self.ctx.project_directory();
 
         let metadata = cargo_metadata(project_directory)?;
@@ -2362,19 +2377,5 @@ mod tests {
             "src/main.rs",
         ];
         assert_eq!(entries, expected);
-    }
-
-    #[tokio::test]
-    async fn finds_workspace_root() {
-        let project_args = ProjectArgs {
-            working_directory: path_from_workspace_root("examples/axum/hello-world/src"),
-            name: None,
-            id: None,
-        };
-
-        assert_eq!(
-            project_args.workspace_path().unwrap(),
-            path_from_workspace_root("examples/axum/hello-world")
-        );
     }
 }

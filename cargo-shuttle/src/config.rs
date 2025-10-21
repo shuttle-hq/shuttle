@@ -37,9 +37,6 @@ impl ConfigManager for LocalConfigManager {
 /// Shuttle.toml schema (User-facing project-local config)
 #[derive(Deserialize, Serialize, Default)]
 pub struct ProjectConfig {
-    // unused on new platform, but still used for project names in local runs
-    // TODO: remove and use the crate/workspace name instead
-    pub name: Option<String>,
     /// Deprecated, now [`ProjectDeployConfig::include`]
     pub assets: Option<Vec<String>>,
     pub deploy: Option<ProjectDeployConfig>,
@@ -98,9 +95,7 @@ impl RequestContext {
     }
 
     pub fn load_local_internal_config(&mut self, project_args: &ProjectArgs) -> Result<()> {
-        let workspace_path = project_args
-            .workspace_path()
-            .unwrap_or(project_args.working_directory.clone());
+        let workspace_path = project_args.workspace_path();
 
         trace!(
             "looking for .shuttle/config.toml in {}",
@@ -189,19 +184,15 @@ impl RequestContext {
     }
 
     /// Load the Shuttle.toml project configuration at the given `working_directory`
-    pub fn load_local_config(&mut self, project_args: &ProjectArgs) -> Result<()> {
-        self.project = Some(Self::get_local_config(project_args)?);
+    pub fn load_local_config(&mut self, workspace_path: &Path) -> Result<()> {
+        self.project = Some(Self::get_local_config(workspace_path)?);
 
         Ok(())
     }
 
     fn get_local_config(
-        project_args: &ProjectArgs,
+        workspace_path: &Path,
     ) -> Result<Config<LocalConfigManager, ProjectConfig>> {
-        let workspace_path = project_args
-            .workspace_path()
-            .unwrap_or(project_args.working_directory.clone());
-
         trace!("looking for Shuttle.toml in {}", workspace_path.display());
 
         // check that the uppercase file does not exist so a false warning is not printed on case-insensitive file systems
@@ -220,31 +211,6 @@ impl RequestContext {
             trace!("found a local Shuttle.toml");
             project.open()?;
         }
-
-        let config = project.as_mut().unwrap();
-
-        // Project names are preferred in this order:
-        // 1. Name given on command line
-        // 2. Name from Shuttle.toml file
-        // 3. Name from Cargo.toml package if it's a crate
-        // 4. Name from the workspace directory if it's a workspace
-        match (&project_args.name, &config.name) {
-            // Command-line name parameter trumps everything
-            (Some(name_from_args), _) => {
-                trace!("using command-line project name");
-                config.name = Some(name_from_args.clone());
-            }
-            // If key exists in config then keep it as it is
-            (None, Some(_)) => {
-                trace!("using Shuttle.toml project name");
-            }
-            // If name key is not in project config, then we infer from crate name
-            (None, None) => {
-                trace!("using crate name as project name");
-                config.name = Some(project_args.project_name()?);
-            }
-        };
-        // now, `config.name` is always Some
 
         Ok(project)
     }
@@ -297,22 +263,6 @@ impl RequestContext {
     pub fn clear_api_key(&mut self) -> Result<()> {
         self.global.as_mut().unwrap().api_key = None;
         self.global.save()
-    }
-
-    /// Get the current project name.
-    ///
-    /// # Panics
-    /// Panics if the project configuration has not been loaded.
-    pub fn project_name(&self) -> &str {
-        self.project
-            .as_ref()
-            .unwrap()
-            .as_ref()
-            .unwrap()
-            .name
-            .as_ref()
-            .unwrap()
-            .as_str()
     }
 
     /// # Panics
@@ -374,63 +324,5 @@ impl RequestContext {
             .as_ref()
             .unwrap()
             .as_str()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::path::PathBuf;
-
-    use crate::{args::ProjectArgs, config::RequestContext};
-
-    use super::{Config, LocalConfigManager, ProjectConfig};
-
-    fn path_from_workspace_root(path: &str) -> PathBuf {
-        PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap())
-            .join("..")
-            .join(path)
-    }
-
-    fn unwrap_project_name(config: &Config<LocalConfigManager, ProjectConfig>) -> String {
-        config.as_ref().unwrap().name.as_ref().unwrap().to_string()
-    }
-
-    #[test]
-    fn get_local_config_finds_name_in_cargo_toml() {
-        let project_args = ProjectArgs {
-            working_directory: path_from_workspace_root("examples/axum/hello-world/"),
-            name: None,
-            id: None,
-        };
-
-        let local_config = RequestContext::get_local_config(&project_args).unwrap();
-
-        assert_eq!(unwrap_project_name(&local_config), "hello-world");
-    }
-
-    #[test]
-    fn get_local_config_finds_name_from_workspace_dir() {
-        let project_args = ProjectArgs {
-            working_directory: path_from_workspace_root("examples/rocket/workspace/hello-world/"),
-            name: None,
-            id: None,
-        };
-
-        let local_config = RequestContext::get_local_config(&project_args).unwrap();
-
-        assert_eq!(unwrap_project_name(&local_config), "workspace");
-    }
-
-    #[test]
-    fn setting_name_overrides_name_in_config() {
-        let project_args = ProjectArgs {
-            working_directory: path_from_workspace_root("examples/axum/hello-world/"),
-            name: Some("my-fancy-project-name".to_owned()),
-            id: None,
-        };
-
-        let local_config = RequestContext::get_local_config(&project_args).unwrap();
-
-        assert_eq!(unwrap_project_name(&local_config), "my-fancy-project-name");
     }
 }

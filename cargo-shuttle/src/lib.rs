@@ -2,6 +2,7 @@ pub mod args;
 pub mod builder;
 pub mod config;
 mod init;
+pub mod neptune;
 mod provisioner_server;
 mod util;
 
@@ -119,13 +120,15 @@ pub fn setup_tracing(debug: bool) {
 pub enum Binary {
     CargoShuttle,
     Shuttle,
+    Neptune,
 }
 
 impl Binary {
-    pub fn name(&self) -> String {
+    pub fn name(&self) -> &'static str {
         match self {
-            Self::CargoShuttle => "cargo-shuttle".to_owned(),
-            Self::Shuttle => "shuttle".to_owned(),
+            Self::CargoShuttle => "cargo-shuttle",
+            Self::Shuttle => "shuttle",
+            Self::Neptune => "neptune",
         }
     }
 }

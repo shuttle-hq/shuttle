@@ -573,7 +573,7 @@ pub struct LogsArgs {
 }
 
 /// Helper function to parse and return the absolute path
-fn parse_path(path: OsString) -> Result<PathBuf, io::Error> {
+pub fn parse_path(path: OsString) -> Result<PathBuf, io::Error> {
     dunce::canonicalize(&path).map_err(|e| {
         io::Error::new(
             ErrorKind::InvalidInput,

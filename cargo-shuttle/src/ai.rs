@@ -73,7 +73,10 @@ pub fn handle_ai_rules(args: &AiRulesArgs, working_directory: &Path) -> Result<(
     // Write the rules file
     let file_path = working_directory.join(platform.file_path());
     let file_existed = file_path.exists();
-    let should_append = matches!(platform, AiPlatform::Claude | AiPlatform::Gemini | AiPlatform::Codex) && file_existed;
+    let should_append = matches!(
+        platform,
+        AiPlatform::Claude | AiPlatform::Gemini | AiPlatform::Codex
+    ) && file_existed;
 
     let was_written = write_rules_file(platform, working_directory)?;
 
@@ -118,11 +121,18 @@ fn write_rules_file(platform: AiPlatform, working_directory: &Path) -> Result<bo
     let file_path = working_directory.join(platform.file_path());
 
     // For top-level markdown platforms (Claude, Gemini, Codex), append to existing file instead of overwriting
-    let should_append = matches!(platform, AiPlatform::Claude | AiPlatform::Gemini | AiPlatform::Codex) && file_path.exists();
+    let should_append = matches!(
+        platform,
+        AiPlatform::Claude | AiPlatform::Gemini | AiPlatform::Codex
+    ) && file_path.exists();
 
     // Check if file already exists
     if file_path.exists() {
-        let action = if should_append { "append to" } else { "overwrite" };
+        let action = if should_append {
+            "append to"
+        } else {
+            "overwrite"
+        };
         let confirm = Confirm::with_theme(&ColorfulTheme::default())
             .with_prompt(format!(
                 "File {} already exists. {} it?",
@@ -148,8 +158,10 @@ fn write_rules_file(platform: AiPlatform, working_directory: &Path) -> Result<bo
     // Write or append the content
     if should_append {
         // For top-level markdown files (Claude, Gemini, Codex), append the AI rules to existing file
-        let existing_content = fs::read_to_string(&file_path)
-            .context(format!("Failed to read existing file: {}", file_path.display()))?;
+        let existing_content = fs::read_to_string(&file_path).context(format!(
+            "Failed to read existing file: {}",
+            file_path.display()
+        ))?;
 
         // Add separator and append new content
         let combined_content = format!("{}\n\n{}", existing_content.trim_end(), AI_RULES_CONTENT);

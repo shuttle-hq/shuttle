@@ -52,7 +52,8 @@ impl AiPlatform {
     }
 }
 
-/// Handle the `ai rules` command
+/// Handle the `ai rules` command.
+/// Generates AI coding assistant rules files for the selected platform in the working directory.
 pub fn handle_ai_rules(args: &AiRulesArgs, working_directory: &Path) -> Result<()> {
     // Determine platform from args or prompt user
     let platform = if args.cursor {
@@ -137,7 +138,12 @@ fn write_rules_file(platform: AiPlatform, working_directory: &Path) -> Result<bo
             .with_prompt(format!(
                 "File {} already exists. {} it?",
                 platform.file_path(),
-                action.chars().next().unwrap().to_uppercase().to_string() + &action[1..]
+                action
+                    .chars()
+                    .next()
+                    .map(|c| c.to_uppercase().collect::<String>())
+                    .unwrap_or_default()
+                    + &action[1..]
             ))
             .default(false)
             .interact()

@@ -1,12 +1,20 @@
+pub mod args;
+
 use anyhow::Result;
+use nixpacks::nixpacks::{
+    builder::docker::DockerBuilderOptions,
+    plan::{generator::GeneratePlanOptions, BuildPlan},
+};
 
 use crate::{
     args::OutputMode,
     neptune::args::{NeptuneArgs, NeptuneCommand},
-    CommandOutput,
 };
 
-pub mod args;
+pub enum NeptuneCommandOutput {
+    BuiltImage(String),
+    None,
+}
 
 pub struct Neptune {
     // ctx: RequestContext,
@@ -32,13 +40,29 @@ impl Neptune {
         })
     }
 
-    pub async fn run(mut self, args: NeptuneArgs) -> Result<CommandOutput> {
+    pub async fn run(mut self, args: NeptuneArgs) -> Result<NeptuneCommandOutput> {
         self.output_mode = args.output_mode;
 
         match args.cmd {
-            NeptuneCommand::Build(_build_args) => {
+            NeptuneCommand::Build(build_args) => {
                 eprintln!("Neptune build command");
-                Ok(CommandOutput::None)
+
+                let image_name = "test-nixpacks".to_owned();
+                nixpacks::create_docker_image(
+                    build_args.path.as_str(),
+                    Vec::new(),
+                    &GeneratePlanOptions {
+                        plan: Some(BuildPlan::default()),
+                        config_file: None,
+                    },
+                    &DockerBuilderOptions {
+                        name: Some(image_name.clone()),
+                        ..Default::default()
+                    },
+                )
+                .await?;
+
+                Ok(NeptuneCommandOutput::BuiltImage(image_name))
             }
         }
     }

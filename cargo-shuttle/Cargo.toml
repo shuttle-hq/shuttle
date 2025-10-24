@@ -41,6 +41,7 @@ hyper-util = { workspace = true }
 ignore = { workspace = true }
 indicatif = { workspace = true }
 indoc = { workspace = true }
+nixpacks = { workspace = true }
 portpicker = { workspace = true }
 regex = { workspace = true }
 reqwest = { workspace = true }

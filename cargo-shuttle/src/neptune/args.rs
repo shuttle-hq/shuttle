@@ -72,4 +72,6 @@ pub enum NeptuneCommand {
 }
 
 #[derive(Args, Debug, Default)]
-pub struct BuildArgs {}
+pub struct BuildArgs {
+    pub path: String,
+}

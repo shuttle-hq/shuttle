@@ -1,6 +1,6 @@
 pub mod args;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use nixpacks::nixpacks::{
     builder::docker::DockerBuilderOptions,
     plan::{generator::GeneratePlanOptions, BuildPlan},
@@ -47,7 +47,14 @@ impl Neptune {
             NeptuneCommand::Build(build_args) => {
                 eprintln!("Neptune build command");
 
-                let image_name = "test-nixpacks".to_owned();
+                let cwd = args.working_directory;
+                let dirname = cwd
+                    .file_name()
+                    .context("getting name of working directory")?
+                    .to_string_lossy()
+                    .into_owned();
+
+                let image_name = dirname;
                 nixpacks::create_docker_image(
                     build_args.path.as_str(),
                     Vec::new(),

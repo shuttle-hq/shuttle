@@ -1,8 +1,8 @@
 pub mod args;
 pub mod builder;
 pub mod config;
+pub mod impulse;
 mod init;
-pub mod neptune;
 mod provisioner_server;
 mod util;
 
@@ -120,7 +120,7 @@ pub fn setup_tracing(debug: bool) {
 pub enum Binary {
     CargoShuttle,
     Shuttle,
-    Neptune,
+    Impulse,
 }
 
 impl Binary {
@@ -128,7 +128,7 @@ impl Binary {
         match self {
             Self::CargoShuttle => "cargo-shuttle",
             Self::Shuttle => "shuttle",
-            Self::Neptune => "neptune",
+            Self::Impulse => "impulse",
         }
     }
 }

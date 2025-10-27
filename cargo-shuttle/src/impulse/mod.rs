@@ -8,15 +8,15 @@ use nixpacks::nixpacks::{
 
 use crate::{
     args::OutputMode,
-    neptune::args::{NeptuneArgs, NeptuneCommand},
+    impulse::args::{ImpulseArgs, ImpulseCommand},
 };
 
-pub enum NeptuneCommandOutput {
+pub enum ImpulseCommandOutput {
     BuiltImage(String),
     None,
 }
 
-pub struct Neptune {
+pub struct Impulse {
     // ctx: RequestContext,
     // client: Option<ShuttleApiClient>,
     output_mode: OutputMode,
@@ -24,7 +24,7 @@ pub struct Neptune {
     // bin: Binary,
 }
 
-impl Neptune {
+impl Impulse {
     pub fn new(/* bin: Binary */ /* env_override: Option<String> */) -> Result<Self> {
         // let ctx = RequestContext::load_global(env_override.inspect(|e| {
         //     eprintln!(
@@ -40,12 +40,12 @@ impl Neptune {
         })
     }
 
-    pub async fn run(mut self, args: NeptuneArgs) -> Result<NeptuneCommandOutput> {
+    pub async fn run(mut self, args: ImpulseArgs) -> Result<ImpulseCommandOutput> {
         self.output_mode = args.output_mode;
 
         match args.cmd {
-            NeptuneCommand::Build(build_args) => {
-                eprintln!("Neptune build command");
+            ImpulseCommand::Build(build_args) => {
+                eprintln!("Impulse build command");
 
                 let cwd = args.working_directory;
                 let dirname = cwd
@@ -69,7 +69,7 @@ impl Neptune {
                 )
                 .await?;
 
-                Ok(NeptuneCommandOutput::BuiltImage(image_name))
+                Ok(ImpulseCommandOutput::BuiltImage(image_name))
             }
         }
     }

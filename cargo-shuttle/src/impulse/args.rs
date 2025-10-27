@@ -9,7 +9,7 @@ use crate::args::{parse_path, OutputMode};
 
 #[derive(Parser)]
 #[command(version, next_help_heading = "Global options")]
-pub struct NeptuneArgs {
+pub struct ImpulseArgs {
     /// URL for the Shuttle API to target (overrides inferred URL from api_env)
     #[arg(global = true, long, env = "SHUTTLE_API", hide = true)]
     pub api_url: Option<String>,
@@ -29,7 +29,7 @@ pub struct NeptuneArgs {
     pub working_directory: PathBuf,
 
     #[command(subcommand)]
-    pub cmd: NeptuneCommand,
+    pub cmd: ImpulseCommand,
 }
 
 #[allow(rustdoc::bare_urls)]
@@ -37,7 +37,7 @@ pub struct NeptuneArgs {
 ///
 /// See the CLI docs for more information: https://docs.shuttle.dev/guides/cli
 #[derive(Subcommand)]
-pub enum NeptuneCommand {
+pub enum ImpulseCommand {
     // /// Generate a Shuttle project from a template
     // #[command(visible_alias = "i")]
     // Init(InitArgs),

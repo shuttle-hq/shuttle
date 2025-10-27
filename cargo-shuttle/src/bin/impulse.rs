@@ -9,7 +9,7 @@ async fn main() -> Result<()> {
     let args =
         ImpulseArgs::from_arg_matches(&matches).expect("args to already be parsed successfully");
 
-    setup_tracing(args.debug);
+    setup_tracing(args.globals.debug);
 
-    Impulse::new()?.run(args).await.map(|_| ())
+    Impulse::new(args.globals)?.run(args.cmd).await.map(|_| ())
 }

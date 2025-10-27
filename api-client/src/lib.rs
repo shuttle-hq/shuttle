@@ -36,6 +36,8 @@ use crate::middleware::LoggingMiddleware;
 pub mod util;
 use util::{ParsedJson, ToBodyContent};
 
+pub mod impulse;
+
 #[derive(Clone)]
 pub struct ShuttleApiClient {
     pub client: ClientWithMiddleware,

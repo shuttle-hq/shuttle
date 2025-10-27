@@ -1,15 +1,10 @@
 pub mod args;
+pub mod commands;
 
-use anyhow::{Context, Result};
-use nixpacks::nixpacks::{
-    builder::docker::DockerBuilderOptions,
-    plan::{generator::GeneratePlanOptions, BuildPlan},
-};
+use anyhow::Result;
+use shuttle_api_client::impulse::ImpulseClient;
 
-use crate::{
-    args::OutputMode,
-    impulse::args::{ImpulseArgs, ImpulseCommand},
-};
+use crate::impulse::args::{GenerateCommand, ImpulseCommand, ImpulseGlobalArgs};
 
 pub enum ImpulseCommandOutput {
     BuiltImage(String),
@@ -18,14 +13,16 @@ pub enum ImpulseCommandOutput {
 
 pub struct Impulse {
     // ctx: RequestContext,
-    // client: Option<ShuttleApiClient>,
-    output_mode: OutputMode,
+    _client: Option<ImpulseClient>,
+    global_args: ImpulseGlobalArgs,
     // /// Alter behaviour based on which CLI is used
     // bin: Binary,
 }
 
 impl Impulse {
-    pub fn new(/* bin: Binary */ /* env_override: Option<String> */) -> Result<Self> {
+    pub fn new(
+        global_args: ImpulseGlobalArgs, /* bin: Binary */ /* env_override: Option<String> */
+    ) -> Result<Self> {
         // let ctx = RequestContext::load_global(env_override.inspect(|e| {
         //     eprintln!(
         //         "{}",
@@ -34,43 +31,31 @@ impl Impulse {
         // }))?;
         Ok(Self {
             // ctx,
-            // client: None,
-            output_mode: OutputMode::Normal,
+            _client: None,
+            global_args,
             // bin,
         })
     }
 
-    pub async fn run(mut self, args: ImpulseArgs) -> Result<ImpulseCommandOutput> {
-        self.output_mode = args.output_mode;
-
-        match args.cmd {
-            ImpulseCommand::Build(build_args) => {
-                eprintln!("Impulse build command");
-
-                let cwd = args.working_directory;
-                let dirname = cwd
-                    .file_name()
-                    .context("getting name of working directory")?
-                    .to_string_lossy()
-                    .into_owned();
-
-                let image_name = dirname;
-                nixpacks::create_docker_image(
-                    build_args.path.as_str(),
-                    Vec::new(),
-                    &GeneratePlanOptions {
-                        plan: Some(BuildPlan::default()),
-                        config_file: None,
-                    },
-                    &DockerBuilderOptions {
-                        name: Some(image_name.clone()),
-                        ..Default::default()
-                    },
-                )
-                .await?;
-
-                Ok(ImpulseCommandOutput::BuiltImage(image_name))
-            }
+    pub async fn run(self, command: ImpulseCommand) -> Result<ImpulseCommandOutput> {
+        use ImpulseCommand::*;
+        match command {
+            Init(init_args) => self.init(init_args).await,
+            Build(build_args) => self.build(build_args).await,
+            Run(run_args) => self.local_run(run_args).await,
+            Deploy(deploy_args) => self.deploy(deploy_args).await,
+            Login(login_args) => self.login(login_args).await,
+            Logout(logout_args) => self.logout(logout_args).await,
+            Generate(cmd) => match cmd {
+                GenerateCommand::Shell { shell, output_file } => {
+                    self.generate_completions(shell, output_file).await
+                }
+                GenerateCommand::Manpage { output_file } => {
+                    self.generate_manpage(output_file).await
+                }
+                GenerateCommand::Agents => self.generate_agents().await,
+            },
+            Upgrade { preview } => self.self_upgrade(preview).await,
         }
     }
 }

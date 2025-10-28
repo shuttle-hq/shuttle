@@ -6,7 +6,10 @@ use clap::{
 };
 use clap_complete::Shell;
 
-use crate::args::{create_and_parse_path, parse_path, InitTemplateArg, OutputMode};
+use crate::{
+    args::{create_and_parse_path, parse_path, InitTemplateArg, OutputMode},
+    impulse::config::ImpulseConfig,
+};
 
 #[derive(Parser)]
 #[command(version)]
@@ -18,26 +21,41 @@ pub struct ImpulseArgs {
     pub cmd: ImpulseCommand,
 }
 
-#[derive(Args)]
+#[derive(Args, Clone)]
 #[command(next_help_heading = "Global options")]
 pub struct ImpulseGlobalArgs {
-    /// URL for the Shuttle API to target (overrides inferred URL from api_env)
-    #[arg(global = true, long, env = "SHUTTLE_API", hide = true)]
+    /// URL for the Impulse API to target (overrides inferred URL from api_env)
+    #[arg(global = true, long, env = "IMPULSE_API", hide = true)]
     pub api_url: Option<String>,
     /// Turn on tracing output for Shuttle libraries. (WARNING: can print sensitive data)
-    #[arg(global = true, long, env = "SHUTTLE_DEBUG")]
+    #[arg(global = true, long, env = "IMPULSE_DEBUG")]
     pub debug: bool,
     /// What format to print output in
     #[arg(
         global = true,
         long = "output",
-        env = "SHUTTLE_OUTPUT_MODE",
+        env = "IMPULSE_OUTPUT_MODE",
         default_value = "normal"
     )]
     pub output_mode: OutputMode,
 
     #[arg(global = true, long, visible_alias = "wd", default_value = ".", value_parser = OsStringValueParser::new().try_map(parse_path))]
     pub working_directory: PathBuf,
+}
+
+impl ImpulseGlobalArgs {
+    pub fn into_config(self) -> ImpulseConfig {
+        // Since the API key is sensitive, a clap arg for it is not provided, and the env var is read here instead
+        let api_key = std::env::var("IMPULSE_API_KEY").ok();
+
+        // TODO!: Only set these to Some() if a value was given to the arg, so that the "default_value" is not mistaken for an explicitly given arg.
+        ImpulseConfig {
+            api_url: self.api_url,
+            api_key,
+            debug: Some(self.debug),
+            output_mode: Some(self.output_mode),
+        }
+    }
 }
 
 #[allow(rustdoc::bare_urls)]
@@ -65,8 +83,8 @@ pub enum ImpulseCommand {
     Login(LoginArgs),
     /// Log out of the Impulse platform
     Logout(LogoutArgs),
-    /// Generate shell completions, man page, AI instructions, etc
-    #[command(subcommand)]
+    /// Generate AI instructions, shell completions, man page, etc
+    #[command(subcommand, visible_alias = "gen")]
     Generate(GenerateCommand),
     /// Upgrade the Impulse CLI binary
     Upgrade {
@@ -136,7 +154,7 @@ pub struct LoginArgs {
     // /// Prompt to paste the API key instead of opening the browser
     // #[arg(long, conflicts_with = "api_key", alias = "input")]
     // pub prompt: bool,
-    /// Log in with this Shuttle API key
+    /// Log in with this API key
     #[arg(long)]
     pub api_key: Option<String>,
 }

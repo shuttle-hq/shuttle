@@ -43,7 +43,7 @@ pub trait ConfigManager: Sized {
             })
             .with_context(|| anyhow!("Unable to read configuration file: {}", path.display()))?;
         toml::from_str(config_string.as_str())
-            .with_context(|| anyhow!("Invalid global configuration file: {}", path.display()))
+            .with_context(|| anyhow!("Invalid configuration file: {}", path.display()))
     }
 
     fn save<C>(&self, config: &C) -> Result<()>
@@ -61,10 +61,7 @@ pub trait ConfigManager: Sized {
 
         let config_str = toml::to_string_pretty(config).unwrap();
         config_file.write(config_str.as_bytes()).with_context(|| {
-            anyhow!(
-                "Could not write the global configuration file: {}",
-                path.display()
-            )
+            anyhow!("Could not write the configuration file: {}", path.display())
         })?;
         Ok(())
     }
@@ -88,14 +85,14 @@ impl GlobalConfigManager {
 
 impl ConfigManager for GlobalConfigManager {
     fn directory(&self) -> PathBuf {
-        let shuttle_config_dir = dirs::config_dir()
+        let user_config_dir = dirs::config_dir()
             .ok_or_else(|| {
                 anyhow!(
                     "Could not find a configuration directory. Your operating system may not be supported."
                 )
             })
             .unwrap();
-        shuttle_config_dir.join("shuttle")
+        user_config_dir.join("shuttle")
     }
 
     fn filename(&self) -> PathBuf {

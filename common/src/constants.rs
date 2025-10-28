@@ -1,6 +1,7 @@
 //! Shared constants used across Shuttle crates
 
 // URLs
+pub const IMPULSE_API_URL: &str = "https://api.impulse.co";
 pub const SHUTTLE_API_URL: &str = "https://api.shuttle.dev";
 pub const SHUTTLE_CONSOLE_URL: &str = "https://console.shuttle.dev";
 

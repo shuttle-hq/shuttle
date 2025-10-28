@@ -11,6 +11,7 @@ use clap::{
     Args, Parser, Subcommand, ValueEnum,
 };
 use clap_complete::Shell;
+use serde::{Deserialize, Serialize};
 use shuttle_common::{
     constants::EXAMPLES_REPO,
     models::{deployment::BuildMeta, resource::ResourceType},
@@ -61,7 +62,8 @@ pub struct ShuttleArgs {
     pub cmd: Command,
 }
 
-#[derive(ValueEnum, Clone, Debug, Default, PartialEq)]
+#[derive(ValueEnum, Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum OutputMode {
     #[default]
     Normal,

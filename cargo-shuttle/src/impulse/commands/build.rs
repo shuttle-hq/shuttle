@@ -17,7 +17,7 @@ impl Impulse {
 
         let image_name = dirname;
         nixpacks::create_docker_image(
-            build_args.path.as_str(),
+            build_args.path.as_str(), // TODO: change to global_args.working_directory relative to cwd
             Vec::new(),
             &GeneratePlanOptions {
                 plan: Some(BuildPlan::default()),

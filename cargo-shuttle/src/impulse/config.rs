@@ -71,22 +71,27 @@ impl ConfigLayers {
         let mut config = ImpulseConfig::default_values();
 
         if self.global.exists() {
+            tracing::debug!(file = %self.global.path().display(), "Found config file");
             if let Ok(globals) = self.global.open::<ImpulseConfig>() {
                 config = config.merge_with(globals);
             }
         }
         if self.local.exists() {
+            tracing::debug!(file = %self.local.path().display(), "Found config file");
             if let Ok(locals) = self.local.open::<ImpulseConfig>() {
                 config = config.merge_with(locals);
             }
         }
         if self.local_internal.exists() {
+            tracing::debug!(file = %self.local_internal.path().display(), "Found config file");
             if let Ok(locals_int) = self.local_internal.open::<ImpulseConfig>() {
                 config = config.merge_with(locals_int);
             }
         }
 
         config = config.merge_with(global_args.into_config());
+
+        tracing::debug!(config = ?config, "Resolved config");
 
         config
     }

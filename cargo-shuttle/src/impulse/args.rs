@@ -39,6 +39,11 @@ pub struct ImpulseGlobalArgs {
     )]
     pub output_mode: OutputMode,
 
+    /// Utility for knowing which of the above config fields were given as args, not used for parsing
+    #[arg(skip)]
+    pub arg_provided_fields: Vec<&'static str>,
+
+    // Global args that can't be modified in config:
     #[arg(global = true, long, visible_alias = "wd", default_value = ".", value_parser = OsStringValueParser::new().try_map(parse_path))]
     pub working_directory: PathBuf,
 }
@@ -48,12 +53,20 @@ impl ImpulseGlobalArgs {
         // Since the API key is sensitive, a clap arg for it is not provided, and the env var is read here instead
         let api_key = std::env::var("IMPULSE_API_KEY").ok();
 
-        // TODO!: Only set these to Some() if a value was given to the arg, so that the "default_value" is not mistaken for an explicitly given arg.
+        // For args that have default values in clap:
+        //   Only set them to Some() if a value was given on the command line,
+        //   so that the default value is not mistaken as an explicitly given arg and overrides config from files.
         ImpulseConfig {
             api_url: self.api_url,
             api_key,
-            debug: Some(self.debug),
-            output_mode: Some(self.output_mode),
+            debug: self
+                .arg_provided_fields
+                .contains(&"debug")
+                .then_some(self.debug),
+            output_mode: self
+                .arg_provided_fields
+                .contains(&"output_mode")
+                .then_some(self.output_mode),
         }
     }
 }

@@ -31,6 +31,7 @@ impl Impulse {
         };
 
         // Save global config and reload API client
+        tracing::debug!("Saving global config");
         let mut global = self
             .config
             .global
@@ -53,6 +54,7 @@ impl Impulse {
         // }
 
         // Save global config and reload API client
+        tracing::debug!("Saving global config");
         if let Ok(mut global) = self.config.global.open::<ImpulseConfig>() {
             global.api_key = None;
             self.config.global.save(&global)?;

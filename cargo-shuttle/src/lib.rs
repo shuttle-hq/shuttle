@@ -55,7 +55,7 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::time::{sleep, Duration};
 use tokio_tungstenite::tungstenite::Message;
 use tracing::{debug, error, info, trace, warn};
-use tracing_subscriber::{fmt, prelude::*, registry, EnvFilter};
+use tracing_subscriber::{fmt, prelude::*, registry, reload, EnvFilter, Registry};
 use zip::write::FileOptions;
 
 use crate::args::{
@@ -100,20 +100,35 @@ pub fn parse_args() -> (ShuttleArgs, bool) {
     (args, provided_path_to_init)
 }
 
-pub fn setup_tracing(debug: bool) {
+/// Sets up a tracing subscriber respecting RUST_LOG and the debug flag.
+/// Returns a handle for hot-reloading the EnvFilter layer.
+pub fn setup_tracing(debug: bool) -> reload::Handle<EnvFilter, Registry> {
+    let (filter, reload_handle) = reload::Layer::new(env_filter(debug));
     registry()
+        .with(filter)
         .with(fmt::layer().with_writer(std::io::stderr))
-        .with(
-            // let user set RUST_LOG if they want to
-            EnvFilter::try_from_default_env().unwrap_or_else(|_| {
-                if debug {
-                    EnvFilter::new("info,cargo_shuttle=trace,shuttle=trace")
-                } else {
-                    EnvFilter::default()
-                }
-            }),
-        )
         .init();
+
+    reload_handle
+}
+
+pub fn reload_env_filter(handle: &reload::Handle<EnvFilter, Registry>, debug: bool) {
+    tracing::trace!("reloading tracing subscriber filter");
+    handle.modify(|filter| *filter = env_filter(debug)).unwrap();
+    tracing::trace!("reloaded tracing subscriber filter");
+}
+
+pub fn env_filter(debug: bool) -> EnvFilter {
+    // let user set RUST_LOG if they want to
+    EnvFilter::try_from_default_env()
+        // else use presets based on debug flag
+        .unwrap_or_else(|_| {
+            if debug {
+                EnvFilter::new("info,cargo_shuttle=trace,shuttle=trace")
+            } else {
+                EnvFilter::default()
+            }
+        })
 }
 
 #[derive(PartialEq)]

@@ -8,10 +8,14 @@ use anyhow::{bail, Result};
 use hyper::HeaderMap;
 use shuttle_api_client::{impulse::ImpulseClient, ShuttleApiClient};
 use shuttle_common::constants::headers::X_CARGO_SHUTTLE_VERSION;
+use tracing_subscriber::{reload::Handle, EnvFilter, Registry};
 
-use crate::impulse::{
-    args::{GenerateCommand, ImpulseCommand, ImpulseGlobalArgs},
-    config::ConfigLayers,
+use crate::{
+    impulse::{
+        args::{GenerateCommand, ImpulseCommand, ImpulseGlobalArgs},
+        config::ConfigLayers,
+    },
+    reload_env_filter,
 };
 
 pub enum ImpulseCommandOutput {
@@ -20,7 +24,6 @@ pub enum ImpulseCommandOutput {
 }
 
 pub struct Impulse {
-    // ctx: RequestContext,
     config: ConfigLayers,
     _client: Option<ImpulseClient>,
     global_args: ImpulseGlobalArgs,
@@ -30,17 +33,22 @@ pub struct Impulse {
 
 impl Impulse {
     pub fn new(
-        global_args: ImpulseGlobalArgs, /* bin: Binary */ /* env_override: Option<String> */
+        global_args: ImpulseGlobalArgs,
+        // bin: Binary,
+        // env_override: Option<String>,
+        env_filter_handle: Option<Handle<EnvFilter, Registry>>,
     ) -> Result<Self> {
-        // let ctx = RequestContext::load_global(env_override.inspect(|e| {
-        //     eprintln!(
-        //         "{}",
-        //         format!("INFO: Using non-default global config file: {e}").yellow(),
-        //     )
-        // }))?;
+        let config = ConfigLayers::new(&global_args);
+
+        // Load config files and refresh the env filter based on the potentially new debug value
+        // TODO?: move this out? resolve config earlier?
+        if let Some(ref handle) = env_filter_handle {
+            let c = config.resolve_config(global_args.clone());
+            reload_env_filter(handle, c.debug.unwrap_or_default());
+        }
+
         Ok(Self {
-            // ctx,
-            config: ConfigLayers::new(&global_args),
+            config,
             _client: None,
             global_args,
             // bin,

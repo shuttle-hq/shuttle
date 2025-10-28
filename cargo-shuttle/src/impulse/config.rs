@@ -6,7 +6,7 @@ use shuttle_common::{
 
 use crate::{args::OutputMode, config::LocalConfigManager, impulse::args::ImpulseGlobalArgs};
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Default, Debug, Serialize, Deserialize)]
 pub struct ImpulseConfig {
     pub api_url: Option<String>,
     pub api_key: Option<String>,
@@ -14,8 +14,9 @@ pub struct ImpulseConfig {
     pub output_mode: Option<OutputMode>,
 }
 
-impl Default for ImpulseConfig {
-    fn default() -> Self {
+impl ImpulseConfig {
+    /// `Default::default()` is used for all-None config. This is used for default values when none are set.
+    pub fn default_values() -> Self {
         Self {
             api_url: Some(IMPULSE_API_URL.to_owned()),
             api_key: None,
@@ -46,7 +47,8 @@ pub struct ConfigLayers {
 impl ConfigLayers {
     pub fn new(global_args: &ImpulseGlobalArgs) -> Self {
         Self {
-            global: GlobalConfigManager::new(None).expect("No environments in impulse yet"),
+            global: GlobalConfigManager::new("impulse".to_owned(), None)
+                .expect("No environments in impulse yet"),
             local_internal: LocalConfigManager::new(
                 global_args.working_directory.join(".impulse"),
                 "config.toml".to_owned(),
@@ -66,7 +68,7 @@ impl ConfigLayers {
     /// - CLI args
     // TODO?: other return type with guaranteed Some() values replaced with non-Options?
     pub fn resolve_config(&self, global_args: ImpulseGlobalArgs) -> ImpulseConfig {
-        let mut config = ImpulseConfig::default();
+        let mut config = ImpulseConfig::default_values();
 
         if self.global.exists() {
             if let Ok(globals) = self.global.open::<ImpulseConfig>() {

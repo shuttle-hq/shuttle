@@ -79,7 +79,10 @@ pub struct RequestContext {
 impl RequestContext {
     /// Create a [`RequestContext`], only loading in the global configuration details.
     pub fn load_global(env_override: Option<String>) -> Result<Self> {
-        let mut global = Config::new(GlobalConfigManager::new(env_override)?);
+        let mut global = Config::new(GlobalConfigManager::new(
+            "shuttle".to_owned(),
+            env_override,
+        )?);
         if !global.exists() {
             global.create()?;
         }

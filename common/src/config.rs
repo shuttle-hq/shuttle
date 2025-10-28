@@ -68,18 +68,22 @@ pub trait ConfigManager: Sized {
 }
 
 pub struct GlobalConfigManager {
+    config_folder_name: String,
     env_override: Option<String>,
 }
 
 impl GlobalConfigManager {
-    pub fn new(env_override: Option<String>) -> Result<Self> {
+    pub fn new(config_folder_name: String, env_override: Option<String>) -> Result<Self> {
         if let Some(ref s) = env_override {
             if s.chars().any(|c| !c.is_ascii_alphanumeric()) {
                 return Err(anyhow!("Invalid Shuttle API Environment name"));
             }
         }
 
-        Ok(Self { env_override })
+        Ok(Self {
+            config_folder_name,
+            env_override,
+        })
     }
 }
 
@@ -92,7 +96,7 @@ impl ConfigManager for GlobalConfigManager {
                 )
             })
             .unwrap();
-        user_config_dir.join("shuttle")
+        user_config_dir.join(&self.config_folder_name)
     }
 
     fn filename(&self) -> PathBuf {

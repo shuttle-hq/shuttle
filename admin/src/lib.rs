@@ -18,7 +18,7 @@ pub async fn run(args: Args) {
         Ok(s) => s,
         Err(_) => {
             let mut global = Config::<_, GlobalConfig>::new(
-                GlobalConfigManager::new(args.api_env.clone()).unwrap(),
+                GlobalConfigManager::new("shuttle".to_owned(), args.api_env.clone()).unwrap(),
             );
             let path = global.manager.path();
             tracing::trace!(?path, "looking for config");

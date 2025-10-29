@@ -67,7 +67,9 @@ impl Impulse {
     }
 
     pub async fn generate_agents(&self) -> Result<ImpulseCommandOutput> {
-        unimplemented!();
+        let a = self.client.get_agents_md().await?;
+        println!("{a}");
+        // TODO: write it to the file
         Ok(ImpulseCommandOutput::None)
     }
 }

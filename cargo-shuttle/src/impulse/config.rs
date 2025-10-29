@@ -1,12 +1,17 @@
-use anyhow::Context;
+use std::collections::HashMap;
+
+use anyhow::{Context, Result};
+use hyper::HeaderMap;
 use serde::{Deserialize, Serialize};
+use shuttle_api_client::{impulse::ImpulseClient, ShuttleApiClient};
 use shuttle_common::{
     config::{ConfigManager, GlobalConfigManager},
-    constants::IMPULSE_API_URL,
+    constants::{headers::X_CARGO_SHUTTLE_VERSION, IMPULSE_API_URL},
 };
 
 use crate::{args::OutputMode, config::LocalConfigManager, impulse::args::ImpulseGlobalArgs};
 
+/// Schema for each config file. Everything is optional.
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct ImpulseConfig {
     pub api_url: Option<String>,
@@ -60,41 +65,36 @@ pub struct ResolvedImpulseConfig {
     pub output_mode: OutputMode,
 }
 
-pub struct ConfigLayers {
+pub struct ConfigHandler {
     global: GlobalConfigManager,
-    local: LocalConfigManager,
-    local_internal: LocalConfigManager,
-    args_config: ImpulseConfig,
+    _local: LocalConfigManager,
+    _local_internal: LocalConfigManager,
 
-    resolved: Option<ResolvedImpulseConfig>,
+    resolved: ResolvedImpulseConfig,
 }
 
-impl ConfigLayers {
-    pub fn new(global_args: ImpulseGlobalArgs) -> Self {
-        Self {
-            global: GlobalConfigManager::new("impulse".to_owned(), None)
-                .expect("No environments in impulse yet"),
-            local_internal: LocalConfigManager::new(
-                global_args.working_directory.join(".impulse"),
-                "config.toml".to_owned(),
-            ),
-            local: LocalConfigManager::new(
-                global_args.working_directory.clone(),
-                "Impulse.toml".to_owned(),
-            ),
-            args_config: global_args.into_config(),
-            resolved: None,
-        }
-    }
+impl ConfigHandler {
+    pub fn new(global_args: ImpulseGlobalArgs) -> Result<Self> {
+        let global = GlobalConfigManager::new("impulse".to_owned(), None)
+            .expect("No environments in impulse yet");
+        let local_internal = LocalConfigManager::new(
+            global_args.working_directory.join(".impulse"),
+            "config.toml".to_owned(),
+        );
+        let local = LocalConfigManager::new(
+            global_args.working_directory.clone(),
+            "Impulse.toml".to_owned(),
+        );
 
-    pub fn get_config(&mut self) -> anyhow::Result<ResolvedImpulseConfig> {
-        if self.resolved.is_none() {
-            self.resolve_config()?;
-        }
-        Ok(self
-            .resolved
-            .clone()
-            .context("expected config to be resolved")?)
+        let resolved =
+            Self::resolve_config(&global, &local, &local_internal, global_args.into_config())?;
+
+        Ok(Self {
+            global,
+            _local_internal: local_internal,
+            _local: local,
+            resolved,
+        })
     }
 
     /// Read and resolve config values in the order:
@@ -103,39 +103,46 @@ impl ConfigLayers {
     /// - Local "internal" config (.impulse/config.toml)
     /// - Env vars
     /// - CLI args
-    fn resolve_config(&mut self) -> anyhow::Result<()> {
+    fn resolve_config(
+        global: &GlobalConfigManager,
+        local: &LocalConfigManager,
+        local_internal: &LocalConfigManager,
+        args_config: ImpulseConfig,
+    ) -> Result<ResolvedImpulseConfig> {
         let mut config = ImpulseConfig::default_values();
 
-        if self.global.exists() {
-            tracing::debug!(file = %self.global.path().display(), "Found config file");
-            if let Ok(globals) = self.global.open::<ImpulseConfig>() {
+        if global.exists() {
+            tracing::debug!(file = %global.path().display(), "Reading config file");
+            if let Ok(globals) = global.open::<ImpulseConfig>() {
                 config = config.merge_with(globals);
             }
         }
-        if self.local.exists() {
-            tracing::debug!(file = %self.local.path().display(), "Found config file");
-            if let Ok(locals) = self.local.open::<ImpulseConfig>() {
+        if local.exists() {
+            tracing::debug!(file = %local.path().display(), "Reading config file");
+            if let Ok(locals) = local.open::<ImpulseConfig>() {
                 config = config.merge_with(locals);
             }
         }
-        if self.local_internal.exists() {
-            tracing::debug!(file = %self.local_internal.path().display(), "Found config file");
-            if let Ok(locals_int) = self.local_internal.open::<ImpulseConfig>() {
+        if local_internal.exists() {
+            tracing::debug!(file = %local_internal.path().display(), "Reading config file");
+            if let Ok(locals_int) = local_internal.open::<ImpulseConfig>() {
                 config = config.merge_with(locals_int);
             }
         }
 
-        config = config.merge_with(self.args_config.clone());
+        config = config.merge_with(args_config);
         let resolved = config.into_resolved()?;
 
         tracing::debug!(config = ?resolved, "Resolved config");
 
-        self.resolved = Some(resolved);
-
-        Ok(())
+        Ok(resolved)
     }
 
-    pub fn modify_global<F>(&mut self, mut f: F) -> anyhow::Result<()>
+    pub fn config(&self) -> &ResolvedImpulseConfig {
+        &self.resolved
+    }
+
+    pub fn modify_global<F>(&mut self, mut f: F) -> Result<()>
     where
         F: FnMut(&mut ImpulseConfig) -> (),
     {
@@ -143,5 +150,24 @@ impl ConfigLayers {
         f(&mut global);
         self.global.save(&global)?;
         Ok(())
+    }
+
+    /// Create a new API client based on this config's values
+    pub fn make_api_client(&self) -> Result<ImpulseClient> {
+        let config = self.config();
+        Ok(ImpulseClient {
+            inner: ShuttleApiClient::new(
+                config.api_url.clone(),
+                config.api_key.clone(),
+                Some(
+                    HeaderMap::try_from(&HashMap::from([(
+                        X_CARGO_SHUTTLE_VERSION.clone(),
+                        crate::VERSION.to_owned(),
+                    )]))
+                    .unwrap(),
+                ),
+                None,
+            ),
+        })
     }
 }

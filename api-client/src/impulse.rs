@@ -1,6 +1,6 @@
 use anyhow::Result;
 
-use crate::{util::ParsedJson, ShuttleApiClient};
+use crate::{util::ToBodyContent, ShuttleApiClient};
 
 pub struct ImpulseClient {
     pub inner: ShuttleApiClient,
@@ -13,7 +13,11 @@ impl ImpulseClient {
         }
     }
 
-    pub async fn todo(&self) -> Result<ParsedJson<String>> {
-        self.inner.get_json("/todo").await
+    pub async fn get_agents_md(&self) -> Result<String> {
+        self.inner
+            .get("/todo", Option::<()>::None)
+            .await?
+            .to_text()
+            .await
     }
 }

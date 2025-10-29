@@ -36,14 +36,12 @@ impl Impulse {
         tracing::debug!("Saving global config");
         self.config
             .modify_global(|g| g.api_key = Some(api_key.clone()))?;
-        self.client = Some(self.make_api_client()?);
+        self.refresh_api_client()?;
 
         // if offline {
         //     eprintln!("INFO: Skipping API key verification");
         let (user, raw_json) = self
             .client
-            .as_ref()
-            .unwrap()
             // TODO: use actual impulse endpoint
             .inner
             .get_current_user()
@@ -51,7 +49,7 @@ impl Impulse {
             .context("failed to check API key validity")?
             .into_parts();
 
-        match self.config.get_config()?.output_mode {
+        match self.config.config().output_mode {
             OutputMode::Normal => {
                 println!("Logged in as {}", user.id.bold());
             }
@@ -64,6 +62,7 @@ impl Impulse {
     }
 
     pub async fn logout(&mut self, _logout_args: LogoutArgs) -> Result<ImpulseCommandOutput> {
+        // Reset API key endpoint:
         // if logout_args.reset_api_key {
         //     let client = self.client.as_ref().unwrap();
         //     client.reset_api_key().await.context("Resetting API key")?;
@@ -74,7 +73,7 @@ impl Impulse {
         tracing::debug!("Saving global config");
         self.config.modify_global(|g| g.api_key = None)?;
         // TODO: clear the key from local configs too?
-        self.client = Some(self.make_api_client()?);
+        self.refresh_api_client()?;
 
         eprintln!("Successfully logged out.");
         eprintln!(" -> Use `impulse login` to log in again.");

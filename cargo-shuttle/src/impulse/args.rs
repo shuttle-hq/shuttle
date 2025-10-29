@@ -124,6 +124,9 @@ pub struct RunArgs {
     /// Use 0.0.0.0 instead of localhost
     #[arg(long)]
     pub external: bool,
+
+    #[command(flatten)]
+    pub build_args: BuildArgs,
 }
 
 #[derive(Args, Clone, Debug, Default)]

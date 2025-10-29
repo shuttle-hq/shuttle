@@ -49,6 +49,12 @@ pub struct ImpulseGlobalArgs {
 }
 
 impl ImpulseGlobalArgs {
+    pub fn workdir_name(&self) -> Option<String> {
+        self.working_directory
+            .file_name()
+            .map(|s| s.to_string_lossy().into_owned())
+    }
+
     pub fn into_config(self) -> ImpulseConfig {
         // Since the API key is sensitive, a clap arg for it is not provided, and the env var is read here instead
         let api_key = std::env::var("IMPULSE_API_KEY").ok();
@@ -143,10 +149,10 @@ pub struct InitArgs {
 
 #[derive(Args, Debug, Default)]
 pub struct BuildArgs {
-    pub path: String,
-
+    /// Tag for the docker image
     #[arg(long)]
-    pub dockerfile: Option<String>,
+    pub tag: Option<String>,
+    /// Print the generated Dockerfile instead of building
     #[arg(long)]
     pub print_dockerfile: bool,
 }

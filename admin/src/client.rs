@@ -173,6 +173,14 @@ impl Client {
             .await
     }
 
+    pub async fn suspend_user(&self, user_id: &str) -> Result<()> {
+        self.inner
+            .put(format!("/admin/users/{user_id}"), Option::<()>::None)
+            .await?
+            .to_empty()
+            .await
+    }
+
     pub async fn set_user_tier(&self, user_id: &str, account_tier: AccountTier) -> Result<()> {
         self.inner
             .put(

@@ -599,6 +599,7 @@ export interface UserResponse {
 	account_tier: AccountTier;
 	subscriptions?: Subscription[];
 	flags?: string[];
+	suspended_at?: string;
 }
 
 /** Response for the /user/me/usage backend endpoint */

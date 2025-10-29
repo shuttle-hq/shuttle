@@ -1,11 +1,13 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
+use crossterm::style::Stylize;
 use dialoguer::{theme::ColorfulTheme, Password};
-use shuttle_common::config::ConfigManager;
 
-use crate::impulse::{
-    args::{LoginArgs, LogoutArgs},
-    config::ImpulseConfig,
-    Impulse, ImpulseCommandOutput,
+use crate::{
+    args::OutputMode,
+    impulse::{
+        args::{LoginArgs, LogoutArgs},
+        Impulse, ImpulseCommandOutput,
+    },
 };
 
 impl Impulse {
@@ -32,16 +34,31 @@ impl Impulse {
 
         // Save global config and reload API client
         tracing::debug!("Saving global config");
-        let mut global = self
-            .config
-            .global
-            .open::<ImpulseConfig>()
-            .unwrap_or_default();
-        global.api_key = Some(api_key);
-        self.config.global.save(&global)?;
-        self._client = Some(self.make_api_client());
+        self.config
+            .modify_global(|g| g.api_key = Some(api_key.clone()))?;
+        self.client = Some(self.make_api_client()?);
 
-        // TODO: validate successful login with API call
+        // if offline {
+        //     eprintln!("INFO: Skipping API key verification");
+        let (user, raw_json) = self
+            .client
+            .as_ref()
+            .unwrap()
+            // TODO: use actual impulse endpoint
+            .inner
+            .get_current_user()
+            .await
+            .context("failed to check API key validity")?
+            .into_parts();
+
+        match self.config.get_config()?.output_mode {
+            OutputMode::Normal => {
+                println!("Logged in as {}", user.id.bold());
+            }
+            OutputMode::Json => {
+                println!("{}", raw_json);
+            }
+        }
 
         Ok(ImpulseCommandOutput::None)
     }
@@ -55,12 +72,9 @@ impl Impulse {
 
         // Save global config and reload API client
         tracing::debug!("Saving global config");
-        if let Ok(mut global) = self.config.global.open::<ImpulseConfig>() {
-            global.api_key = None;
-            self.config.global.save(&global)?;
-            self._client = Some(self.make_api_client());
-        };
+        self.config.modify_global(|g| g.api_key = None)?;
         // TODO: clear the key from local configs too?
+        self.client = Some(self.make_api_client()?);
 
         eprintln!("Successfully logged out.");
         eprintln!(" -> Use `impulse login` to log in again.");

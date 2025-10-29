@@ -1,3 +1,4 @@
+use anyhow::Context;
 use serde::{Deserialize, Serialize};
 use shuttle_common::{
     config::{ConfigManager, GlobalConfigManager},
@@ -6,7 +7,7 @@ use shuttle_common::{
 
 use crate::{args::OutputMode, config::LocalConfigManager, impulse::args::ImpulseGlobalArgs};
 
-#[derive(Default, Debug, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct ImpulseConfig {
     pub api_url: Option<String>,
     pub api_key: Option<String>,
@@ -24,9 +25,7 @@ impl ImpulseConfig {
             output_mode: Some(OutputMode::Normal),
         }
     }
-}
 
-impl ImpulseConfig {
     /// Create a new [`ImpulseConfig`] with the values in `other` overriding the values in `self`
     pub fn merge_with(self, other: ImpulseConfig) -> Self {
         Self {
@@ -36,16 +35,42 @@ impl ImpulseConfig {
             output_mode: other.output_mode.or(self.output_mode),
         }
     }
+
+    /// Assume all non-optional fields have been set and convert to more convenient type
+    pub fn into_resolved(self) -> anyhow::Result<ResolvedImpulseConfig> {
+        Ok(ResolvedImpulseConfig {
+            api_url: self
+                .api_url
+                .context("missing api_url when resolving config")?,
+            api_key: self.api_key,
+            debug: self.debug.context("missing debug when resolving config")?,
+            output_mode: self
+                .output_mode
+                .context("missing output_mode when resolving config")?,
+        })
+    }
+}
+
+/// Same as `ImpulseConfig`, but all non-optional fields are not options
+#[derive(Debug, Clone)]
+pub struct ResolvedImpulseConfig {
+    pub api_url: String,
+    pub api_key: Option<String>,
+    pub debug: bool,
+    pub output_mode: OutputMode,
 }
 
 pub struct ConfigLayers {
-    pub global: GlobalConfigManager,
-    pub local: LocalConfigManager,
-    pub local_internal: LocalConfigManager,
+    global: GlobalConfigManager,
+    local: LocalConfigManager,
+    local_internal: LocalConfigManager,
+    args_config: ImpulseConfig,
+
+    resolved: Option<ResolvedImpulseConfig>,
 }
 
 impl ConfigLayers {
-    pub fn new(global_args: &ImpulseGlobalArgs) -> Self {
+    pub fn new(global_args: ImpulseGlobalArgs) -> Self {
         Self {
             global: GlobalConfigManager::new("impulse".to_owned(), None)
                 .expect("No environments in impulse yet"),
@@ -57,7 +82,19 @@ impl ConfigLayers {
                 global_args.working_directory.clone(),
                 "Impulse.toml".to_owned(),
             ),
+            args_config: global_args.into_config(),
+            resolved: None,
         }
+    }
+
+    pub fn get_config(&mut self) -> anyhow::Result<ResolvedImpulseConfig> {
+        if self.resolved.is_none() {
+            self.resolve_config()?;
+        }
+        Ok(self
+            .resolved
+            .clone()
+            .context("expected config to be resolved")?)
     }
 
     /// Read and resolve config values in the order:
@@ -66,8 +103,7 @@ impl ConfigLayers {
     /// - Local "internal" config (.impulse/config.toml)
     /// - Env vars
     /// - CLI args
-    // TODO?: other return type with guaranteed Some() values replaced with non-Options?
-    pub fn resolve_config(&self, global_args: ImpulseGlobalArgs) -> ImpulseConfig {
+    fn resolve_config(&mut self) -> anyhow::Result<()> {
         let mut config = ImpulseConfig::default_values();
 
         if self.global.exists() {
@@ -89,10 +125,23 @@ impl ConfigLayers {
             }
         }
 
-        config = config.merge_with(global_args.into_config());
+        config = config.merge_with(self.args_config.clone());
+        let resolved = config.into_resolved()?;
 
-        tracing::debug!(config = ?config, "Resolved config");
+        tracing::debug!(config = ?resolved, "Resolved config");
 
-        config
+        self.resolved = Some(resolved);
+
+        Ok(())
+    }
+
+    pub fn modify_global<F>(&mut self, mut f: F) -> anyhow::Result<()>
+    where
+        F: FnMut(&mut ImpulseConfig) -> (),
+    {
+        let mut global = self.global.open::<ImpulseConfig>().unwrap_or_default();
+        f(&mut global);
+        self.global.save(&global)?;
+        Ok(())
     }
 }

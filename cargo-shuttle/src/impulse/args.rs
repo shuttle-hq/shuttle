@@ -144,6 +144,11 @@ pub struct InitArgs {
 #[derive(Args, Debug, Default)]
 pub struct BuildArgs {
     pub path: String,
+
+    #[arg(long)]
+    pub dockerfile: Option<String>,
+    #[arg(long)]
+    pub print_dockerfile: bool,
 }
 
 #[derive(Args, Default)]

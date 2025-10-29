@@ -25,7 +25,7 @@ pub enum ImpulseCommandOutput {
 
 pub struct Impulse {
     config: ConfigLayers,
-    _client: Option<ImpulseClient>,
+    client: Option<ImpulseClient>,
     global_args: ImpulseGlobalArgs,
     // /// Alter behaviour based on which CLI is used
     // bin: Binary,
@@ -38,18 +38,17 @@ impl Impulse {
         // env_override: Option<String>,
         env_filter_handle: Option<Handle<EnvFilter, Registry>>,
     ) -> Result<Self> {
-        let config = ConfigLayers::new(&global_args);
+        let mut config = ConfigLayers::new(global_args.clone());
 
         // Load config files and refresh the env filter based on the potentially new debug value
         // TODO?: move this out? resolve config earlier?
         if let Some(ref handle) = env_filter_handle {
-            let c = config.resolve_config(global_args.clone());
-            reload_env_filter(handle, c.debug.unwrap_or_default());
+            reload_env_filter(handle, config.get_config()?.debug);
         }
 
         Ok(Self {
             config,
-            _client: None,
+            client: None,
             global_args,
             // bin,
         })
@@ -59,12 +58,12 @@ impl Impulse {
         use ImpulseCommand::*;
 
         // For all commands that call an API, initiate the client if it has not yet been done
-        if matches!(command, Deploy(_)) {
-            if self._client.is_none() {
-                self._client = Some(self.make_api_client());
+        if matches!(command, Deploy(_) | Login(_)) {
+            if self.client.is_none() {
+                self.client = Some(self.make_api_client()?);
             }
             if self
-                ._client
+                .client
                 .as_ref()
                 .is_some_and(|c| c.inner.api_key.is_none())
             {
@@ -93,13 +92,13 @@ impl Impulse {
     }
 
     /// Create a new API client based on the current values in config
-    pub fn make_api_client(&mut self) -> ImpulseClient {
-        let c = self.config.resolve_config(self.global_args.clone());
+    pub fn make_api_client(&mut self) -> Result<ImpulseClient> {
+        let config = self.config.get_config()?;
 
-        ImpulseClient {
+        Ok(ImpulseClient {
             inner: ShuttleApiClient::new(
-                c.api_url.expect("An API URL to be loaded"),
-                c.api_key,
+                config.api_url,
+                config.api_key,
                 Some(
                     HeaderMap::try_from(&HashMap::from([(
                         X_CARGO_SHUTTLE_VERSION.clone(),
@@ -109,6 +108,6 @@ impl Impulse {
                 ),
                 None,
             ),
-        }
+        })
     }
 }

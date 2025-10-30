@@ -430,6 +430,7 @@ dependencies = [
  "ignore",
  "indicatif",
  "indoc",
+ "nix",
  "portpicker",
  "regex",
  "reqwest",

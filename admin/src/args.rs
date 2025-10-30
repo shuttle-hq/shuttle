@@ -110,6 +110,11 @@ pub enum Command {
         user_id: String,
     },
 
+    /// Suspend a user
+    SuspendUser {
+        user_id: String,
+    },
+
     SetAccountTier {
         user_id: String,
         tier: AccountTier,

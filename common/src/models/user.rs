@@ -23,6 +23,7 @@ pub struct UserResponse {
     pub account_tier: AccountTier,
     pub subscriptions: Option<Vec<Subscription>>,
     pub flags: Option<Vec<String>>,
+    pub suspended_at: Option<DateTime<Utc>>,
 }
 
 impl UserResponse {
@@ -37,6 +38,9 @@ impl UserResponse {
             self.account_tier.to_string_fancy()
         )
         .unwrap();
+        if let Some(suspended_at) = self.suspended_at.as_ref() {
+            writeln!(&mut s, "  Suspended at: {}", suspended_at).unwrap();
+        }
         if let Some(subs) = self.subscriptions.as_ref() {
             if !subs.is_empty() {
                 writeln!(&mut s, "  Subscriptions:").unwrap();

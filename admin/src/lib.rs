@@ -154,6 +154,12 @@ pub async fn run(args: Args) {
             let msg = client.delete_user(&user_id).await.unwrap();
             println!("{msg}");
         }
+        Command::SuspendUser { user_id } => {
+            eprintln!("Suspending user {} in 3 seconds...", user_id);
+            tokio::time::sleep(tokio::time::Duration::from_millis(3000)).await;
+            client.suspend_user(&user_id).await.unwrap();
+            println!("User {user_id} suspended");
+        }
         Command::SetAccountTier { user_id, tier } => {
             client.set_user_tier(&user_id, tier.clone()).await.unwrap();
             println!("Set {user_id} to {tier}");

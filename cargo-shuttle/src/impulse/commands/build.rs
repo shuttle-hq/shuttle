@@ -31,7 +31,7 @@ impl Impulse {
 
         nixpacks::create_docker_image(
             rel_path,
-            Vec::new(),
+            build_args.env.iter().map(|e| e.as_str()).collect(),
             &GeneratePlanOptions {
                 plan: Some(BuildPlan::default()),
                 config_file: None,

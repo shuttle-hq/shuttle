@@ -158,6 +158,9 @@ pub struct BuildArgs {
     /// Print the generated Dockerfile instead of building
     #[arg(long)]
     pub print_dockerfile: bool,
+    /// Provide environment variables to your build
+    #[arg(long, short)]
+    pub env: Vec<String>,
 }
 
 #[derive(Args, Default)]

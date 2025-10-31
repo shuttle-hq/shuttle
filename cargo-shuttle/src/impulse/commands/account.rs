@@ -42,7 +42,7 @@ impl Impulse {
         let (user, raw_json) = self
             .client
             // TODO: use actual impulse endpoint
-            .inner
+            .ai_service_client
             .get_current_user()
             .await
             .context("failed to check API key validity")?

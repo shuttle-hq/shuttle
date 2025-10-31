@@ -24,9 +24,12 @@ pub struct ImpulseArgs {
 #[derive(Args, Clone)]
 #[command(next_help_heading = "Global options")]
 pub struct ImpulseGlobalArgs {
-    /// URL for the Impulse API to target (overrides inferred URL from api_env)
+    /// URL for the Impulse API to target
     #[arg(global = true, long, env = "IMPULSE_API", hide = true)]
     pub api_url: Option<String>,
+    /// URL for the Impulse AI service to target
+    #[arg(global = true, long, env = "IMPULSE_AI", hide = true)]
+    pub ai_url: Option<String>,
     /// Turn on tracing output for Shuttle libraries. (WARNING: can print sensitive data)
     #[arg(global = true, long, env = "IMPULSE_DEBUG")]
     pub debug: bool,
@@ -64,6 +67,7 @@ impl ImpulseGlobalArgs {
         //   so that the default value is not mistaken as an explicitly given arg and overrides config from files.
         ImpulseConfig {
             api_url: self.api_url,
+            ai_url: self.ai_url,
             api_key,
             debug: self
                 .arg_provided_fields

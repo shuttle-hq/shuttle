@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use shuttle_api_client::{impulse::ImpulseClient, ShuttleApiClient};
 use shuttle_common::{
     config::{ConfigManager, GlobalConfigManager},
-    constants::{headers::X_CARGO_SHUTTLE_VERSION, IMPULSE_API_URL},
+    constants::{headers::X_CARGO_SHUTTLE_VERSION, IMPULSE_AI_URL, IMPULSE_API_URL},
 };
 
 use crate::{args::OutputMode, config::LocalConfigManager, impulse::args::ImpulseGlobalArgs};
@@ -15,6 +15,7 @@ use crate::{args::OutputMode, config::LocalConfigManager, impulse::args::Impulse
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct ImpulseConfig {
     pub api_url: Option<String>,
+    pub ai_url: Option<String>,
     pub api_key: Option<String>,
     pub debug: Option<bool>,
     pub output_mode: Option<OutputMode>,
@@ -25,6 +26,7 @@ impl ImpulseConfig {
     pub fn default_values() -> Self {
         Self {
             api_url: Some(IMPULSE_API_URL.to_owned()),
+            ai_url: Some(IMPULSE_AI_URL.to_owned()),
             api_key: None,
             debug: Some(false),
             output_mode: Some(OutputMode::Normal),
@@ -35,6 +37,7 @@ impl ImpulseConfig {
     pub fn merge_with(self, other: ImpulseConfig) -> Self {
         Self {
             api_url: other.api_url.or(self.api_url),
+            ai_url: other.ai_url.or(self.ai_url),
             api_key: other.api_key.or(self.api_key),
             debug: other.debug.or(self.debug),
             output_mode: other.output_mode.or(self.output_mode),
@@ -47,6 +50,9 @@ impl ImpulseConfig {
             api_url: self
                 .api_url
                 .context("missing api_url when resolving config")?,
+            ai_url: self
+                .ai_url
+                .context("missing ai_url when resolving config")?,
             api_key: self.api_key,
             debug: self.debug.context("missing debug when resolving config")?,
             output_mode: self
@@ -60,6 +66,7 @@ impl ImpulseConfig {
 #[derive(Debug, Clone)]
 pub struct ResolvedImpulseConfig {
     pub api_url: String,
+    pub ai_url: String,
     pub api_key: Option<String>,
     pub debug: bool,
     pub output_mode: OutputMode,
@@ -157,8 +164,20 @@ impl ConfigHandler {
     pub fn make_api_client(&self) -> Result<ImpulseClient> {
         let config = self.config();
         Ok(ImpulseClient {
-            inner: ShuttleApiClient::new(
+            api_client: ShuttleApiClient::new(
                 config.api_url.clone(),
+                config.api_key.clone(),
+                Some(
+                    HeaderMap::try_from(&HashMap::from([(
+                        X_CARGO_SHUTTLE_VERSION.clone(),
+                        crate::VERSION.to_owned(),
+                    )]))
+                    .unwrap(),
+                ),
+                None,
+            ),
+            ai_service_client: ShuttleApiClient::new(
+                config.api_url.clone(), // TODO
                 config.api_key.clone(),
                 Some(
                     HeaderMap::try_from(&HashMap::from([(

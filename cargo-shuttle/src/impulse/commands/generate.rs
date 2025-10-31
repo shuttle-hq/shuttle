@@ -72,4 +72,9 @@ impl Impulse {
         // TODO: write it to the file
         Ok(ImpulseCommandOutput::None)
     }
+
+    pub async fn generate_spec(&self) -> Result<ImpulseCommandOutput> {
+        unimplemented!();
+        Ok(ImpulseCommandOutput::None)
+    }
 }

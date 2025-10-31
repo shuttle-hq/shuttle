@@ -133,7 +133,7 @@ impl ConfigHandler {
         config = config.merge_with(args_config);
         let resolved = config.into_resolved()?;
 
-        tracing::debug!(config = ?resolved, "Resolved config");
+        tracing::debug!(config = ?resolved, "resolved config");
 
         Ok(resolved)
     }
@@ -148,6 +148,7 @@ impl ConfigHandler {
     {
         let mut global = self.global.open::<ImpulseConfig>().unwrap_or_default();
         f(&mut global);
+        tracing::debug!("saving global config");
         self.global.save(&global)?;
         Ok(())
     }

@@ -33,7 +33,6 @@ impl Impulse {
         };
 
         // Save global config and reload API client
-        tracing::debug!("Saving global config");
         self.config
             .modify_global(|g| g.api_key = Some(api_key.clone()))?;
         self.refresh_api_client()?;
@@ -70,7 +69,6 @@ impl Impulse {
         // }
 
         // Save global config and reload API client
-        tracing::debug!("Saving global config");
         self.config.modify_global(|g| g.api_key = None)?;
         // TODO: clear the key from local configs too?
         self.refresh_api_client()?;

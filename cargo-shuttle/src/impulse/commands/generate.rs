@@ -4,7 +4,7 @@ use std::{
     path::PathBuf,
 };
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use clap::CommandFactory;
 use clap_complete::{generate, Shell};
 use clap_mangen::Man;
@@ -67,9 +67,53 @@ impl Impulse {
     }
 
     pub async fn generate_agents(&self) -> Result<ImpulseCommandOutput> {
-        let a = self.client.get_agents_md().await?;
-        println!("{a}");
-        // TODO: write it to the file
+        let re =
+            regex::Regex::new(r"<!-- impulse: agents.md version (.+) -->.+<!-- impulse end -->")
+                .unwrap();
+        let agents = self.client.get_agents_md().await?;
+        let agents_version = re
+            .captures(&agents)
+            .context("detecting remote AGENTS.md version")?
+            .get(1)
+            .unwrap()
+            .as_str();
+        tracing::debug!("got agents.md file with version {}", agents_version);
+        let p = self.global_args.working_directory.join("AGENTS.md");
+        tracing::debug!("checking {} for existing impulse rules", p.display());
+        if p.exists() && p.is_file() {
+            let mut content = fs::read_to_string(&p).context("reading existing AGENTS.md")?;
+            if let Some(cap) = re.captures(&content) {
+                let mat = cap.get(0).unwrap();
+                let version = cap.get(1).unwrap().as_str();
+                if version < agents_version {
+                    tracing::debug!("updating agents.md impulse section");
+                    let before = &content[0..mat.start()];
+                    let after = &content[mat.end()..];
+                    content = format!("{before}{agents}{after}");
+                    fs::File::open(&p)
+                        .context("updating AGENTS.md")?
+                        .write_all(content.as_bytes())
+                        .context("writing AGENTS.md")?;
+                } else {
+                    tracing::info!("AGENTS.md instructions are up to date");
+                }
+            } else {
+                // append
+                content.push('\n');
+                content.push('\n');
+                content.push_str(&agents);
+                fs::File::open(&p)
+                    .context("updating AGENTS.md")?
+                    .write_all(content.as_bytes())
+                    .context("writing AGENTS.md")?;
+            }
+        } else {
+            tracing::debug!("not found, creating");
+            let mut f = fs::File::create(&p).context("creating AGENTS.md")?;
+            f.write_all(agents.as_bytes())
+                .context("writing AGENTS.md")?;
+        }
+
         Ok(ImpulseCommandOutput::None)
     }
 

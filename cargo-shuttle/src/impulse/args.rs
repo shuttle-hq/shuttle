@@ -30,6 +30,9 @@ pub struct ImpulseGlobalArgs {
     /// URL for the Impulse AI service to target
     #[arg(global = true, long, env = "IMPULSE_AI", hide = true)]
     pub ai_url: Option<String>,
+    /// Impulse API key
+    #[arg(global = true, long, env = "IMPULSE_API_KEY", hide_env_values = true)]
+    pub api_key: Option<String>,
     /// Turn on tracing output for Shuttle libraries. (WARNING: can print sensitive data)
     #[arg(global = true, long, env = "IMPULSE_DEBUG")]
     pub debug: bool,
@@ -59,16 +62,13 @@ impl ImpulseGlobalArgs {
     }
 
     pub fn into_config(self) -> ImpulseConfig {
-        // Since the API key is sensitive, a clap arg for it is not provided, and the env var is read here instead
-        let api_key = std::env::var("IMPULSE_API_KEY").ok();
-
         // For args that have default values in clap:
         //   Only set them to Some() if a value was given on the command line,
         //   so that the default value is not mistaken as an explicitly given arg and overrides config from files.
         ImpulseConfig {
             api_url: self.api_url,
             ai_url: self.ai_url,
-            api_key,
+            api_key: self.api_key,
             debug: self
                 .arg_provided_fields
                 .contains(&"debug")

@@ -3,6 +3,7 @@ pub mod commands;
 pub mod config;
 
 use anyhow::Result;
+use impulse_common::types::{Project, ProjectStatus};
 use shuttle_api_client::impulse::ImpulseClient;
 use tracing_subscriber::{reload::Handle, EnvFilter, Registry};
 
@@ -16,6 +17,7 @@ use crate::{
 
 pub enum ImpulseCommandOutput {
     BuiltImage(String),
+    ProjectStatus(Box<ProjectStatus>),
     None,
 }
 
@@ -78,11 +80,24 @@ impl Impulse {
                 GenerateCommand::Agents => self.generate_agents().await,
             },
             Upgrade { preview } => self.self_upgrade(preview).await,
+            Status => self.status().await,
         }
     }
 
     pub fn refresh_api_client(&mut self) -> Result<()> {
         self.client = self.config.make_api_client()?;
         Ok(())
+    }
+
+    pub(crate) async fn fetch_local_state(&self) -> std::result::Result<Project, std::io::Error> {
+        if tokio::fs::try_exists("shuttle.json").await? {
+            let bytes = tokio::fs::read("shuttle.json").await?;
+            Ok(serde_json::from_slice(&bytes)?)
+        } else {
+            Err(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "Missing 'shuttle.json'",
+            ))
+        }
     }
 }

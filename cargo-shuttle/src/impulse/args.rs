@@ -118,6 +118,8 @@ pub enum ImpulseCommand {
     // /// Commands for the Shuttle MCP server
     // #[command(subcommand)]
     // Mcp(McpCommand),
+    #[command(visible_alias = "s")]
+    Status,
 }
 
 #[derive(Args, Debug, Default)]

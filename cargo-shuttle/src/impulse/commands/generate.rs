@@ -67,9 +67,7 @@ impl Impulse {
     }
 
     pub async fn generate_agents(&self) -> Result<ImpulseCommandOutput> {
-        let re =
-            regex::Regex::new(r"<!-- impulse: agents.md version (.+) -->.+<!-- impulse end -->")
-                .unwrap();
+        let re = regex::Regex::new(r"<!-- impulse: agents.md version (.+) -->").unwrap();
         let agents = self.client.get_agents_md().await?;
         let agents_version = re
             .captures(&agents)

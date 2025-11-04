@@ -52,6 +52,9 @@ pub struct ImpulseGlobalArgs {
     // Global args that can't be modified in config:
     #[arg(global = true, long, visible_alias = "wd", default_value = ".", value_parser = OsStringValueParser::new().try_map(parse_path))]
     pub working_directory: PathBuf,
+
+    #[arg(global = true, long, short = 'v', env = "IMPULSE_VERBOSE")]
+    pub verbose: bool,
 }
 
 impl ImpulseGlobalArgs {

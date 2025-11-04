@@ -9,6 +9,7 @@ homepage = "https://www.shuttle.dev"
 
 [dependencies]
 shuttle-common = { workspace = true, features = ["models", "unknown-variants"] }
+impulse-common = { workspace = true, optional = true }
 
 anyhow = { workspace = true }
 async-trait = { workspace = true }
@@ -29,3 +30,4 @@ tracing = { workspace = true, features = ["default"], optional = true }
 [features]
 default = ["tracing"]
 tracing = ["dep:tracing"]
+impulse = ["dep:impulse-common"]

@@ -177,7 +177,7 @@ impl ConfigHandler {
                 None,
             ),
             ai_service_client: ShuttleApiClient::new(
-                config.api_url.clone(), // TODO
+                config.ai_url.clone(), // TODO
                 config.api_key.clone(),
                 Some(
                     HeaderMap::try_from(&HashMap::from([(

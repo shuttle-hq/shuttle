@@ -1,6 +1,10 @@
 use anyhow::Result;
+use impulse_common::types::ProjectStatusResponse;
 
-use crate::{util::ToBodyContent, ShuttleApiClient};
+use crate::{
+    util::{ParsedJson, ToBodyContent},
+    ShuttleApiClient,
+};
 
 #[derive(Clone)]
 pub struct ImpulseClient {
@@ -14,6 +18,22 @@ impl ImpulseClient {
             .get("/v1/agents.md", Option::<()>::None)
             .await?
             .to_text()
+            .await
+    }
+
+    pub async fn get_impulse_projects(&self) -> Result<ParsedJson<Vec<ProjectStatusResponse>>> {
+        self.api_client
+            .get("/projects", Option::<()>::None)
+            .await?
+            .to_json()
+            .await
+    }
+
+    pub async fn get_impulse_project(&self, id: &str) -> Result<ParsedJson<ProjectStatusResponse>> {
+        self.api_client
+            .get(format!("/project/{id}"), Option::<()>::None)
+            .await?
+            .to_json()
             .await
     }
 }

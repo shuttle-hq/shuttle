@@ -9,7 +9,7 @@ homepage = "https://www.shuttle.dev"
 default-run = "shuttle"
 
 [features]
-impulse = ["dep:impulse-common", "shuttle-api-client/impulse"]
+impulse = ["dep:impulse-common", "dep:tar", "shuttle-api-client/impulse"]
 
 [dependencies]
 shuttle-api-client = { workspace = true, default-features = true }
@@ -21,7 +21,7 @@ impulse-common = { workspace = true, optional = true }
 
 anyhow = { workspace = true }
 async-trait = { workspace = true }
-bollard = { workspace = true }
+bollard = { workspace = true, features = ["ssl_providerless"] }
 cargo_metadata = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true, features = ["env"] }
@@ -53,6 +53,7 @@ semver = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 strum = { workspace = true }
+tar = { workspace = true, optional = true }
 tempfile = { workspace = true }
 tokio = { workspace = true, features = [
   "rt-multi-thread",

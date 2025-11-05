@@ -170,6 +170,9 @@ pub struct BuildArgs {
     /// Provide environment variables to your build
     #[arg(long, short)]
     pub env: Vec<String>,
+    /// Use a local Dockerfile instead of Nixpacks
+    #[arg(long)]
+    pub dockerfile: Option<std::path::PathBuf>,
 }
 
 #[derive(Args, Default)]

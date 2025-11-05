@@ -1,4 +1,5 @@
 use anyhow::Result;
+use bytes::Bytes;
 use impulse_common::types::ProjectStatusResponse;
 
 use crate::{
@@ -35,5 +36,14 @@ impl ImpulseClient {
             .await?
             .to_json()
             .await
+    }
+
+    pub async fn registry_auth(&self) -> std::result::Result<Bytes, anyhow::Error> {
+        self.api_client
+            .post("/registry_auth", Option::<()>::None)
+            .await?
+            .bytes()
+            .await
+            .map_err(Into::into)
     }
 }

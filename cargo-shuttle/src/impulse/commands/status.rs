@@ -42,7 +42,7 @@ impl Impulse {
 
         if let Some(ref status) = projects
             .into_iter()
-            .find(|x| x.name == spec.name())
+            .find(|x| x.name == spec.name)
             .and_then(|p| p.status)
         {
             Ok(ImpulseCommandOutput::ProjectStatus(Box::new(
@@ -50,7 +50,8 @@ impl Impulse {
             )))
         } else {
             if self.global_args.output_mode == crate::OutputMode::Json {
-                eprintln!(indoc::indoc! {r#"
+                eprintln!(
+                    indoc::indoc! {r#"
                     {{
                         "error": "project_not_deployed",
                         "message": "The project '{}' exists locally but was not found in the remote Shuttle platform",
@@ -58,9 +59,12 @@ impl Impulse {
                         "next_action": "deploy_project",
                         "project_name": "{}"
                     }}"#
-                }, spec.name(), spec.name());
+                    },
+                    spec.name, spec.name
+                );
             } else if self.global_args.verbose {
-                eprintln!(indoc::indoc! {r#"
+                eprintln!(
+                    indoc::indoc! {r#"
                     ERROR: Project '{}' not deployed to Shuttle
                     
                     Your shuttle.json configuration was found locally, but the project
@@ -75,9 +79,14 @@ impl Impulse {
                     Note: The first deployment may take longer as it needs to build and
                     provision all required resources.
                     "#
-                }, spec.name());
+                    },
+                    spec.name
+                );
             } else {
-                eprintln!("ERROR: Project '{}' not deployed - run 'impulse deploy' to deploy the project", spec.name());
+                eprintln!(
+                    "ERROR: Project '{}' not deployed - run 'impulse deploy' to deploy the project",
+                    spec.name
+                );
             }
             Ok(ImpulseCommandOutput::None)
         }

@@ -3,7 +3,8 @@ pub mod commands;
 pub mod config;
 
 use anyhow::Result;
-use impulse_common::types::{Project, ProjectStatus};
+use impulse_common::types::{ProjectSpec, ProjectStatus};
+use serde::de::Error;
 use shuttle_api_client::impulse::ImpulseClient;
 use tracing_subscriber::{reload::Handle, EnvFilter, Registry};
 
@@ -89,10 +90,19 @@ impl Impulse {
         Ok(())
     }
 
-    pub(crate) async fn fetch_local_state(&self) -> std::result::Result<Project, std::io::Error> {
+    pub(crate) async fn fetch_local_state(
+        &self,
+    ) -> std::result::Result<ProjectSpec, std::io::Error> {
         if tokio::fs::try_exists("shuttle.json").await? {
             let bytes = tokio::fs::read("shuttle.json").await?;
-            Ok(serde_json::from_slice(&bytes)?)
+            let root: serde_json::Value = serde_json::from_slice(&bytes)?;
+            if let Some(spec) = root.get("spec") {
+                Ok(serde_json::from_value(spec.clone())?)
+            } else {
+                Err(std::io::Error::other(serde_json::Error::missing_field(
+                    "spec",
+                )))
+            }
         } else {
             Err(std::io::Error::new(
                 std::io::ErrorKind::NotFound,

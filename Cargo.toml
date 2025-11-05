@@ -28,7 +28,7 @@ shuttle-common = { path = "common", version = "0.57.0" }
 shuttle-ifc = { path = "ifc", version = "0.57.0" }
 shuttle-mcp = { path = "mcp", version = "0.57.0" }
 shuttle-service = { path = "service", version = "0.57.0" }
-impulse-common = { git = "https://github.com/shuttle-hq/shuttle-impulse.git", package = "shuttle-common" }
+impulse-common = { branch = "ND/public-projectspec-fields", git = "https://github.com/shuttle-hq/shuttle-impulse.git", package = "shuttle-common" }
 
 anyhow = "1.0.66"
 askama = "0.14.0"
@@ -84,6 +84,7 @@ serde_json = "1.0.89"
 strfmt = "0.2.2"
 strum = { version = "0.27.1", features = ["derive"] }
 syn = "2"
+tar = "0.4"
 tempfile = "3"
 thiserror = "2"
 tokio = "1.40.0"

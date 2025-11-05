@@ -1404,24 +1404,24 @@ impl Shuttle {
             fs::write(path, archive).context("writing archive")?;
             Ok(())
         } else if build_args.inner.docker {
-            self.local_docker_build(project_args, &build_args.inner)
+            self.local_docker_build(project_args, &build_args.inner, false)
                 .await
         } else {
-            self.local_build(&build_args.inner).await.map(|_| ())
+            self.local_build(&build_args.inner, false).await.map(|_| ())
         }
     }
 
-    async fn local_build(&self, build_args: &BuildArgsShared) -> Result<BuiltService> {
+    async fn local_build(&self, build_args: &BuildArgsShared, quiet: bool) -> Result<BuiltService> {
         let project_directory = self.ctx.project_directory();
 
-        cargo_green_eprintln("Building", project_directory.display());
+        if !quiet {
+            cargo_green_eprintln("Building", project_directory.display());
+        }
 
-        // TODO: hook up -q/--quiet flag
-        let quiet = false;
         cargo_build(project_directory.to_owned(), build_args.release, quiet).await
     }
 
-    fn find_available_port(run_args: &mut RunArgs) {
+    fn find_available_port(run_args: &mut RunArgs, quiet: bool) {
         let original_port = run_args.port;
         for port in (run_args.port..=u16::MAX).step_by(10) {
             if !portpicker::is_free_tcp(port) {
@@ -1431,7 +1431,7 @@ impl Shuttle {
             break;
         }
 
-        if run_args.port != original_port {
+        if run_args.port != original_port && !quiet {
             eprintln!(
                 "Port {} is already in use. Using port {}.",
                 original_port, run_args.port,
@@ -1452,33 +1452,41 @@ impl Shuttle {
 
         // Handle bacon mode
         if run_args.build_args.bacon {
-            cargo_green_eprintln(
-                "Starting",
-                format!("{} in watch mode using bacon", project_name),
-            );
-            eprintln!();
+            if !run_args.quiet {
+                cargo_green_eprintln(
+                    "Starting",
+                    format!("{} in watch mode using bacon", project_name),
+                );
+                eprintln!();
+            }
             return bacon::run_bacon(project_directory).await;
         }
 
-        if run_args.build_args.docker {
+        if run_args.build_args.docker && !run_args.quiet {
             eprintln!("WARN: Local run with --docker is EXPERIMENTAL. Please submit feedback on GitHub or Discord if you encounter issues.");
         }
 
         let secrets = Shuttle::get_secrets(&run_args.secret_args, project_directory, true)?
             .unwrap_or_default();
-        Shuttle::find_available_port(&mut run_args);
+
+        let quiet = run_args.quiet;
+        Shuttle::find_available_port(&mut run_args, quiet);
 
         let s_re = if !run_args.build_args.docker {
-            let service = self.local_build(&run_args.build_args).await?;
+            let service = self
+                .local_build(&run_args.build_args, run_args.quiet)
+                .await?;
             trace!(path = ?service.executable_path, "runtime executable");
             if let Some(warning) = check_and_warn_runtime_version(&service.executable_path).await? {
-                eprint!("{}", warning);
+                if !run_args.quiet {
+                    eprint!("{}", warning);
+                }
             }
             let runtime_executable = service.executable_path.clone();
 
             Some((service, runtime_executable))
         } else {
-            self.local_docker_build(project_args, &run_args.build_args)
+            self.local_docker_build(project_args, &run_args.build_args, run_args.quiet)
                 .await?;
             None
         };
@@ -1510,6 +1518,9 @@ impl Shuttle {
             ("SHUTTLE_HEALTHZ_PORT", healthz_port.to_string()),
             ("SHUTTLE_API", format!("http://127.0.0.1:{}", api_port)),
         ];
+        if run_args.quiet {
+            envs.push(("SHUTTLE_QUIET", "true".to_owned()));
+        }
         // Use a nice debugging tracing level if user does not provide their own
         if debug && std::env::var("RUST_LOG").is_err() {
             envs.push(("RUST_LOG", "info,shuttle=trace,reqwest=debug".to_owned()));
@@ -1521,12 +1532,14 @@ impl Shuttle {
         let name = format!("shuttle-run-{project_name}");
         let mut child = if run_args.build_args.docker {
             let image = format!("shuttle-build-{project_name}");
-            eprintln!();
-            cargo_green_eprintln(
-                "Starting",
-                format!("{} on http://{}:{}", image, ip, run_args.port),
-            );
-            eprintln!();
+            if !run_args.quiet {
+                eprintln!();
+                cargo_green_eprintln(
+                    "Starting",
+                    format!("{} on http://{}:{}", image, ip, run_args.port),
+                );
+                eprintln!();
+            }
             info!(image, "Spawning 'docker run' process");
             let mut docker = tokio::process::Command::new("docker");
             docker
@@ -1551,12 +1564,14 @@ impl Shuttle {
                 .context("spawning 'docker run' process")?
         } else {
             let (service, runtime_executable) = s_re.context("developer skill issue")?;
-            eprintln!();
-            cargo_green_eprintln(
-                "Starting",
-                format!("{} on http://{}:{}", service.target_name, ip, run_args.port),
-            );
-            eprintln!();
+            if !run_args.quiet {
+                eprintln!();
+                cargo_green_eprintln(
+                    "Starting",
+                    format!("{} on http://{}:{}", service.target_name, ip, run_args.port),
+                );
+                eprintln!();
+            }
             info!(
                 path = %runtime_executable.display(),
                 "Spawning runtime process",
@@ -1723,6 +1738,7 @@ impl Shuttle {
         &self,
         project_args: &ProjectArgs,
         build_args: &BuildArgsShared,
+        quiet: bool,
     ) -> Result<()> {
         let project_name = project_args.local_project_name()?;
         let project_directory = self.ctx.project_directory();
@@ -1730,7 +1746,9 @@ impl Shuttle {
         let metadata = cargo_metadata(project_directory)?;
         let rust_build_args = gather_rust_build_args(&metadata)?;
 
-        cargo_green_eprintln("Building", format!("{} with docker", project_name));
+        if !quiet {
+            cargo_green_eprintln("Building", format!("{} with docker", project_name));
+        }
 
         let tempdir = tempfile::Builder::new()
             .prefix("shuttle-build-")
@@ -1785,7 +1803,9 @@ impl Shuttle {
             bail!("Docker build error");
         }
 
-        cargo_green_eprintln("Finished", "building with docker");
+        if !quiet {
+            cargo_green_eprintln("Finished", "building with docker");
+        }
 
         Ok(())
     }

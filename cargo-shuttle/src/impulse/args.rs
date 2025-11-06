@@ -97,8 +97,8 @@ pub enum ImpulseCommand {
     #[command(visible_alias = "r")]
     Run(RunArgs),
     /// Build a project
-    #[command(visible_alias = "b")]
-    Build(BuildArgs),
+    // #[command(visible_alias = "b")]
+    // Build(BuildArgs),
     /// Deploy a project
     #[command(visible_alias = "d")]
     Deploy(DeployArgs),
@@ -133,9 +133,6 @@ pub struct RunArgs {
     /// Use 0.0.0.0 instead of localhost
     #[arg(long)]
     pub external: bool,
-
-    #[command(flatten)]
-    pub build_args: BuildArgs,
 }
 
 #[derive(Args, Clone, Debug, Default)]
@@ -176,21 +173,17 @@ impl InitArgs {
     }
 }
 
-#[derive(Args, Debug, Default)]
-pub struct BuildArgs {
+#[derive(Args, Default)]
+pub struct DeployArgs {
     /// Tag for the docker image
     #[arg(long)]
     pub tag: Option<String>,
-    /// Print the generated Dockerfile instead of building
-    #[arg(long)]
-    pub print_dockerfile: bool,
     /// Provide environment variables to your build
     #[arg(long, short)]
     pub env: Vec<String>,
-}
-
-#[derive(Args, Default)]
-pub struct DeployArgs {
+    /// Use a local Dockerfile instead of Nixpacks
+    #[arg(long)]
+    pub dockerfile: Option<std::path::PathBuf>,
     // /// WIP: Deploy this Docker image instead of building one
     // #[arg(long, short = 'i', hide = true)]
     // pub image: Option<String>,

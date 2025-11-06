@@ -7,7 +7,7 @@ use clap::{
 use clap_complete::Shell;
 
 use crate::{
-    args::{create_and_parse_path, parse_path, InitTemplateArg, OutputMode},
+    args::{parse_and_create_path, parse_path, InitTemplateArg, OutputMode, TemplateLocation},
     impulse::config::ImpulseConfig,
 };
 
@@ -155,8 +155,25 @@ pub struct InitArgs {
     pub no_git: bool,
 
     /// Path where to place the new Shuttle project
-    #[arg(default_value = ".", value_parser = OsStringValueParser::new().try_map(create_and_parse_path))]
+    #[arg(default_value = ".", value_parser = OsStringValueParser::new().try_map(parse_and_create_path))]
     pub path: PathBuf,
+
+    /// Utility for knowing if the path arg was given on the command line
+    #[arg(skip)]
+    pub path_provided_arg: bool,
+}
+
+impl InitArgs {
+    /// Turns the git args to a repo+folder, if present.
+    pub fn git_template(&self) -> anyhow::Result<Option<TemplateLocation>> {
+        if self.template.is_some() {
+            anyhow::bail!("Template arg not yet supported.");
+        }
+        Ok(self.from.as_ref().map(|from| TemplateLocation {
+            auto_path: from.clone(),
+            subfolder: self.subfolder.clone(),
+        }))
+    }
 }
 
 #[derive(Args, Debug, Default)]

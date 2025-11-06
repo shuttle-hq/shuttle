@@ -1,4 +1,5 @@
 use anyhow::Result;
+use cargo_shuttle::impulse::args::ImpulseCommand;
 use cargo_shuttle::impulse::Impulse;
 use cargo_shuttle::reload_env_filter;
 use cargo_shuttle::{impulse::args::ImpulseArgs, setup_tracing};
@@ -21,6 +22,15 @@ async fn main() -> Result<()> {
         if matches.value_source(arg) == Some(ValueSource::CommandLine) {
             args.globals.arg_provided_fields.push(arg);
         }
+    }
+    if let ImpulseCommand::Init(ref mut init_args) = args.cmd {
+        let provided_path_to_init =
+            matches
+                .subcommand_matches("init")
+                .is_some_and(|init_matches| {
+                    init_matches.value_source("path") == Some(ValueSource::CommandLine)
+                });
+        init_args.path_provided_arg = provided_path_to_init;
     }
 
     // reload to enable debugging asap if given as arg or env var

@@ -1,7 +1,7 @@
 use std::{
     fs,
     io::{self, Write},
-    path::PathBuf,
+    path::{Path, PathBuf},
 };
 
 use anyhow::{Context, Result};
@@ -66,8 +66,17 @@ impl Impulse {
         Ok(ImpulseCommandOutput::None)
     }
 
-    pub async fn generate_agents(&self) -> Result<ImpulseCommandOutput> {
+    pub async fn generate_agents(&self, dir: impl AsRef<Path>) -> Result<ImpulseCommandOutput> {
+        let dir = dir.as_ref().canonicalize()?;
+        if !dir.exists() && !dir.is_dir() {
+            fs::create_dir_all(&dir)?;
+        }
+        let file = dir.join("AGENTS.md");
+
         let re = regex::Regex::new(r"<!-- impulse: agents.md version (.+) -->").unwrap();
+        // let re =
+        //     regex::Regex::new(r"<!-- impulse: agents.md version (.+) -->.+<!-- impulse end -->")
+        //         .unwrap();
         let agents = self.client.get_agents_md().await?;
         let agents_version = re
             .captures(&agents)
@@ -76,10 +85,10 @@ impl Impulse {
             .unwrap()
             .as_str();
         tracing::debug!("got agents.md file with version {}", agents_version);
-        let p = self.global_args.working_directory.join("AGENTS.md");
-        tracing::debug!("checking {} for existing impulse rules", p.display());
-        if p.exists() && p.is_file() {
-            let mut content = fs::read_to_string(&p).context("reading existing AGENTS.md")?;
+
+        tracing::debug!("checking {} for existing impulse rules", file.display());
+        if file.exists() && file.is_file() {
+            let mut content = fs::read_to_string(&file).context("reading existing AGENTS.md")?;
             if let Some(cap) = re.captures(&content) {
                 let mat = cap.get(0).unwrap();
                 let version = cap.get(1).unwrap().as_str();
@@ -88,7 +97,7 @@ impl Impulse {
                     let before = &content[0..mat.start()];
                     let after = &content[mat.end()..];
                     content = format!("{before}{agents}{after}");
-                    fs::File::open(&p)
+                    fs::File::open(&file)
                         .context("updating AGENTS.md")?
                         .write_all(content.as_bytes())
                         .context("writing AGENTS.md")?;
@@ -100,14 +109,14 @@ impl Impulse {
                 content.push('\n');
                 content.push('\n');
                 content.push_str(&agents);
-                fs::File::open(&p)
+                fs::File::open(&file)
                     .context("updating AGENTS.md")?
                     .write_all(content.as_bytes())
                     .context("writing AGENTS.md")?;
             }
         } else {
             tracing::debug!("not found, creating");
-            let mut f = fs::File::create(&p).context("creating AGENTS.md")?;
+            let mut f = fs::File::create(&file).context("creating AGENTS.md")?;
             f.write_all(agents.as_bytes())
                 .context("writing AGENTS.md")?;
         }
@@ -117,6 +126,7 @@ impl Impulse {
 
     pub async fn generate_spec(&self) -> Result<ImpulseCommandOutput> {
         unimplemented!();
+        // TODO: recycle gather_build_files and make_archive
         Ok(ImpulseCommandOutput::None)
     }
 }

@@ -454,7 +454,7 @@ pub struct InitArgs {
     pub subfolder: Option<String>,
 
     /// Path where to place the new Shuttle project
-    #[arg(default_value = ".", value_parser = OsStringValueParser::new().try_map(create_and_parse_path))]
+    #[arg(default_value = ".", value_parser = OsStringValueParser::new().try_map(parse_and_create_path))]
     pub path: PathBuf,
 
     /// Don't check the project name's validity or availability and use it anyways
@@ -585,7 +585,7 @@ pub fn parse_path(path: OsString) -> Result<PathBuf, io::Error> {
 }
 
 /// Helper function to parse, create if not exists, and return the absolute path
-pub(crate) fn create_and_parse_path(path: OsString) -> Result<PathBuf, io::Error> {
+pub(crate) fn parse_and_create_path(path: OsString) -> Result<PathBuf, io::Error> {
     // Create the directory if does not exist
     create_dir_all(&path).map_err(|e| {
         io::Error::new(

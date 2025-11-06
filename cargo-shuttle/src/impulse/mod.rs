@@ -77,7 +77,10 @@ impl Impulse {
                 GenerateCommand::Manpage { output_file } => {
                     self.generate_manpage(output_file).await
                 }
-                GenerateCommand::Agents => self.generate_agents().await,
+                GenerateCommand::Agents => {
+                    self.generate_agents(&self.global_args.working_directory)
+                        .await
+                }
             },
             Upgrade { preview } => self.self_upgrade(preview).await,
             Status => self.status().await,

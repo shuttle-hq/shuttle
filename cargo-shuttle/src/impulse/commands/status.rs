@@ -40,14 +40,12 @@ impl Impulse {
 
         let projects = self.client.get_impulse_projects().await?.into_inner();
 
-        if let Some(ref status) = projects
+        if let Some(status) = projects
             .into_iter()
             .find(|x| x.name == spec.name)
-            .and_then(|p| p.status)
+            .map(|p| p.condition)
         {
-            Ok(ImpulseCommandOutput::ProjectStatus(Box::new(
-                status.clone(),
-            )))
+            Ok(ImpulseCommandOutput::ProjectStatus(Box::new(status)))
         } else {
             if self.global_args.output_mode == crate::OutputMode::Json {
                 eprintln!(

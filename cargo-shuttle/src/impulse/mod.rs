@@ -3,7 +3,7 @@ pub mod commands;
 pub mod config;
 
 use anyhow::Result;
-use impulse_common::types::{ProjectSpec, ProjectStatus};
+use impulse_common::types::{AggregateProjectCondition, ProjectSpec};
 use serde::de::Error;
 use shuttle_api_client::impulse::ImpulseClient;
 use tracing_subscriber::{reload::Handle, EnvFilter, Registry};
@@ -18,7 +18,7 @@ use crate::{
 
 pub enum ImpulseCommandOutput {
     BuiltImage(String),
-    ProjectStatus(Box<ProjectStatus>),
+    ProjectStatus(Box<AggregateProjectCondition>),
     None,
 }
 
@@ -66,7 +66,7 @@ impl Impulse {
 
         match command {
             Init(init_args) => self.init(init_args).await,
-            Build(build_args) => self.build(build_args).await,
+            // Build(build_args) => self.build(build_args).await,
             Run(run_args) => self.local_run(run_args).await,
             Deploy(deploy_args) => self.deploy(deploy_args).await,
             Login(login_args) => self.login(login_args).await,

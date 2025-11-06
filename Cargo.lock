@@ -3155,7 +3155,7 @@ checksum = "d13f06d5326a915becaffabdfab75051b8cdc260c2a5c06c0e90226ede89a692"
 dependencies = [
  "base64 0.22.1",
  "chrono",
- "schemars 1.0.5",
+ "schemars 1.1.0",
  "serde",
  "serde_json",
 ]
@@ -3228,7 +3228,7 @@ dependencies = [
  "http 1.3.1",
  "json-patch",
  "k8s-openapi",
- "schemars 1.0.5",
+ "schemars 1.1.0",
  "serde",
  "serde-value",
  "serde_json",
@@ -4537,7 +4537,7 @@ dependencies = [
  "paste",
  "pin-project-lite",
  "rmcp-macros",
- "schemars 1.0.5",
+ "schemars 1.1.0",
  "serde",
  "serde_json",
  "thiserror 2.0.17",
@@ -4746,9 +4746,9 @@ dependencies = [
 
 [[package]]
 name = "schemars"
-version = "1.0.5"
+version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1317c3bf3e7df961da95b0a56a172a02abead31276215a0497241a7624b487ce"
+checksum = "9558e172d4e8533736ba97870c4b2cd63f84b382a3d6eb063da41b91cce17289"
 dependencies = [
  "chrono",
  "dyn-clone",
@@ -4760,9 +4760,9 @@ dependencies = [
 
 [[package]]
 name = "schemars_derive"
-version = "1.0.5"
+version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5f760a6150d45dd66ec044983c124595ae76912e77ed0b44124cb3e415cce5d9"
+checksum = "301858a4023d78debd2353c7426dc486001bddc91ae31a76fb1f55132f7e2633"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -4980,7 +4980,7 @@ dependencies = [
  "indexmap 1.9.3",
  "indexmap 2.12.0",
  "schemars 0.9.0",
- "schemars 1.0.5",
+ "schemars 1.1.0",
  "serde_core",
  "serde_json",
  "time",
@@ -5142,7 +5142,7 @@ dependencies = [
 [[package]]
 name = "shuttle-common"
 version = "0.0.1"
-source = "git+https://github.com/shuttle-hq/shuttle-impulse.git?branch=ND%2Fpublic-projectspec-fields#c0c0f0cdb369d57a38a9d8a93d8c6d1715d3562f"
+source = "git+ssh://git@github.com/shuttle-hq/shuttle-impulse.git#55959430d8e097fd251340f902501dd2d2abfcb1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5155,7 +5155,7 @@ dependencies = [
  "kube",
  "logfire",
  "rand 0.9.2",
- "schemars 1.0.5",
+ "schemars 1.1.0",
  "serde",
  "serde-aux",
  "serde_json",
@@ -5210,7 +5210,7 @@ dependencies = [
  "reqwest",
  "rmcp",
  "rmcp-macros",
- "schemars 1.0.5",
+ "schemars 1.1.0",
  "serde",
  "tokio",
  "tracing",
@@ -5380,9 +5380,9 @@ checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
 
 [[package]]
 name = "syn"
-version = "2.0.108"
+version = "2.0.109"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "da58917d35242480a05c2897064da0a80589a2a0476c9a3f2fdc83b53502e917"
+checksum = "2f17c7e013e88258aa9543dcbe81aca68a667a9ac37cd69c9fbc07858bfe0e2f"
 dependencies = [
  "proc-macro2",
  "quote",

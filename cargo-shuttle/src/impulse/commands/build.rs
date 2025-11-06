@@ -17,7 +17,7 @@ use nixpacks::nixpacks::{
 use tar::{Builder, Header};
 use walkdir::WalkDir;
 
-use crate::impulse::{args::BuildArgs, Impulse, ImpulseCommandOutput};
+use crate::impulse::{args::DeployArgs, Impulse};
 
 impl Impulse {
     fn load_dockerignore(
@@ -91,47 +91,8 @@ impl Impulse {
         Ok(tar_data)
     }
 
-    pub async fn build(&self, build_args: BuildArgs) -> Result<ImpulseCommandOutput> {
+    pub async fn build(&self, name: &str, build_args: DeployArgs) -> Result<Option<String>> {
         let wd = &self.global_args.working_directory;
-
-        let spec = match self.fetch_local_state().await {
-            Ok(project) => project,
-            Err(ref e) if e.kind() == std::io::ErrorKind::NotFound => {
-                if self.global_args.output_mode == crate::OutputMode::Json {
-                    eprintln!(indoc::indoc! {r#"
-                        {{
-                            "error": "shuttle_json_not_found",
-                            "message": "The shuttle.json project manifest file was not found in the current directory",
-                            "suggestion": "Run 'impulse generate' to create the shuttle.json configuration file",
-                            "next_action": "generate_config"
-                        }}"#
-                    });
-                } else if self.global_args.verbose {
-                    eprintln!(indoc::indoc! {r#"
-                        ERROR: shuttle.json project manifest not found
-                        
-                        The shuttle.json file contains your project configuration and is required
-                        for build operations. This file defines your project name, resources,
-                        and deployment settings.
-                        
-                        To fix this issue:
-                        1. Run 'impulse generate' to create a new shuttle.json configuration
-                        2. Configure your project settings in the generated file
-                        3. Run 'impulse build' again to build your project
-                        "#
-                    });
-                } else {
-                    eprintln!("ERROR: shuttle.json not found - run 'impulse generate' to create the project manifest");
-                }
-                return Ok(ImpulseCommandOutput::None);
-            }
-            Err(ref e) => {
-                eprintln!("ERROR: {:?}", e);
-                return Ok(ImpulseCommandOutput::None);
-            }
-        };
-
-        tracing::info!("Spec: {:?}", spec);
 
         let docker = Docker::connect_with_local_defaults()?;
 
@@ -154,7 +115,7 @@ impl Impulse {
 
         let uri = format!(
             "europe-west2-docker.pkg.dev/dev-shuttlebox/cloud-run-deploy-public/{}",
-            spec.name
+            name
         );
 
         let final_image_uri = format!("{}:{}", &uri, unique_tag);
@@ -170,6 +131,7 @@ impl Impulse {
                     .dockerfile
                     .unwrap_or_else(|| Path::new("Dockerfile").to_path_buf()),
             )?;
+            let mut logs = vec![];
             match docker
                 .build_image(
                     bollard::image::BuildImageOptions {
@@ -187,7 +149,8 @@ impl Impulse {
                     bollard::models::BuildInfo {
                         stream: Some(v), ..
                     } => {
-                        tracing::info!("{}", v);
+                        tracing::info!("{}", &v);
+                        logs.push(v);
                     }
                     _ => {}
                 })
@@ -197,7 +160,10 @@ impl Impulse {
                 Ok(_) => (),
                 Err(e) => {
                     eprintln!("Build error: {e:?}");
-                    return Ok(ImpulseCommandOutput::None);
+                    for line in logs {
+                        eprintln!("{}", line);
+                    }
+                    return Ok(None);
                 }
             }
         } else {
@@ -218,8 +184,9 @@ impl Impulse {
                 },
                 &DockerBuilderOptions {
                     name: Some(image_name.clone()),
-                    print_dockerfile: build_args.print_dockerfile,
-                    tags: vec![],
+                    // print_dockerfile: build_args.print_dockerfile,
+                    tags: vec![String::from(&unique_tag)],
+                    no_error_without_start: true,
                     ..Default::default()
                 },
             )
@@ -258,46 +225,46 @@ impl Impulse {
             .try_collect::<Vec<_>>()
             .await?;
 
-        if self.global_args.output_mode == crate::OutputMode::Json {
-            println!(
-                indoc::indoc! {r#"
-                {{
-                    "ok": true,
-                    "project": "{}",
-                    "image_uri": "{}",
-                    "summary": "Image built and pushed successfully.",
-                    "messages": ["Image is ready for deployment."],
-                    "next_action": "deploy",
-                    "requires_confirmation": false,
-                    "next_action_tool": "impulse-deploy",
-                    "next_action_params": {{
-                        "image_uri": "{}"
-                    }},
-                    "next_action_non_tool": "Run 'impulse deploy' to deploy the built image to your infrastructure."
-                }}"#
-                },
-                spec.name, final_image_uri, final_image_uri
-            );
-        } else if self.global_args.verbose {
-            println!(
-                indoc::indoc! {r#"
-                ✅ Build completed successfully!
-                
-                Project: {}
-                Image URI: {}
-                
-                Your application has been built and pushed to the container registry.
-                The image is now ready for deployment to your infrastructure.
-                
-                Next step: Run 'impulse deploy' to deploy your application.
-                "#
-                },
-                spec.name, final_image_uri
-            );
-        } else {
-            println!("✅ Build successful: {}", final_image_uri);
-            println!("Next: impulse deploy");
-        }
-        Ok(ImpulseCommandOutput::BuiltImage(final_image_uri))
+        // if self.global_args.output_mode == crate::OutputMode::Json {
+        //     println!(
+        //         indoc::indoc! {r#"
+        //         {{
+        //             "ok": true,
+        //             "project": "{}",
+        //             "image_uri": "{}",
+        //             "summary": "Image built and pushed successfully.",
+        //             "messages": ["Image is ready for deployment."],
+        //             "next_action": "deploy",
+        //             "requires_confirmation": false,
+        //             "next_action_tool": "impulse-deploy",
+        //             "next_action_params": {{
+        //                 "image_uri": "{}"
+        //             }},
+        //             "next_action_non_tool": "Run 'impulse deploy' to deploy the built image to your infrastructure."
+        //         }}"#
+        //         },
+        //         name, final_image_uri, final_image_uri
+        //     );
+        // } else if self.global_args.verbose {
+        //     println!(
+        //         indoc::indoc! {r#"
+        //         ✅ Build completed successfully!
+
+        //         Project: {}
+        //         Image URI: {}
+
+        //         Your application has been built and pushed to the container registry.
+        //         The image is now ready for deployment to your infrastructure.
+
+        //         Next step: Run 'impulse deploy' to deploy your application.
+        //         "#
+        //         },
+        //         name, final_image_uri
+        //     );
+        // } else {
+        //     println!("✅ Build successful: {}", final_image_uri);
+        //     println!("Next: impulse deploy");
+        // }
+        Ok(Some(final_image_uri))
     }
 }

@@ -11,7 +11,7 @@ use futures::TryStreamExt;
 use ignore::{gitignore::GitignoreBuilder, Match};
 use nixpacks::nixpacks::{
     builder::docker::DockerBuilderOptions,
-    plan::{generator::GeneratePlanOptions, BuildPlan},
+    plan::{generator::GeneratePlanOptions, phase::StartPhase, BuildPlan},
 };
 use tar::Builder;
 use walkdir::WalkDir;
@@ -226,11 +226,18 @@ impl Impulse {
                 .to_str()
                 .unwrap();
 
+            // TODO: figure out where to pass start command from
+            let start_command = "TODO";
+            if start_command == "TODO" {
+                let mut build_plan = BuildPlan::default();
+                build_plan.set_start_phase(StartPhase::new(start_command));
+            }
+
             nixpacks::create_docker_image(
                 rel_path,
                 build_args.env.iter().map(|e| e.as_str()).collect(),
                 &GeneratePlanOptions {
-                    plan: Some(BuildPlan::default()),
+                    plan: Some(build_plan),
                     config_file: None,
                 },
                 &DockerBuilderOptions {

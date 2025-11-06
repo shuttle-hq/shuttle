@@ -144,18 +144,18 @@ impl Impulse {
         } else if self.global_args.verbose {
             eprintln!(indoc::indoc! {r#"
                 SUCCESS: Generated shuttle.json configuration
-                
+
                 The shuttle.json project manifest has been successfully created at the project root.
                 This file contains your project configuration including:
                 - Project name and metadata
                 - Resource definitions (databases, secrets, etc.)
                 - Runtime and deployment settings
-                
+
                 Next steps:
                 1. Review the generated shuttle.json configuration
                 2. Run 'impulse deploy' to build and deploy your application
                 3. Run 'impulse status' to check your project deployment
-                
+
                 The configuration is based on your project's source code analysis and
                 follows Shuttle's best practices for resource provisioning.
                 "#

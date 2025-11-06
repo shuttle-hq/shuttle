@@ -108,6 +108,8 @@ impl Impulse {
                 context_root.as_ref()
             );
 
+            // TODO: safety check that we don't zip user's $HOME directory
+
             for entry in WalkDir::new(&context_root).into_iter() {
                 let entry = entry?;
                 let path = entry.path();

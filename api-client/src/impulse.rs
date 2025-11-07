@@ -3,6 +3,8 @@ use bytes::Bytes;
 use impulse_common::types::project::{CreateDeploymentRequest, CreateProjectRequest, ProjectKind};
 use impulse_common::types::ProjectSpec;
 use impulse_common::types::ProjectStatusResponse;
+use reqwest::multipart::Form;
+use reqwest::multipart::Part;
 
 use crate::{
     util::{ParsedJson, ToBodyContent},
@@ -97,5 +99,37 @@ impl ImpulseClient {
             .await?
             .to_json()
             .await
+    }
+
+    pub async fn generate_impulse_spec(&self, payload: Vec<u8>) -> Result<Bytes> {
+        let url = format!("{}/v1/generate/spec", self.ai_service_client.api_url);
+
+        let mut builder = self.ai_service_client.client.post(url);
+        builder = self.ai_service_client.set_auth_bearer(builder);
+        let form = Form::new()
+            .part(
+                "project",
+                Part::bytes(payload)
+                    .file_name("project.zip")
+                    .mime_str("application/octet-stream")?,
+            )
+            .text("project_name", "hickyblue");
+
+        builder = builder.multipart(form);
+        builder = builder.header("Accept", "application/json");
+        builder = builder.header("Content-Type", "multipart/from-data");
+
+        let res = builder.send().await?;
+        match res.error_for_status_ref() {
+            Ok(_) => Ok(res.bytes().await?),
+            Err(e) => {
+                tracing::error!(
+                    "{:?}: {:?}",
+                    e,
+                    str::from_utf8(&res.bytes().await?.to_vec())?
+                );
+                Err(e.into())
+            }
+        }
     }
 }

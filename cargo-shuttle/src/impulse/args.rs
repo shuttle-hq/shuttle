@@ -181,9 +181,9 @@ pub struct DeployArgs {
     /// Provide environment variables to your build
     #[arg(long, short)]
     pub env: Vec<String>,
-    /// Use a local Dockerfile instead of Nixpacks
-    #[arg(long)]
-    pub dockerfile: Option<std::path::PathBuf>,
+    // /// Use a local Dockerfile instead of Nixpacks
+    // #[arg(long)]
+    // pub dockerfile: Option<std::path::PathBuf>,
     // /// WIP: Deploy this Docker image instead of building one
     // #[arg(long, short = 'i', hide = true)]
     // pub image: Option<String>,
@@ -233,4 +233,6 @@ pub enum GenerateCommand {
     },
     /// Generate agents.md, Impulse-tailored instructions for AI code agents
     Agents,
+    /// Generate spec, instructions and nixpacks command
+    Spec,
 }

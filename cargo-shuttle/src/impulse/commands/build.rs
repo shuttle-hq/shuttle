@@ -1,8 +1,7 @@
 use std::collections::hash_map::DefaultHasher;
 use std::env;
-use std::fs::File;
 use std::hash::{Hash, Hasher};
-use std::io::Read;
+use std::io::{Cursor, Read, Seek, Write};
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -14,17 +13,74 @@ use nixpacks::nixpacks::{
     builder::docker::DockerBuilderOptions,
     plan::{generator::GeneratePlanOptions, BuildPlan},
 };
-use tar::{Builder, Header};
+use tar::Builder;
 use walkdir::WalkDir;
+use zip::read::ZipFile;
+use zip::write::FileOptions;
+use zip::ZipWriter;
 
 use crate::impulse::{args::DeployArgs, Impulse};
+
+pub(crate) enum ArchiveType {
+    Tar,
+    Zip,
+}
+enum ArchiverType<'a, W: Write + Seek> {
+    Tar(Builder<&'a mut W>),
+    Zip(ZipWriter<&'a mut W>),
+}
+struct Archiver<'a, W: Write + Seek> {
+    inner: ArchiverType<'a, W>,
+}
+
+impl<'a, W: Write + Seek> Archiver<'a, W> {
+    fn tar(manifest_data: &'a mut W) -> Self {
+        Archiver {
+            inner: ArchiverType::Tar(Builder::new(manifest_data)),
+        }
+    }
+
+    fn zip(manifest_data: &'a mut W) -> Self {
+        Archiver {
+            inner: ArchiverType::Zip(ZipWriter::new(manifest_data)),
+        }
+    }
+
+    fn add_file(
+        &mut self,
+        path: impl AsRef<Path>,
+        rel_path: impl AsRef<Path>,
+    ) -> std::result::Result<(), std::io::Error> {
+        match &mut self.inner {
+            ArchiverType::Tar(ref mut manifest) => manifest.append_path_with_name(path, rel_path),
+            ArchiverType::Zip(ref mut manifest) => {
+                let options: FileOptions<'_, zip::write::ExtendedFileOptions> =
+                    FileOptions::default().compression_method(zip::CompressionMethod::Deflated);
+                manifest.start_file_from_path(path, options)?;
+                let mut f = std::fs::File::open(rel_path)?;
+                std::io::copy(&mut f, manifest)?;
+                Ok(())
+            }
+        }
+    }
+
+    fn finish(self) -> std::result::Result<(), std::io::Error> {
+        match self.inner {
+            ArchiverType::Tar(mut manifest) => manifest.finish(),
+            ArchiverType::Zip(manifest) => {
+                manifest.finish()?;
+                Ok(())
+            }
+        }
+    }
+}
 
 impl Impulse {
     fn load_dockerignore(
         &self,
-        dockerfile_path: &Path,
+        dockerfile_path: impl AsRef<Path>,
     ) -> Result<Option<ignore::gitignore::Gitignore>> {
-        let dockerignore_path = dockerfile_path.join(".dockerignore");
+        let dockerignore_path = dockerfile_path.as_ref().join(".dockerignore");
         if !dockerignore_path.exists() {
             return Ok(None);
         }
@@ -34,27 +90,30 @@ impl Impulse {
         Ok(Some(builder.build()?))
     }
 
-    fn create_build_context(
+    pub(crate) fn create_build_context(
         &self,
-        dockerfile_context_root: &Path,
-        dockerfile_filename: &Path,
+        context_root: impl AsRef<Path>,
+        archive_type: ArchiveType, // dockerfile_filename: &Path,
     ) -> Result<Vec<u8>> {
-        let mut tar_data = Vec::new();
+        let mut manifest_data = Cursor::new(Vec::new());
         {
-            let mut tar = Builder::new(&mut tar_data);
-            let ignore_spec = self.load_dockerignore(dockerfile_context_root)?;
+            let mut manifest = match archive_type {
+                ArchiveType::Tar => Archiver::tar(&mut manifest_data),
+                ArchiveType::Zip => Archiver::zip(&mut manifest_data),
+            };
+            let ignore_spec = self.load_dockerignore(&context_root)?;
 
             tracing::debug!(
                 "Creating build context tar from {:?}",
-                dockerfile_context_root
+                context_root.as_ref()
             );
 
-            for entry in WalkDir::new(dockerfile_context_root).into_iter() {
+            for entry in WalkDir::new(&context_root).into_iter() {
                 let entry = entry?;
                 let path = entry.path();
 
                 if path.is_file() {
-                    let rel_path = path.strip_prefix(dockerfile_context_root)?;
+                    let rel_path = path.strip_prefix(&context_root)?;
 
                     // Check against .dockerignore patterns
                     if let Some(ref ignore) = ignore_spec {
@@ -65,30 +124,30 @@ impl Impulse {
                     }
                     tracing::debug!("Adding tar entry: {:?}", rel_path);
 
-                    tar.append_path_with_name(path, rel_path)?;
+                    manifest.add_file(path, rel_path)?;
                 }
             }
 
-            tracing::debug!("{:?}", dockerfile_context_root);
+            tracing::debug!("{:?}", context_root.as_ref());
 
             // Add the Dockerfile to the tar
-            let dockerfile_path = dockerfile_context_root.join(dockerfile_filename);
-            if dockerfile_path.exists() && dockerfile_path.is_file() {
-                let mut dockerfile_contents = Vec::new();
-                File::open(&dockerfile_path)?.read_to_end(&mut dockerfile_contents)?;
+            // let dockerfile_path = context_root.join(dockerfile_filename);
+            // if dockerfile_path.exists() && dockerfile_path.is_file() {
+            //     let mut dockerfile_contents = Vec::new();
+            //     File::open(&dockerfile_path)?.read_to_end(&mut dockerfile_contents)?;
 
-                let mut header = Header::new_gnu();
-                header.set_path("Dockerfile")?;
-                header.set_size(dockerfile_contents.len() as u64);
-                header.set_cksum();
+            //     let mut header = Header::new_gnu();
+            //     header.set_path("Dockerfile")?;
+            //     header.set_size(dockerfile_contents.len() as u64);
+            //     header.set_cksum();
 
-                tar.append(&header, dockerfile_contents.as_slice())?;
-            }
+            //     tar.append(&header, dockerfile_contents.as_slice())?;
+            // }
 
-            tar.finish()?;
+            manifest.finish()?;
         }
 
-        Ok(tar_data)
+        Ok(manifest_data.into_inner())
     }
 
     pub async fn build(&self, name: &str, build_args: DeployArgs) -> Result<Option<String>> {
@@ -120,17 +179,9 @@ impl Impulse {
 
         let final_image_uri = format!("{}:{}", &uri, unique_tag);
 
-        if (build_args.dockerfile.is_some()
-            && tokio::fs::try_exists(build_args.dockerfile.as_ref().unwrap()).await?)
-            || tokio::fs::try_exists("Dockerfile").await?
-        {
-            println!("Using local Dockerfile...");
-            let tar: Vec<u8> = self.create_build_context(
-                wd,
-                &build_args
-                    .dockerfile
-                    .unwrap_or_else(|| Path::new("Dockerfile").to_path_buf()),
-            )?;
+        if tokio::fs::try_exists("Dockerfile").await? {
+            tracing::info!("Using local Dockerfile...");
+            let tar: Vec<u8> = self.create_build_context(wd, ArchiveType::Tar)?;
             let mut logs = vec![];
             match docker
                 .build_image(

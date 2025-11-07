@@ -28,6 +28,6 @@ url = { workspace = true }
 tracing = { workspace = true, features = ["default"], optional = true }
 
 [features]
-default = ["tracing"]
+default = ["tracing", "impulse"]
 tracing = ["dep:tracing"]
-impulse = ["dep:impulse-common"]
+impulse = ["dep:impulse-common", "reqwest/multipart", "reqwest-middleware/multipart"]

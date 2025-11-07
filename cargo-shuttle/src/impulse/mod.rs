@@ -82,6 +82,10 @@ impl Impulse {
                     self.generate_agents(&self.global_args.working_directory)
                         .await
                 }
+                GenerateCommand::Spec => {
+                    self.generate_spec(&self.global_args.working_directory)
+                        .await
+                }
             },
             Upgrade { preview } => self.self_upgrade(preview).await,
             Status => self.status().await,

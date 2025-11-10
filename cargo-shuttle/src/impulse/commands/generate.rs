@@ -97,10 +97,7 @@ impl Impulse {
                     let before = &content[0..mat.start()];
                     let after = &content[mat.end()..];
                     content = format!("{before}{agents}{after}");
-                    fs::File::open(&file)
-                        .context("updating AGENTS.md")?
-                        .write_all(content.as_bytes())
-                        .context("writing AGENTS.md")?;
+                    fs::write(&file, content.as_bytes()).context("writing AGENTS.md")?;
                 } else {
                     tracing::info!("AGENTS.md instructions are up to date");
                 }
@@ -109,10 +106,7 @@ impl Impulse {
                 content.push('\n');
                 content.push('\n');
                 content.push_str(&agents);
-                fs::File::open(&file)
-                    .context("updating AGENTS.md")?
-                    .write_all(content.as_bytes())
-                    .context("writing AGENTS.md")?;
+                fs::write(&file, content.as_bytes()).context("writing AGENTS.md")?;
             }
         } else {
             tracing::debug!("not found, creating");

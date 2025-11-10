@@ -37,20 +37,28 @@ impl Impulse {
             .modify_global(|g| g.api_key = Some(api_key.clone()))?;
         self.refresh_api_client()?;
 
-        // if offline {
-        //     eprintln!("INFO: Skipping API key verification");
-        let (user, raw_json) = self
+        // Verify API key using the Impulse API; be lenient with response schema
+        let response = self
             .client
-            // TODO: use actual impulse endpoint
-            .ai_service_client
-            .get_current_user()
+            .api_client
+            .get("/users/me", Option::<()>::None)
             .await
-            .context("failed to check API key validity")?
-            .into_parts();
+            .context("failed to check API key validity")?;
+        let raw_json = response
+            .text()
+            .await
+            .context("failed to read user response")?;
+        let user_id = serde_json::from_str::<serde_json::Value>(&raw_json)
+            .ok()
+            .and_then(|v| v.get("id").and_then(|s| s.as_str()).map(|s| s.to_string()));
 
         match self.config.config().output_mode {
             OutputMode::Normal => {
-                println!("Logged in as {}", user.id.bold());
+                if let Some(id) = user_id {
+                    println!("Logged in as {}", id.bold());
+                } else {
+                    println!("Logged in.");
+                }
             }
             OutputMode::Json => {
                 println!("{}", raw_json);

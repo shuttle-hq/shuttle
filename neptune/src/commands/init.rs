@@ -1,15 +1,13 @@
 use std::{ffi::OsString, fs};
 
 use anyhow::Result;
+use cargo_shuttle::{args::parse_and_create_path, init::generate_project};
 use dialoguer::{theme::ColorfulTheme, Confirm, Input};
 
-use crate::{
-    args,
-    impulse::{args::InitArgs, Impulse, ImpulseCommandOutput},
-};
+use crate::{args::InitArgs, Neptune, NeptuneCommandOutput};
 
-impl Impulse {
-    pub async fn init(&self, args: InitArgs) -> Result<ImpulseCommandOutput> {
+impl Neptune {
+    pub async fn init(&self, args: InitArgs) -> Result<NeptuneCommandOutput> {
         // TODO: offer to log in if not done yet?
 
         let theme = ColorfulTheme::default();
@@ -34,7 +32,7 @@ impl Impulse {
                     .interact()?;
                 eprintln!();
 
-                let path = args::parse_and_create_path(OsString::from(directory_str))?;
+                let path = parse_and_create_path(OsString::from(directory_str))?;
 
                 if fs::read_dir(&path)
                     .expect("init dir to exist and list entries")
@@ -60,7 +58,7 @@ impl Impulse {
         let git_template =
             git_template.ok_or(anyhow::anyhow!("No template provided. Use --from"))?;
 
-        crate::init::generate_project(path.clone(), &project_name, &git_template, no_git)?;
+        generate_project(path.clone(), &project_name, &git_template, no_git)?;
         eprintln!();
 
         if Confirm::with_theme(&theme)
@@ -74,8 +72,8 @@ impl Impulse {
         if std::env::current_dir().is_ok_and(|d| d != path) {
             eprintln!("You can `cd` to the directory, then:");
         }
-        eprintln!("Run `impulse deploy` to deploy it to Impulse.");
+        eprintln!("Run `neptune deploy` to deploy it.");
 
-        Ok(ImpulseCommandOutput::None)
+        Ok(NeptuneCommandOutput::None)
     }
 }

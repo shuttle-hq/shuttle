@@ -1,10 +1,9 @@
 pub mod args;
 pub mod builder;
 pub mod config;
-pub mod impulse;
-mod init;
-mod provisioner_server;
-mod util;
+pub mod init;
+pub mod provisioner_server;
+pub mod util;
 
 use std::collections::{BTreeMap, HashMap};
 use std::ffi::OsString;
@@ -124,7 +123,7 @@ pub fn env_filter(debug: bool) -> EnvFilter {
         // else use presets based on debug flag
         .unwrap_or_else(|_| {
             if debug {
-                EnvFilter::new("info,cargo_shuttle=trace,shuttle=trace")
+                EnvFilter::new("info,cargo_shuttle=trace,shuttle=trace,neptune=trace")
             } else {
                 EnvFilter::default()
             }
@@ -135,7 +134,6 @@ pub fn env_filter(debug: bool) -> EnvFilter {
 pub enum Binary {
     CargoShuttle,
     Shuttle,
-    Impulse,
 }
 
 impl Binary {
@@ -143,7 +141,6 @@ impl Binary {
         match self {
             Self::CargoShuttle => "cargo-shuttle",
             Self::Shuttle => "shuttle",
-            Self::Impulse => "impulse",
         }
     }
 }

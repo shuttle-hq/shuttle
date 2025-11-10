@@ -1,46 +1,46 @@
 use std::path::PathBuf;
 
+use cargo_shuttle::args::{
+    parse_and_create_path, parse_path, InitTemplateArg, OutputMode, TemplateLocation,
+};
 use clap::{
     builder::{OsStringValueParser, TypedValueParser},
     Args, Parser, Subcommand,
 };
 use clap_complete::Shell;
 
-use crate::{
-    args::{parse_and_create_path, parse_path, InitTemplateArg, OutputMode, TemplateLocation},
-    impulse::config::ImpulseConfig,
-};
+use crate::config::NeptuneConfig;
 
 #[derive(Parser)]
 #[command(version)]
-pub struct ImpulseArgs {
+pub struct NeptuneArgs {
     #[command(flatten)]
-    pub globals: ImpulseGlobalArgs,
+    pub globals: NeptuneGlobalArgs,
 
     #[command(subcommand)]
-    pub cmd: ImpulseCommand,
+    pub cmd: NeptuneCommand,
 }
 
 #[derive(Args, Clone)]
 #[command(next_help_heading = "Global options")]
-pub struct ImpulseGlobalArgs {
-    /// URL for the Impulse API to target
-    #[arg(global = true, long, env = "IMPULSE_API", hide = true)]
+pub struct NeptuneGlobalArgs {
+    /// URL for the Neptune API to target
+    #[arg(global = true, long, env = "NEPTUNE_API", hide = true)]
     pub api_url: Option<String>,
-    /// URL for the Impulse AI service to target
-    #[arg(global = true, long, env = "IMPULSE_AI", hide = true)]
+    /// URL for the Neptune AI service to target
+    #[arg(global = true, long, env = "NEPTUNE_AI", hide = true)]
     pub ai_url: Option<String>,
-    /// Impulse API key
-    #[arg(global = true, long, env = "IMPULSE_API_KEY", hide_env_values = true)]
+    /// Neptune API key
+    #[arg(global = true, long, env = "NEPTUNE_API_KEY", hide_env_values = true)]
     pub api_key: Option<String>,
     /// Turn on tracing output for Shuttle libraries. (WARNING: can print sensitive data)
-    #[arg(global = true, long, env = "IMPULSE_DEBUG")]
+    #[arg(global = true, long, env = "NEPTUNE_DEBUG")]
     pub debug: bool,
     /// What format to print output in
     #[arg(
         global = true,
         long = "output",
-        env = "IMPULSE_OUTPUT_MODE",
+        env = "NEPTUNE_OUTPUT_MODE",
         default_value = "normal"
     )]
     pub output_mode: OutputMode,
@@ -53,22 +53,22 @@ pub struct ImpulseGlobalArgs {
     #[arg(global = true, long, visible_alias = "wd", default_value = ".", value_parser = OsStringValueParser::new().try_map(parse_path))]
     pub working_directory: PathBuf,
 
-    #[arg(global = true, long, short = 'v', env = "IMPULSE_VERBOSE")]
+    #[arg(global = true, long, short = 'v', env = "NEPTUNE_VERBOSE")]
     pub verbose: bool,
 }
 
-impl ImpulseGlobalArgs {
+impl NeptuneGlobalArgs {
     pub fn workdir_name(&self) -> Option<String> {
         self.working_directory
             .file_name()
             .map(|s| s.to_string_lossy().into_owned())
     }
 
-    pub fn into_config(self) -> ImpulseConfig {
+    pub fn into_config(self) -> NeptuneConfig {
         // For args that have default values in clap:
         //   Only set them to Some() if a value was given on the command line,
         //   so that the default value is not mistaken as an explicitly given arg and overrides config from files.
-        ImpulseConfig {
+        NeptuneConfig {
             api_url: self.api_url,
             ai_url: self.ai_url,
             api_key: self.api_key,
@@ -85,12 +85,12 @@ impl ImpulseGlobalArgs {
 }
 
 #[allow(rustdoc::bare_urls)]
-/// CLI for the Impulse platform (https://www.shuttle.dev/)
+/// CLI for the Neptune platform (https://www.neptune.dev/)
 ///
 /// See the CLI docs for more information: https://docs.shuttle.dev/guides/cli
 #[derive(Subcommand)]
-pub enum ImpulseCommand {
-    /// Generate an Impulse project from a template
+pub enum NeptuneCommand {
+    /// Generate an Neptune project from a template
     #[command(visible_alias = "i")]
     Init(InitArgs),
     /// Run a project locally
@@ -102,20 +102,20 @@ pub enum ImpulseCommand {
     /// Deploy a project
     #[command(visible_alias = "d")]
     Deploy(DeployArgs),
-    // /// Show info about your Impulse account
+    // /// Show info about your Neptune account
     // #[command(visible_alias = "acc")]
     // Account,
-    /// Log in to the Impulse platform
+    /// Log in to the Neptune platform
     Login(LoginArgs),
-    /// Log out of the Impulse platform
+    /// Log out of the Neptune platform
     Logout(LogoutArgs),
     /// Generate AI instructions, shell completions, man page, etc
     #[command(subcommand, visible_alias = "gen")]
     Generate(GenerateCommand),
-    /// Upgrade the Impulse CLI binary
+    /// Upgrade the Neptune CLI binary
     Upgrade {
         /// Install from the repository's main branch (requires `cargo`)
-        #[arg(long)]
+        #[arg(long, hide = true)]
         preview: bool,
     },
     // /// Commands for the Shuttle MCP server
@@ -231,7 +231,7 @@ pub enum GenerateCommand {
         #[arg(short, long)]
         output_file: Option<PathBuf>,
     },
-    /// Generate agents.md, Impulse-tailored instructions for AI code agents
+    /// Generate agents.md, Neptune-tailored instructions for AI code agents
     Agents,
     /// Generate spec, instructions and nixpacks command
     Spec,

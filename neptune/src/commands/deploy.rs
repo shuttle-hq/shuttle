@@ -1,19 +1,20 @@
 use anyhow::Result;
+use cargo_shuttle::args::OutputMode;
 
-use crate::impulse::{args::DeployArgs, Impulse, ImpulseCommandOutput};
+use crate::{args::DeployArgs, Neptune, NeptuneCommandOutput};
 
-impl Impulse {
-    pub async fn deploy(&self, deploy_args: DeployArgs) -> Result<ImpulseCommandOutput> {
+impl Neptune {
+    pub async fn deploy(&self, deploy_args: DeployArgs) -> Result<NeptuneCommandOutput> {
         let spec = match self.fetch_local_state().await {
             Ok(project) => project,
             // Handle 'shuttle.json' file missing
             Err(ref e) if e.kind() == std::io::ErrorKind::NotFound => {
-                if self.global_args.output_mode == crate::OutputMode::Json {
+                if self.global_args.output_mode == OutputMode::Json {
                     eprintln!(indoc::indoc! {r#"
                         {{
                             "error": "shuttle_json_not_found",
                             "message": "The shuttle.json project manifest file was not found in the current directory",
-                            "suggestion": "Run 'impulse generate' to create the shuttle.json configuration file",
+                            "suggestion": "Run 'neptune generate spec' to create the shuttle.json configuration file",
                             "next_action": "generate_config"
                         }}"#
                     });
@@ -26,15 +27,15 @@ impl Impulse {
                         and deployment settings.
                         
                         To fix this issue:
-                        1. Run 'impulse generate' to create a new shuttle.json configuration
+                        1. Run 'neptune generate' to create a new shuttle.json configuration
                         2. Configure your project settings in the generated file
-                        3. Run 'impulse build' again to build your project
+                        3. Run 'neptune build' again to build your project
                         "#
                     });
                 } else {
-                    eprintln!("ERROR: shuttle.json not found - run 'impulse generate' to create the project manifest");
+                    eprintln!("ERROR: shuttle.json not found - run 'neptune generate' to create the project manifest");
                 }
-                return Ok(ImpulseCommandOutput::None);
+                return Ok(NeptuneCommandOutput::None);
             }
             // Handle JSON validation errors (missing fields, etc.)
             Err(e) => {
@@ -48,7 +49,7 @@ impl Impulse {
                         let err_message = err_message.replace('"', r#"\""#);
                         let json_err = json_err.to_string().replace('"', r#"\""#);
 
-                        if self.global_args.output_mode == crate::OutputMode::Json {
+                        if self.global_args.output_mode == OutputMode::Json {
                             eprintln!(
                                 indoc::indoc! {r#"
                             {{
@@ -63,13 +64,13 @@ impl Impulse {
                                 }},
                                 "next_action": "fix_config_then_retry",
                                 "requires_confirmation": false,
-                                "next_action_tool": "impulse-generate",
+                                "next_action_tool": "neptune-generate",
                                 "next_action_params": {{
                                     "config": "<pass shuttle.json>",
                                     "request": "{}",
                                     "context": "<optional code snippets>"
                                 }},
-                                "next_action_non_tool": "Fix shuttle.json errors with impulse generate, then re-run validation."
+                                "next_action_non_tool": "Fix shuttle.json errors with neptune generate, then re-run validation."
                             }}"#, 
                                 },
                                 err_message, json_err, err_message
@@ -82,7 +83,7 @@ impl Impulse {
                         }
                     }
                 }
-                return Ok(ImpulseCommandOutput::None);
+                return Ok(NeptuneCommandOutput::None);
             }
         };
 
@@ -90,25 +91,22 @@ impl Impulse {
 
         if let Some(image_name) = self.build(&spec.name, deploy_args).await? {
             tracing::info!("Image name: {}", image_name);
-            let project = if let Some(project_id) = self
-                .client
-                .get_impulse_project_id_from_name(&spec.name)
-                .await?
-            {
-                self.client.get_impulse_project_by_id(&project_id).await?
-            } else {
-                self.client.create_impulse_project(&spec).await?
-            }
-            .into_inner();
+            let project =
+                if let Some(project_id) = self.client.get_project_id_from_name(&spec.name).await? {
+                    self.client.get_project_by_id(&project_id).await?
+                } else {
+                    self.client.create_project(&spec).await?
+                }
+                .into_inner();
 
             let deployment = self
                 .client
-                .create_impulse_deployment(&spec, &project.id, &image_name)
+                .create_deployment(&spec, &project.id, &image_name)
                 .await?
                 .into_inner();
 
             // Handle successful deployment output
-            if self.global_args.output_mode == crate::OutputMode::Json {
+            if self.global_args.output_mode == OutputMode::Json {
                 println!(
                     indoc::indoc! {r#"
                     {{
@@ -121,7 +119,7 @@ impl Impulse {
                         "requires_confirmation": false,
                         "next_action_tool": null,
                         "next_action_params": null,
-                        "next_action_non_tool": "You can manually run impulse status later to view progress."
+                        "next_action_non_tool": "You can manually run neptune status later to view progress."
                     }}"#},
                     spec.name, deployment.id
                 );
@@ -130,11 +128,11 @@ impl Impulse {
                 println!("📦 Project: {}", spec.name);
                 println!("🚀 Deployment ID: {}", deployment.id);
                 println!("⏳ Deployments may take a while to complete.");
-                println!("💡 Run 'impulse status' to check deployment progress.");
+                println!("💡 Run 'neptune status' to check deployment progress.");
             }
         } else {
             // Handle build failure
-            if self.global_args.output_mode == crate::OutputMode::Json {
+            if self.global_args.output_mode == OutputMode::Json {
                 eprintln!(
                     indoc::indoc! {r#"
                     {{
@@ -149,7 +147,7 @@ impl Impulse {
                         }},
                         "next_action": "check_build_logs_then_retry",
                         "requires_confirmation": false,
-                        "next_action_tool": "impulse-build",
+                        "next_action_tool": "neptune-build",
                         "next_action_params": {{
                             "config": "<pass shuttle.json>",
                             "verbose": true
@@ -162,12 +160,12 @@ impl Impulse {
                 eprintln!("❌ Build failed - unable to create container image");
                 eprintln!("📋 Project: {}", spec.name);
                 eprintln!(
-                    "💡 Check build logs for errors and retry with 'impulse build --verbose'"
+                    "💡 Check build logs for errors and retry with 'neptune build --verbose'"
                 );
             }
-            return Ok(ImpulseCommandOutput::None);
+            return Ok(NeptuneCommandOutput::None);
         }
 
-        Ok(ImpulseCommandOutput::None)
+        Ok(NeptuneCommandOutput::None)
     }
 }

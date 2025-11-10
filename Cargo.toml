@@ -8,7 +8,7 @@ members = [
   "codegen",
   "common",
   "ifc",
-  "mcp",
+  "mcp", "neptune",
   "runtime",
   "service",
 ]
@@ -29,6 +29,7 @@ shuttle-ifc = { path = "ifc", version = "0.57.0" }
 shuttle-mcp = { path = "mcp", version = "0.57.0" }
 shuttle-service = { path = "service", version = "0.57.0" }
 impulse-common = { git = "ssh://git@github.com/shuttle-hq/shuttle-impulse.git", package = "shuttle-common" }
+cargo-shuttle = { path = "cargo-shuttle", version = "0.57.0" }
 
 anyhow = "1.0.66"
 askama = "0.14.0"

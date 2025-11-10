@@ -3,36 +3,36 @@ pub mod commands;
 pub mod config;
 
 use anyhow::Result;
+use cargo_shuttle::reload_env_filter;
 use impulse_common::types::{AggregateProjectCondition, ProjectSpec};
 use serde::de::Error;
-use shuttle_api_client::impulse::ImpulseClient;
+use shuttle_api_client::neptune::NeptuneClient;
 use tracing_subscriber::{reload::Handle, EnvFilter, Registry};
 
 use crate::{
-    impulse::{
-        args::{GenerateCommand, ImpulseCommand, ImpulseGlobalArgs},
-        config::ConfigHandler,
-    },
-    reload_env_filter,
+    args::{GenerateCommand, NeptuneCommand, NeptuneGlobalArgs},
+    config::ConfigHandler,
 };
 
-pub enum ImpulseCommandOutput {
+const VERSION: &str = env!("CARGO_PKG_VERSION");
+
+pub enum NeptuneCommandOutput {
     BuiltImage(String),
     ProjectStatus(Box<AggregateProjectCondition>),
     None,
 }
 
-pub struct Impulse {
+pub struct Neptune {
     config: ConfigHandler,
-    client: ImpulseClient,
-    global_args: ImpulseGlobalArgs,
+    client: NeptuneClient,
+    global_args: NeptuneGlobalArgs,
     // /// Alter behaviour based on which CLI is used
     // bin: Binary,
 }
 
-impl Impulse {
+impl Neptune {
     pub fn new(
-        global_args: ImpulseGlobalArgs,
+        global_args: NeptuneGlobalArgs,
         // bin: Binary,
         // env_override: Option<String>,
         env_filter_handle: Option<Handle<EnvFilter, Registry>>,
@@ -55,13 +55,13 @@ impl Impulse {
         })
     }
 
-    pub async fn run(mut self, command: ImpulseCommand) -> Result<ImpulseCommandOutput> {
-        use ImpulseCommand::*;
+    pub async fn run(mut self, command: NeptuneCommand) -> Result<NeptuneCommandOutput> {
+        use NeptuneCommand::*;
 
         // TODO?: warning or error when running commands that need the api key:
         // if matches!(command, ...) && client.inner.api_key.is_none()
         // {
-        //     bail!("No API key found. Log in with `impulse login` or set the `IMPULSE_API_KEY` env var.")
+        //     bail!("No API key found. Log in with `neptune login` or set the `NEPTUNE_API_KEY` env var.")
         // }
 
         match command {

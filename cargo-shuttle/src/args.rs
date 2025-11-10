@@ -585,7 +585,7 @@ pub fn parse_path(path: OsString) -> Result<PathBuf, io::Error> {
 }
 
 /// Helper function to parse, create if not exists, and return the absolute path
-pub(crate) fn parse_and_create_path(path: OsString) -> Result<PathBuf, io::Error> {
+pub fn parse_and_create_path(path: OsString) -> Result<PathBuf, io::Error> {
     // Create the directory if does not exist
     create_dir_all(&path).map_err(|e| {
         io::Error::new(

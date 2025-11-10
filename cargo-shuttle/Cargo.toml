@@ -8,9 +8,6 @@ description = "CLI for the Shuttle platform (shuttle.dev)"
 homepage = "https://www.shuttle.dev"
 default-run = "shuttle"
 
-[features]
-impulse = ["dep:impulse-common", "dep:tar", "shuttle-api-client/impulse"]
-
 [dependencies]
 shuttle-api-client = { workspace = true, default-features = true }
 shuttle-builder = { workspace = true }

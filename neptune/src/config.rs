@@ -1,19 +1,20 @@
 use std::collections::HashMap;
 
 use anyhow::{Context, Result};
-use hyper::HeaderMap;
+use cargo_shuttle::{args::OutputMode, config::LocalConfigManager};
+use http::HeaderMap;
 use serde::{Deserialize, Serialize};
-use shuttle_api_client::{impulse::ImpulseClient, ShuttleApiClient};
+use shuttle_api_client::{neptune::NeptuneClient, ShuttleApiClient};
 use shuttle_common::{
     config::{ConfigManager, GlobalConfigManager},
-    constants::{headers::X_CARGO_SHUTTLE_VERSION, IMPULSE_AI_URL, IMPULSE_API_URL},
+    constants::{headers::X_CARGO_SHUTTLE_VERSION, NEPTUNE_AI_URL, NEPTUNE_API_URL},
 };
 
-use crate::{args::OutputMode, config::LocalConfigManager, impulse::args::ImpulseGlobalArgs};
+use crate::args::NeptuneGlobalArgs;
 
 /// Schema for each config file. Everything is optional.
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
-pub struct ImpulseConfig {
+pub struct NeptuneConfig {
     pub api_url: Option<String>,
     pub ai_url: Option<String>,
     pub api_key: Option<String>,
@@ -21,20 +22,20 @@ pub struct ImpulseConfig {
     pub output_mode: Option<OutputMode>,
 }
 
-impl ImpulseConfig {
+impl NeptuneConfig {
     /// `Default::default()` is used for all-None config. This is used for default values when none are set.
     pub fn default_values() -> Self {
         Self {
-            api_url: Some(IMPULSE_API_URL.to_owned()),
-            ai_url: Some(IMPULSE_AI_URL.to_owned()),
+            api_url: Some(NEPTUNE_API_URL.to_owned()),
+            ai_url: Some(NEPTUNE_AI_URL.to_owned()),
             api_key: None,
             debug: Some(false),
             output_mode: Some(OutputMode::Normal),
         }
     }
 
-    /// Create a new [`ImpulseConfig`] with the values in `other` overriding the values in `self`
-    pub fn merge_with(self, other: ImpulseConfig) -> Self {
+    /// Create a new [`NeptuneConfig`] with the values in `other` overriding the values in `self`
+    pub fn merge_with(self, other: NeptuneConfig) -> Self {
         Self {
             api_url: other.api_url.or(self.api_url),
             ai_url: other.ai_url.or(self.ai_url),
@@ -45,8 +46,8 @@ impl ImpulseConfig {
     }
 
     /// Assume all non-optional fields have been set and convert to more convenient type
-    pub fn into_resolved(self) -> anyhow::Result<ResolvedImpulseConfig> {
-        Ok(ResolvedImpulseConfig {
+    pub fn into_resolved(self) -> anyhow::Result<ResolvedNeptuneConfig> {
+        Ok(ResolvedNeptuneConfig {
             api_url: self
                 .api_url
                 .context("missing api_url when resolving config")?,
@@ -62,9 +63,9 @@ impl ImpulseConfig {
     }
 }
 
-/// Same as `ImpulseConfig`, but all non-optional fields are not options
+/// Same as [`NeptuneConfig`], but all non-optional fields are not options
 #[derive(Debug, Clone)]
-pub struct ResolvedImpulseConfig {
+pub struct ResolvedNeptuneConfig {
     pub api_url: String,
     pub ai_url: String,
     pub api_key: Option<String>,
@@ -77,20 +78,20 @@ pub struct ConfigHandler {
     _local: LocalConfigManager,
     _local_internal: LocalConfigManager,
 
-    resolved: ResolvedImpulseConfig,
+    resolved: ResolvedNeptuneConfig,
 }
 
 impl ConfigHandler {
-    pub fn new(global_args: ImpulseGlobalArgs) -> Result<Self> {
-        let global = GlobalConfigManager::new("impulse".to_owned(), None)
-            .expect("No environments in impulse yet");
+    pub fn new(global_args: NeptuneGlobalArgs) -> Result<Self> {
+        let global = GlobalConfigManager::new("neptune".to_owned(), None)
+            .expect("No environments in Neptune yet");
         let local_internal = LocalConfigManager::new(
-            global_args.working_directory.join(".impulse"),
+            global_args.working_directory.join(".neptune"),
             "config.toml".to_owned(),
         );
         let local = LocalConfigManager::new(
             global_args.working_directory.clone(),
-            "Impulse.toml".to_owned(),
+            "Neptune.toml".to_owned(),
         );
 
         let resolved =
@@ -105,34 +106,34 @@ impl ConfigHandler {
     }
 
     /// Read and resolve config values in the order:
-    /// - Global config (~/.config/impulse/config.toml)
-    /// - Local config (Impulse.toml)
-    /// - Local "internal" config (.impulse/config.toml)
+    /// - Global config (~/.config/neptune/config.toml)
+    /// - Local config (Neptune.toml)
+    /// - Local "internal" config (.neptune/config.toml)
     /// - Env vars
     /// - CLI args
     fn resolve_config(
         global: &GlobalConfigManager,
         local: &LocalConfigManager,
         local_internal: &LocalConfigManager,
-        args_config: ImpulseConfig,
-    ) -> Result<ResolvedImpulseConfig> {
-        let mut config = ImpulseConfig::default_values();
+        args_config: NeptuneConfig,
+    ) -> Result<ResolvedNeptuneConfig> {
+        let mut config = NeptuneConfig::default_values();
 
         if global.exists() {
             tracing::debug!(file = %global.path().display(), "Reading config file");
-            if let Ok(globals) = global.open::<ImpulseConfig>() {
+            if let Ok(globals) = global.open::<NeptuneConfig>() {
                 config = config.merge_with(globals);
             }
         }
         if local.exists() {
             tracing::debug!(file = %local.path().display(), "Reading config file");
-            if let Ok(locals) = local.open::<ImpulseConfig>() {
+            if let Ok(locals) = local.open::<NeptuneConfig>() {
                 config = config.merge_with(locals);
             }
         }
         if local_internal.exists() {
             tracing::debug!(file = %local_internal.path().display(), "Reading config file");
-            if let Ok(locals_int) = local_internal.open::<ImpulseConfig>() {
+            if let Ok(locals_int) = local_internal.open::<NeptuneConfig>() {
                 config = config.merge_with(locals_int);
             }
         }
@@ -145,15 +146,15 @@ impl ConfigHandler {
         Ok(resolved)
     }
 
-    pub fn config(&self) -> &ResolvedImpulseConfig {
+    pub fn config(&self) -> &ResolvedNeptuneConfig {
         &self.resolved
     }
 
     pub fn modify_global<F>(&mut self, mut f: F) -> Result<()>
     where
-        F: FnMut(&mut ImpulseConfig) -> (),
+        F: FnMut(&mut NeptuneConfig) -> (),
     {
-        let mut global = self.global.open::<ImpulseConfig>().unwrap_or_default();
+        let mut global = self.global.open::<NeptuneConfig>().unwrap_or_default();
         f(&mut global);
         tracing::debug!("saving global config");
         self.global.save(&global)?;
@@ -161,9 +162,9 @@ impl ConfigHandler {
     }
 
     /// Create a new API client based on this config's values
-    pub fn make_api_client(&self) -> Result<ImpulseClient> {
+    pub fn make_api_client(&self) -> Result<NeptuneClient> {
         let config = self.config();
-        Ok(ImpulseClient {
+        Ok(NeptuneClient {
             api_client: ShuttleApiClient::new(
                 config.api_url.clone(),
                 config.api_key.clone(),

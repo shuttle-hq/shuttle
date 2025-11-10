@@ -1,0 +1,78 @@
+[package]
+name = "neptune"
+version = "0.57.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "CLI for the Neptune platform (neptune.dev)"
+homepage = "https://www.neptune.dev"
+
+[dependencies]
+shuttle-api-client = { workspace = true, default-features = true, features = ["neptune"] }
+# shuttle-builder = { workspace = true }
+shuttle-common = { workspace = true, features = ["config"] }
+# shuttle-ifc = { workspace = true }
+# shuttle-mcp = { workspace = true }
+impulse-common = { workspace = true }
+cargo-shuttle = { workspace = true }
+
+anyhow = { workspace = true }
+# async-trait = { workspace = true }
+bollard = { workspace = true, features = ["ssl_providerless"] }
+# cargo_metadata = { workspace = true }
+# chrono = { workspace = true }
+clap = { workspace = true, features = ["env"] }
+clap_complete = { workspace = true }
+clap_mangen = { workspace = true }
+crossterm = { workspace = true }
+dialoguer = { workspace = true, features = ["password"] }
+# dirs = { workspace = true }
+# dunce = { workspace = true }
+futures = { workspace = true }
+# git2 = { workspace = true }
+# gix = { workspace = true, features = [
+#   "blocking-http-transport-reqwest-rust-tls",
+#   "worktree-mutation",
+# ] }
+# globset = { workspace = true }
+http = { workspace = true }
+# http-body = { workspace = true }
+# http-body-util = { workspace = true }
+# hyper = { workspace = true, features = ["http1", "server"] }
+# hyper-util = { workspace = true }
+ignore = { workspace = true }
+# indicatif = { workspace = true }
+indoc = { workspace = true }
+nixpacks = { workspace = true }
+# portpicker = { workspace = true }
+regex = { workspace = true }
+# reqwest = { workspace = true }
+# semver = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+# strum = { workspace = true }
+tar = { workspace = true }
+# tempfile = { workspace = true }
+tokio = { workspace = true, features = [
+  "rt-multi-thread",
+  "process",
+  "sync",
+  "time",
+] }
+# tokio-tungstenite = { workspace = true }
+# toml = { workspace = true }
+# toml_edit = { workspace = true }
+tracing = { workspace = true, features = ["default"] }
+tracing-subscriber = { workspace = true, features = [
+  "default",
+  "env-filter",
+  "fmt",
+] }
+# url = { workspace = true }
+walkdir = { workspace = true }
+# webbrowser = { workspace = true }
+zip = { workspace = true }
+
+# [dev-dependencies]
+# assert_cmd = { workspace = true }
+# rexpect = { workspace = true }

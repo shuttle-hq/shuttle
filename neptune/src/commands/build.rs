@@ -1,7 +1,7 @@
 use std::collections::hash_map::DefaultHasher;
 use std::env;
 use std::hash::{Hash, Hasher};
-use std::io::{Cursor, Read, Seek, Write};
+use std::io::{Cursor, Seek, Write};
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -15,11 +15,10 @@ use nixpacks::nixpacks::{
 };
 use tar::Builder;
 use walkdir::WalkDir;
-use zip::read::ZipFile;
 use zip::write::FileOptions;
 use zip::ZipWriter;
 
-use crate::impulse::{args::DeployArgs, Impulse};
+use crate::{args::DeployArgs, Neptune};
 
 pub(crate) enum ArchiveType {
     Tar,
@@ -75,7 +74,7 @@ impl<'a, W: Write + Seek> Archiver<'a, W> {
     }
 }
 
-impl Impulse {
+impl Neptune {
     fn load_dockerignore(
         &self,
         dockerfile_path: impl AsRef<Path>,
@@ -230,8 +229,8 @@ impl Impulse {
 
             // TODO: figure out where to pass start command from
             let start_command = "TODO";
+            let mut build_plan = BuildPlan::default();
             if start_command == "TODO" {
-                let mut build_plan = BuildPlan::default();
                 build_plan.set_start_phase(StartPhase::new(start_command));
             }
 
@@ -296,11 +295,11 @@ impl Impulse {
         //             "messages": ["Image is ready for deployment."],
         //             "next_action": "deploy",
         //             "requires_confirmation": false,
-        //             "next_action_tool": "impulse-deploy",
+        //             "next_action_tool": "neptune-deploy",
         //             "next_action_params": {{
         //                 "image_uri": "{}"
         //             }},
-        //             "next_action_non_tool": "Run 'impulse deploy' to deploy the built image to your infrastructure."
+        //             "next_action_non_tool": "Run 'neptune deploy' to deploy the built image to your infrastructure."
         //         }}"#
         //         },
         //         name, final_image_uri, final_image_uri
@@ -316,14 +315,14 @@ impl Impulse {
         //         Your application has been built and pushed to the container registry.
         //         The image is now ready for deployment to your infrastructure.
 
-        //         Next step: Run 'impulse deploy' to deploy your application.
+        //         Next step: Run 'neptune deploy' to deploy your application.
         //         "#
         //         },
         //         name, final_image_uri
         //     );
         // } else {
         //     println!("✅ Build successful: {}", final_image_uri);
-        //     println!("Next: impulse deploy");
+        //     println!("Next: neptune deploy");
         // }
         Ok(Some(final_image_uri))
     }

@@ -1,17 +1,15 @@
 use anyhow::{Context, Result};
+use cargo_shuttle::args::OutputMode;
 use crossterm::style::Stylize;
 use dialoguer::{theme::ColorfulTheme, Password};
 
 use crate::{
-    args::OutputMode,
-    impulse::{
-        args::{LoginArgs, LogoutArgs},
-        Impulse, ImpulseCommandOutput,
-    },
+    args::{LoginArgs, LogoutArgs},
+    Neptune, NeptuneCommandOutput,
 };
 
-impl Impulse {
-    pub async fn login(&mut self, login_args: LoginArgs) -> Result<ImpulseCommandOutput> {
+impl Neptune {
+    pub async fn login(&mut self, login_args: LoginArgs) -> Result<NeptuneCommandOutput> {
         let api_key = match login_args.api_key {
             Some(api_key) => api_key,
             None => {
@@ -37,7 +35,7 @@ impl Impulse {
             .modify_global(|g| g.api_key = Some(api_key.clone()))?;
         self.refresh_api_client()?;
 
-        // Verify API key using the Impulse API; be lenient with response schema
+        // Verify API key using the API; be lenient with response schema
         let response = self
             .client
             .api_client
@@ -65,10 +63,10 @@ impl Impulse {
             }
         }
 
-        Ok(ImpulseCommandOutput::None)
+        Ok(NeptuneCommandOutput::None)
     }
 
-    pub async fn logout(&mut self, _logout_args: LogoutArgs) -> Result<ImpulseCommandOutput> {
+    pub async fn logout(&mut self, _logout_args: LogoutArgs) -> Result<NeptuneCommandOutput> {
         // Reset API key endpoint:
         // if logout_args.reset_api_key {
         //     let client = self.client.as_ref().unwrap();
@@ -82,8 +80,8 @@ impl Impulse {
         self.refresh_api_client()?;
 
         eprintln!("Successfully logged out.");
-        eprintln!(" -> Use `impulse login` to log in again.");
+        eprintln!(" -> Use `neptune login` to log in again.");
 
-        Ok(ImpulseCommandOutput::None)
+        Ok(NeptuneCommandOutput::None)
     }
 }

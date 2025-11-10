@@ -5,20 +5,21 @@ use std::{
 };
 
 use anyhow::{Context, Result};
+use cargo_shuttle::args::OutputMode;
 use clap::CommandFactory;
 use clap_complete::{generate, Shell};
 use clap_mangen::Man;
 
-use crate::impulse::{args::ImpulseArgs, Impulse, ImpulseCommandOutput};
+use crate::{args::NeptuneArgs, Neptune, NeptuneCommandOutput};
 
-impl Impulse {
+impl Neptune {
     pub async fn generate_completions(
         &self,
         shell: Shell,
         output_file: Option<PathBuf>,
-    ) -> Result<ImpulseCommandOutput> {
-        let name = "impulse";
-        let mut app = ImpulseArgs::command();
+    ) -> Result<NeptuneCommandOutput> {
+        let name = "neptune";
+        let mut app = NeptuneArgs::command();
         let mut output = Vec::new();
 
         generate(shell, &mut app, name, &mut output);
@@ -27,14 +28,14 @@ impl Impulse {
             None => io::stdout().write(&output)?,
         };
 
-        Ok(ImpulseCommandOutput::None)
+        Ok(NeptuneCommandOutput::None)
     }
 
     pub async fn generate_manpage(
         &self,
         output_file: Option<PathBuf>,
-    ) -> Result<ImpulseCommandOutput> {
-        let app = ImpulseArgs::command();
+    ) -> Result<NeptuneCommandOutput> {
+        let app = NeptuneArgs::command();
         let mut output = Vec::new();
 
         Man::new(app.clone()).render(&mut output)?;
@@ -63,19 +64,19 @@ impl Impulse {
             None => io::stdout().write(&output)?,
         };
 
-        Ok(ImpulseCommandOutput::None)
+        Ok(NeptuneCommandOutput::None)
     }
 
-    pub async fn generate_agents(&self, dir: impl AsRef<Path>) -> Result<ImpulseCommandOutput> {
+    pub async fn generate_agents(&self, dir: impl AsRef<Path>) -> Result<NeptuneCommandOutput> {
         let dir = dir.as_ref().canonicalize()?;
         if !dir.exists() && !dir.is_dir() {
             fs::create_dir_all(&dir)?;
         }
         let file = dir.join("AGENTS.md");
 
-        let re = regex::Regex::new(r"<!-- impulse: agents.md version (.+) -->").unwrap();
+        let re = regex::Regex::new(r"<!-- neptune: agents.md version (.+) -->").unwrap();
         // let re =
-        //     regex::Regex::new(r"<!-- impulse: agents.md version (.+) -->.+<!-- impulse end -->")
+        //     regex::Regex::new(r"<!-- neptune: agents.md version (.+) -->.+<!-- neptune end -->")
         //         .unwrap();
         let agents = self.client.get_agents_md().await?;
         let agents_version = re
@@ -86,14 +87,14 @@ impl Impulse {
             .as_str();
         tracing::debug!("got agents.md file with version {}", agents_version);
 
-        tracing::debug!("checking {} for existing impulse rules", file.display());
+        tracing::debug!("checking {} for existing neptune rules", file.display());
         if file.exists() && file.is_file() {
             let mut content = fs::read_to_string(&file).context("reading existing AGENTS.md")?;
             if let Some(cap) = re.captures(&content) {
                 let mat = cap.get(0).unwrap();
                 let version = cap.get(1).unwrap().as_str();
                 if version < agents_version {
-                    tracing::debug!("updating agents.md impulse section");
+                    tracing::debug!("updating agents.md neptune section");
                     let before = &content[0..mat.start()];
                     let after = &content[mat.end()..];
                     content = format!("{before}{agents}{after}");
@@ -115,18 +116,18 @@ impl Impulse {
                 .context("writing AGENTS.md")?;
         }
 
-        Ok(ImpulseCommandOutput::None)
+        Ok(NeptuneCommandOutput::None)
     }
 
-    pub async fn generate_spec(&self, dir: impl AsRef<Path>) -> Result<ImpulseCommandOutput> {
+    pub async fn generate_spec(&self, dir: impl AsRef<Path>) -> Result<NeptuneCommandOutput> {
         let bytes: Vec<u8> = self.create_build_context(&dir, super::build::ArchiveType::Zip)?;
 
-        let spec_bytes = self.client.generate_impulse_spec(bytes).await?;
+        let spec_bytes = self.client.generate_spec(bytes).await?;
 
         tokio::fs::write(dir.as_ref().join("shuttle.json"), spec_bytes).await?;
 
         // Output success message based on mode
-        if self.global_args.output_mode == crate::OutputMode::Json {
+        if self.global_args.output_mode == OutputMode::Json {
             eprintln!(indoc::indoc! {r#"
                 {{
                     "ok": true,
@@ -136,9 +137,9 @@ impl Impulse {
                     ],
                     "next_action": "validate_then_deploy",
                     "requires_confirmation": false,
-                    "next_action_tool": "impulse deploy",
+                    "next_action_tool": "neptune deploy",
                     "next_action_params": {{}},
-                    "next_action_non_tool": "Review the generated shuttle.json configuration and run 'impulse status' to check deployment readiness."
+                    "next_action_non_tool": "Review the generated shuttle.json configuration and run 'neptune status' to check deployment readiness."
                 }}"#
             });
         } else if self.global_args.verbose {
@@ -153,17 +154,17 @@ impl Impulse {
 
                 Next steps:
                 1. Review the generated shuttle.json configuration
-                2. Run 'impulse deploy' to build and deploy your application
-                3. Run 'impulse status' to check your project deployment
+                2. Run 'neptune deploy' to build and deploy your application
+                3. Run 'neptune status' to check your project deployment
 
                 The configuration is based on your project's source code analysis and
                 follows Shuttle's best practices for resource provisioning.
                 "#
             });
         } else {
-            eprintln!("Generated shuttle.json - review the configuration and run 'impulse deploy' to deploy");
+            eprintln!("Generated shuttle.json - review the configuration and run 'neptune deploy' to deploy");
         }
 
-        Ok(ImpulseCommandOutput::None)
+        Ok(NeptuneCommandOutput::None)
     }
 }

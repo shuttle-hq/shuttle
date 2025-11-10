@@ -12,12 +12,12 @@ use crate::{
 };
 
 #[derive(Clone)]
-pub struct ImpulseClient {
+pub struct NeptuneClient {
     pub api_client: ShuttleApiClient,
     pub ai_service_client: ShuttleApiClient,
 }
 
-impl ImpulseClient {
+impl NeptuneClient {
     pub async fn get_agents_md(&self) -> Result<String> {
         self.ai_service_client
             .get("/v1/agents.md", Option::<()>::None)
@@ -26,7 +26,7 @@ impl ImpulseClient {
             .await
     }
 
-    pub async fn get_impulse_projects(&self) -> Result<ParsedJson<Vec<ProjectStatusResponse>>> {
+    pub async fn get_projects(&self) -> Result<ParsedJson<Vec<ProjectStatusResponse>>> {
         self.api_client
             .get("/projects", Option::<()>::None)
             .await?
@@ -34,10 +34,7 @@ impl ImpulseClient {
             .await
     }
 
-    pub async fn get_impulse_project_by_id(
-        &self,
-        id: &str,
-    ) -> Result<ParsedJson<ProjectStatusResponse>> {
+    pub async fn get_project_by_id(&self, id: &str) -> Result<ParsedJson<ProjectStatusResponse>> {
         self.api_client
             .get(format!("/project/{id}"), Option::<()>::None)
             .await?
@@ -54,12 +51,12 @@ impl ImpulseClient {
             .map_err(Into::into)
     }
 
-    pub async fn get_impulse_project_id_from_name(&self, name: &str) -> Result<Option<String>> {
-        let projects = self.get_impulse_projects().await?.into_inner();
+    pub async fn get_project_id_from_name(&self, name: &str) -> Result<Option<String>> {
+        let projects = self.get_projects().await?.into_inner();
         Ok(projects.into_iter().find(|p| p.name == name).map(|p| p.id))
     }
 
-    pub async fn create_impulse_project(
+    pub async fn create_project(
         &self,
         spec: &ProjectSpec,
     ) -> Result<ParsedJson<ProjectStatusResponse>> {
@@ -74,7 +71,7 @@ impl ImpulseClient {
             .await
     }
 
-    pub async fn create_impulse_deployment(
+    pub async fn create_deployment(
         &self,
         spec: &ProjectSpec,
         id: &str,
@@ -101,7 +98,7 @@ impl ImpulseClient {
             .await
     }
 
-    pub async fn generate_impulse_spec(&self, payload: Vec<u8>) -> Result<Bytes> {
+    pub async fn generate_spec(&self, payload: Vec<u8>) -> Result<Bytes> {
         let url = format!("{}/v1/generate/spec", self.ai_service_client.api_url);
 
         let mut builder = self.ai_service_client.client.post(url);

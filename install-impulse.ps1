@@ -17,12 +17,12 @@ function Install-Impulse {
         $TELEMETRY = "0"
     }
 
-    Write-Host "    ____                      __        "
-    Write-Host "   /  _/___ ___  ____  __  __/ /_______ "
-    Write-Host "   / // __ `__ \/ __ \/ / / / / ___/ _ \"
-    Write-Host " _/ // / / / / / /_/ / /_/ / (__  )  __/"
-    Write-Host "/___/_/ /_/ /_/ .___/\__,_/_/____/\___/ "
-    Write-Host "             /_/              by Shuttle"
+    Write-Host "    _   __           __                 "
+    Write-Host "   / | / /__  ____  / /___  ______  ___ "
+    Write-Host "  /  |/ / _ \/ __ \/ __/ / / / __ \/ _ \"
+    Write-Host " / /|  /  __/ /_/ / /_/ /_/ / / / /  __/"
+    Write-Host "/_/ |_/\___/ .___/\__/\__,_/_/ /_/\___/ "
+    Write-Host "          /_/                           "
     Write-Host
     Write-Host @"
 https://docs.shuttle.dev

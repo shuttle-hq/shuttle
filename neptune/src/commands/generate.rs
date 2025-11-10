@@ -68,13 +68,17 @@ impl Neptune {
     }
 
     pub async fn generate_agents(&self, dir: impl AsRef<Path>) -> Result<NeptuneCommandOutput> {
-        let dir = dir.as_ref().canonicalize()?;
-        if !dir.exists() && !dir.is_dir() {
-            fs::create_dir_all(&dir)?;
+        let dir = dir.as_ref();
+        if !dir.exists() {
+            fs::create_dir_all(dir)?;
         }
+        let dir = dir.canonicalize()?;
         let file = dir.join("AGENTS.md");
 
-        let re = regex::Regex::new(r"<!-- neptune: agents.md version (.+) -->").unwrap();
+        let re = regex::Regex::new(
+            r"(?s)<!-- neptune: agents\.md version ([^>]+) -->.*?<!-- neptune end -->",
+        )
+        .unwrap();
         // let re =
         //     regex::Regex::new(r"<!-- neptune: agents.md version (.+) -->.+<!-- neptune end -->")
         //         .unwrap();

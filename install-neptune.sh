@@ -101,7 +101,7 @@ _exit_success() {
   _send_telemetry
   echo
   [[ "$SUPPORTS_COLOR" = "1" ]] && echo -en "\e[32m" # green
-  echo "Thanks for installing Impulse CLI! 🚀"
+  echo "Thanks for installing Neptune CLI! 🚀"
   [[ "$SUPPORTS_COLOR" = "1" ]] && echo -en "\e[0m"
   exit 0
 }
@@ -119,7 +119,7 @@ _exit_failure() {
   OUTCOME="failure"
   echo
   [[ "$SUPPORTS_COLOR" = "1" ]] && echo -en "\e[31m" # red
-  echo "Impulse installation script failed with reason: $STEP_FAILED"
+  echo "Neptune installation script failed with reason: $STEP_FAILED"
   [[ "$SUPPORTS_COLOR" = "1" ]] && echo -en "\e[0m"
   echo "If you have any problems, please open an issue on GitHub or visit our Discord!"
   _send_telemetry
@@ -141,15 +141,15 @@ LATEST_RELEASE=$(curl -fsL -H 'Accept: application/json' "$REPO_URL/releases/lat
 LATEST_VERSION=$(echo "$LATEST_RELEASE" | sed -e 's/.*"tag_name":"\([^"]*\)".*/\1/')
 [ $? -ne 0 ] && _exit_failure "parse-latest-version"
 
-if command -v impulse &>/dev/null; then
+if command -v neptune &>/dev/null; then
   NEW_INSTALL="false"
-  if [[ "$(impulse -V)" = *"${LATEST_VERSION#v}" ]]; then
+  if [[ "$(neptune -V)" = *"${LATEST_VERSION#v}" ]]; then
     [[ "$SUPPORTS_COLOR" = "1" ]] && echo -en "\e[32m" # green
-    echo "Impulse CLI is already at the latest version!"
+    echo "Neptune CLI is already at the latest version!"
     [[ "$SUPPORTS_COLOR" = "1" ]] && echo -en "\e[0m"
     exit 0 # skip telemetry and instantly exit
   else
-    echo "Updating Impulse CLI to $LATEST_VERSION"
+    echo "Updating Neptune CLI to $LATEST_VERSION"
   fi
 fi
 
@@ -172,11 +172,11 @@ _install_binary() {
   fi
   tar -xzf "cargo-shuttle-$LATEST_VERSION-$target.tar.gz" || _exit_failure "tar-extract-binary"
   mkdir -p "$INSTALL_DIR" || _exit_failure "create-install-dir"
-  echo "Installing to $INSTALL_DIR/impulse"
-  mv "cargo-shuttle-$target-$LATEST_VERSION/impulse" "$INSTALL_DIR/" || _exit_failure "move-binary"
+  echo "Installing to $INSTALL_DIR/neptune"
+  mv "cargo-shuttle-$target-$LATEST_VERSION/neptune" "$INSTALL_DIR/" || _exit_failure "move-binary"
   popd >/dev/null || _exit_failure "popd"
   if [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
-    echo "Add $INSTALL_DIR to PATH to access the 'impulse' command"
+    echo "Add $INSTALL_DIR to PATH to access the 'neptune' command"
   fi
 }
 

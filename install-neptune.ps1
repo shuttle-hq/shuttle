@@ -1,4 +1,4 @@
-function Install-Impulse {
+function Install-Neptune {
     # Anonymous telemetry
     $TELEMETRY = "1"
     $PLATFORM = "windows"
@@ -68,7 +68,7 @@ Please open an issue if you encounter any problems!
         $OUTCOME = "success"
         Send-Telemetry
         Write-Host ""
-        Write-Host "Thanks for installing Impulse CLI!" -ForegroundColor Green
+        Write-Host "Thanks for installing Neptune CLI!" -ForegroundColor Green
     }
 
     function Exit-Neutral {
@@ -83,7 +83,7 @@ Please open an issue if you encounter any problems!
         $STEP_FAILED = $StepFailed
         $OUTCOME = "failure"
         Write-Host ""
-        Write-Host "Impulse installation script failed with reason: $STEP_FAILED" -ForegroundColor Red
+        Write-Host "Neptune installation script failed with reason: $STEP_FAILED" -ForegroundColor Red
         Write-Host "If you have any problems, please open an issue on GitHub or visit our Discord!"
         Send-Telemetry
     }
@@ -94,17 +94,17 @@ Please open an issue if you encounter any problems!
     $LatestRelease = $Matches.1
     if ($LatestRelease -eq $null) { return Exit-Failure "parse-latest-version" }
 
-    if (Get-Command -CommandType Application -ErrorAction SilentlyContinue impulse.exe) {
+    if (Get-Command -CommandType Application -ErrorAction SilentlyContinue neptune.exe) {
         $NEW_INSTALL = "false"
         $LatestReleaseStripped = $LatestRelease -replace '^v', ''
-        $CurrentVersion = & impulse.exe -V
+        $CurrentVersion = & neptune.exe -V
         $CurrentVersionStripped = $CurrentVersion -replace '^cargo-shuttle ', ''
         if ($LatestReleaseStripped -eq $CurrentVersionStripped) {
-            Write-Host "Impulse CLI is already at the latest version!" -ForegroundColor Green
+            Write-Host "Neptune CLI is already at the latest version!" -ForegroundColor Green
             return
         }
         else {
-            Write-Host "Updating Impulse CLI to $LatestRelease"
+            Write-Host "Updating Neptune CLI to $LatestRelease"
         }
     }
 
@@ -130,8 +130,8 @@ Please open an issue if you encounter any problems!
     $CargoInstallBinDir = "$env:USERPROFILE\bin"
     New-Item -ItemType Directory -Force "$CargoInstallBinDir" | Out-Null
     if (!$?) { return Exit-Failure "binary-folder" }
-    Write-Host "Installing to $CargoInstallBinDir\impulse.exe"
-    Move-Item -Force "$TempDir\cargo-shuttle\cargo-shuttle-x86_64-pc-windows-msvc-$LatestRelease\impulse.exe" "$CargoInstallBinDir\impulse.exe"
+    Write-Host "Installing to $CargoInstallBinDir\neptune.exe"
+    Move-Item -Force "$TempDir\cargo-shuttle\cargo-shuttle-x86_64-pc-windows-msvc-$LatestRelease\neptune.exe" "$CargoInstallBinDir\neptune.exe"
     if (!$?) { return Exit-Failure "move-binary" }
     Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "$TempDir\cargo-shuttle.tar.gz", "$TempDir\cargo-shuttle"
 
@@ -141,5 +141,5 @@ Please open an issue if you encounter any problems!
 
 $OldErrorAction = $ErrorActionPreference
 $ErrorActionPreference = "Stop"
-Install-Impulse
+Install-Neptune
 $ErrorActionPreference = $OldErrorAction

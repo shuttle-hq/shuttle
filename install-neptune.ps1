@@ -98,8 +98,7 @@ Please open an issue if you encounter any problems!
         $NEW_INSTALL = "false"
         $LatestReleaseStripped = $LatestRelease -replace '^v', ''
         $CurrentVersion = & neptune.exe -V
-        $CurrentVersionStripped = $CurrentVersion -replace '^cargo-shuttle ', ''
-        if ($LatestReleaseStripped -eq $CurrentVersionStripped) {
+        if ($LatestReleaseStripped.EndsWith($CurrentVersion)) {
             Write-Host "Neptune CLI is already at the latest version!" -ForegroundColor Green
             return
         }

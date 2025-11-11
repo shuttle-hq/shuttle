@@ -91,6 +91,8 @@ impl Neptune {
         let bytes: Vec<u8> = self.create_build_context(
             &self.global_args.working_directory,
             crate::commands::build::ArchiveType::Zip,
+            None::<Vec<std::path::PathBuf>>,
+            true,
         )?;
         let gen_res = self.client.generate(bytes, &project_name).await?;
         if let Some(pb) = gen_spinner.as_ref() {

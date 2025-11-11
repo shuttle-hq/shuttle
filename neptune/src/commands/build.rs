@@ -6,16 +6,16 @@ use std::io::{Cursor, Seek, Write};
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
 use bollard::{auth::DockerCredentials, Docker};
 use futures::TryStreamExt;
-use ignore::{gitignore::GitignoreBuilder, Match};
+use ignore::DirEntry;
+use ignore::WalkBuilder;
 use nixpacks::nixpacks::{
     builder::docker::DockerBuilderOptions,
     plan::{generator::GeneratePlanOptions, phase::StartPhase, BuildPlan},
 };
 use tar::Builder;
-use walkdir::WalkDir;
 use zip::write::FileOptions;
 use zip::ZipWriter;
 
@@ -76,24 +76,12 @@ impl<'a, W: Write + Seek> Archiver<'a, W> {
 }
 
 impl Neptune {
-    fn load_dockerignore(
-        &self,
-        dockerfile_path: impl AsRef<Path>,
-    ) -> Result<Option<ignore::gitignore::Gitignore>> {
-        let dockerignore_path = dockerfile_path.as_ref().join(".dockerignore");
-        if !dockerignore_path.exists() {
-            return Ok(None);
-        }
-
-        let mut builder = GitignoreBuilder::new(dockerfile_path);
-        builder.add(&dockerignore_path);
-        Ok(Some(builder.build()?))
-    }
-
     pub(crate) fn create_build_context(
         &self,
         context_root: impl AsRef<Path>,
         archive_type: ArchiveType, // dockerfile_filename: &Path,
+        ignore_files: Option<Vec<impl AsRef<Path>>>,
+        standard_filters: bool,
     ) -> Result<Vec<u8>> {
         let mut manifest_data = Cursor::new(Vec::new());
         {
@@ -101,50 +89,51 @@ impl Neptune {
                 ArchiveType::Tar => Archiver::tar(&mut manifest_data),
                 ArchiveType::Zip => Archiver::zip(&mut manifest_data),
             };
-            let ignore_spec = self.load_dockerignore(&context_root)?;
+
+            let mut walk_builder = WalkBuilder::new(&context_root);
+
+            if let Some(files) = ignore_files {
+                for file in files {
+                    if let Some(err) = walk_builder.add_ignore(file) {
+                        return Err(err.into());
+                    }
+                }
+            }
+
+            if standard_filters {
+                tracing::debug!("Setting walk filter standard filters (.gitignore)",);
+                walk_builder.standard_filters(standard_filters);
+            }
 
             tracing::debug!(
                 "Creating build context tar from {:?}",
                 context_root.as_ref()
             );
 
-            // TODO: safety check that we don't zip user's $HOME directory
+            let mut total_size: u64 = 0;
+            const MAX_ARCHIVE_SIZE: u64 = 200 * 1024 * 1024; // 200MB in bytes
 
-            for entry in WalkDir::new(&context_root).into_iter() {
-                let entry = entry?;
+            for entry in walk_builder.build() {
+                let entry: DirEntry = entry?;
                 let path = entry.path();
 
                 if path.is_file() {
-                    let rel_path = path.strip_prefix(&context_root)?;
+                    // Check file size and accumulate total size
+                    let file_size = fs::metadata(path)?.len();
+                    total_size += file_size;
 
-                    // Check against .dockerignore patterns
-                    if let Some(ref ignore) = ignore_spec {
-                        if let Match::Ignore(_) = ignore.matched(rel_path, false) {
-                            tracing::debug!("Ignoring file due to .dockerignore: {:?}", rel_path);
-                            continue;
-                        }
+                    if total_size > MAX_ARCHIVE_SIZE {
+                        return Err(anyhow::anyhow!(
+                            "Archive size would exceed 200MB limit. Current size: {} bytes",
+                            total_size
+                        ));
                     }
-                    tracing::debug!("Adding tar entry: {:?}", rel_path);
 
+                    let rel_path = path.strip_prefix(&context_root)?;
+                    tracing::debug!("Adding entry: {:?}", rel_path);
                     manifest.add_file(path, rel_path)?;
                 }
             }
-
-            tracing::debug!("{:?}", context_root.as_ref());
-
-            // Add the Dockerfile to the tar
-            // let dockerfile_path = context_root.join(dockerfile_filename);
-            // if dockerfile_path.exists() && dockerfile_path.is_file() {
-            //     let mut dockerfile_contents = Vec::new();
-            //     File::open(&dockerfile_path)?.read_to_end(&mut dockerfile_contents)?;
-
-            //     let mut header = Header::new_gnu();
-            //     header.set_path("Dockerfile")?;
-            //     header.set_size(dockerfile_contents.len() as u64);
-            //     header.set_cksum();
-
-            //     tar.append(&header, dockerfile_contents.as_slice())?;
-            // }
 
             manifest.finish()?;
         }
@@ -183,7 +172,12 @@ impl Neptune {
 
         if tokio::fs::try_exists("Dockerfile").await? {
             tracing::info!("Using local Dockerfile...");
-            let tar: Vec<u8> = self.create_build_context(wd, ArchiveType::Tar)?;
+            let tar: Vec<u8> = self.create_build_context(
+                wd,
+                ArchiveType::Tar,
+                Some(vec![Path::new(".dockerfile")]),
+                false,
+            )?;
             let mut logs = vec![];
             match docker
                 .build_image(

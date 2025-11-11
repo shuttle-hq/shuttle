@@ -9,6 +9,9 @@ use cargo_shuttle::args::OutputMode;
 use clap::CommandFactory;
 use clap_complete::{generate, Shell};
 use clap_mangen::Man;
+use crossterm::style::Stylize;
+use indicatif::{ProgressBar, ProgressStyle};
+use shuttle_api_client::neptune_types::GenerateResponse;
 
 use crate::{args::NeptuneArgs, Neptune, NeptuneCommandOutput};
 
@@ -158,38 +161,109 @@ impl Neptune {
     pub async fn generate_spec(&self, dir: impl AsRef<Path>) -> Result<NeptuneCommandOutput> {
         let bytes: Vec<u8> = self.create_build_context(&dir, super::build::ArchiveType::Zip)?;
 
-        let spec_bytes = self.client.generate_spec(bytes).await?;
+        // Spinner only for non-JSON output
+        let spinner = if self.global_args.output_mode != OutputMode::Json {
+            let pb = ProgressBar::new_spinner();
+            pb.set_style(
+                ProgressStyle::with_template("{spinner:.green} {msg}")
+                    .unwrap()
+                    .tick_chars("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"),
+            );
+            pb.set_message("Analyzing project and generating configuration...");
+            pb.enable_steady_tick(std::time::Duration::from_millis(80));
+            Some(pb)
+        } else {
+            None
+        };
 
-        tokio::fs::write(dir.as_ref().join("shuttle.json"), spec_bytes).await?;
+        let gen_res: GenerateResponse = self.client.generate(bytes, "hickyblue").await?;
+
+        if let Some(pb) = spinner.as_ref() {
+            pb.finish_and_clear();
+        }
+
+        // Write neptune.json with change detection and small preview if updated
+        let spec_path = dir.as_ref().join("neptune.json");
+        let new_spec_pretty = serde_json::to_string_pretty(&gen_res.platform_spec)?;
+        if spec_path.exists() && spec_path.is_file() {
+            if let Ok(existing) = fs::read_to_string(&spec_path) {
+                // Normalize existing by parsing and re-serializing to pretty JSON to avoid whitespace-only diffs
+                let normalized_existing = serde_json::from_str::<serde_json::Value>(&existing)
+                    .ok()
+                    .and_then(|v| serde_json::to_string_pretty(&v).ok())
+                    .unwrap_or(existing.clone());
+                let changed = normalized_existing != new_spec_pretty;
+                if !changed && self.global_args.output_mode != OutputMode::Json {
+                    eprintln!("neptune.json is up to date");
+                }
+                if changed && self.global_args.output_mode != OutputMode::Json {
+                    eprintln!("Updating neptune.json");
+                    // Show a small colored diff preview (up to first 60 lines), highlighting only changed lines
+                    let old_lines: Vec<&str> = normalized_existing.lines().collect();
+                    let new_lines: Vec<&str> = new_spec_pretty.lines().collect();
+                    eprintln!();
+                    eprintln!("--- neptune.json diff (preview) ---");
+                    let max_lines = 60usize;
+                    let mut shown = 0usize;
+                    let max_len = old_lines.len().max(new_lines.len());
+                    for i in 0..max_len {
+                        if shown >= max_lines {
+                            eprintln!("... (truncated preview)");
+                            break;
+                        }
+                        let old = old_lines.get(i).copied().unwrap_or("");
+                        let new = new_lines.get(i).copied().unwrap_or("");
+                        if old == new {
+                            continue;
+                        }
+                        if !old.is_empty() {
+                            eprintln!("{} {}", "-".red().bold(), old.red());
+                            shown += 1;
+                        }
+                        if !new.is_empty() {
+                            eprintln!("{} {}", "+".green().bold(), new.green());
+                            shown += 1;
+                        }
+                    }
+                    eprintln!();
+                    eprintln!(
+                        "(Tip: run `git --no-pager diff -- neptune.json` to see full changes)"
+                    );
+                }
+            }
+        } else if self.global_args.output_mode != OutputMode::Json {
+            eprintln!("Creating neptune.json");
+        }
+        tokio::fs::write(&spec_path, new_spec_pretty.as_bytes()).await?;
 
         // Output success message based on mode
         if self.global_args.output_mode == OutputMode::Json {
             eprintln!(indoc::indoc! {r#"
                 {{
                     "ok": true,
-                    "summary": "Generated shuttle.json configuration",
+                    "summary": "Generated neptune.json configuration",
                     "messages": [
-                        "Created shuttle.json at the project root.",
+                        "Created neptune.json at the project root.",
                     ],
                     "next_action": "validate_then_deploy",
                     "requires_confirmation": false,
                     "next_action_tool": "neptune deploy",
                     "next_action_params": {{}},
-                    "next_action_non_tool": "Review the generated shuttle.json configuration and run 'neptune status' to check deployment readiness."
+                    "next_action_non_tool": "Review the generated neptune.json configuration and run 'neptune status' to check deployment readiness."
                 }}"#
             });
         } else if self.global_args.verbose {
             eprintln!(indoc::indoc! {r#"
-                SUCCESS: Generated shuttle.json configuration
+                SUCCESS: Generated neptune.json configuration
 
-                The shuttle.json project manifest has been successfully created at the project root.
+                The neptune.json project manifest has been successfully created at the project root.
                 This file contains your project configuration including:
                 - Project name and metadata
                 - Resource definitions (databases, secrets, etc.)
                 - Runtime and deployment settings
 
                 Next steps:
-                1. Review the generated shuttle.json configuration
+                1. Review the generated neptune.json configuration
                 2. Run 'neptune deploy' to build and deploy your application
                 3. Run 'neptune status' to check your project deployment
 
@@ -197,9 +271,35 @@ impl Neptune {
                 follows Shuttle's best practices for resource provisioning.
                 "#
             });
-        } else {
-            eprintln!("Generated shuttle.json - review the configuration and run 'neptune deploy' to deploy");
         }
+
+        // Handle compatibility report: print if incompatible
+        if !gen_res.compatibility_report.compatible {
+            if self.global_args.output_mode == OutputMode::Json {
+                let report_json = serde_json::to_string_pretty(&gen_res.compatibility_report)?;
+                eprintln!("{}", report_json);
+            } else {
+                eprintln!("{}", "Possible compatibility issues detected:".yellow());
+                eprintln!();
+                for err in gen_res.compatibility_report.errors.iter() {
+                    eprintln!();
+                    eprintln!("{}", err.message.as_str());
+                    if let Some(suggestion) = &err.suggestion {
+                        eprintln!("{} {}", "Suggestion:".green(), suggestion.as_str().white());
+                    }
+                }
+                eprintln!();
+            }
+        }
+
+        // Save start_command for build usage, .neptune/start_command
+        let start_file = dir.as_ref().join(".neptune").join("start_command");
+        if let Some(parent) = start_file.parent() {
+            if !parent.exists() {
+                fs::create_dir_all(parent)?;
+            }
+        }
+        tokio::fs::write(&start_file, gen_res.start_command.as_bytes()).await?;
 
         Ok(NeptuneCommandOutput::None)
     }

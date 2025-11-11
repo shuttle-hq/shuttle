@@ -38,6 +38,8 @@ use util::{ParsedJson, ToBodyContent};
 
 #[cfg(feature = "neptune")]
 pub mod neptune;
+#[cfg(feature = "neptune")]
+pub mod neptune_types;
 
 #[derive(Clone)]
 pub struct ShuttleApiClient {

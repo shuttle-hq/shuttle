@@ -14,6 +14,7 @@ impulse-common = { workspace = true, optional = true }
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 bytes = { workspace = true }
+chrono = { workspace = true, features = ["serde"] }
 headers = { workspace = true }
 http = { workspace = true }
 percent-encoding = { workspace = true }
@@ -30,4 +31,8 @@ tracing = { workspace = true, features = ["default"], optional = true }
 [features]
 default = ["tracing"]
 tracing = ["dep:tracing"]
-neptune = ["dep:impulse-common", "reqwest/multipart", "reqwest-middleware/multipart"]
+neptune = [
+    "dep:impulse-common",
+    "reqwest/multipart",
+    "reqwest-middleware/multipart",
+]

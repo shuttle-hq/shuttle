@@ -5,7 +5,7 @@ use std::io::{Cursor, Seek, Write};
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use bollard::{auth::DockerCredentials, Docker};
 use futures::TryStreamExt;
 use ignore::{gitignore::GitignoreBuilder, Match};
@@ -178,7 +178,7 @@ impl Neptune {
             name
         );
 
-        let final_image_uri = format!("{}:{}", &uri, unique_tag);
+        let image_with_tag = format!("{}:{}", &uri, unique_tag);
 
         if tokio::fs::try_exists("Dockerfile").await? {
             tracing::info!("Using local Dockerfile...");
@@ -188,7 +188,7 @@ impl Neptune {
                 .build_image(
                     bollard::image::BuildImageOptions {
                         dockerfile: String::from("Dockerfile"),
-                        t: String::from(&final_image_uri),
+                        t: String::from(&image_with_tag),
                         ..Default::default()
                     },
                     None,
@@ -268,9 +268,17 @@ impl Neptune {
             )
             .await?;
 
+        let inspect = docker.inspect_image(&image_name).await?;
+        let image_with_digest =
+            if let Some(&[digest, ..]) = inspect.repo_digests.as_deref().as_ref() {
+                digest
+            } else {
+                &image_with_tag
+            };
+
         docker
             .push_image(
-                &final_image_uri,
+                &image_with_tag,
                 Some(bollard::image::PushImageOptions {
                     tag: String::from(unique_tag),
                 }),
@@ -284,46 +292,6 @@ impl Neptune {
             .try_collect::<Vec<_>>()
             .await?;
 
-        // if self.global_args.output_mode == crate::OutputMode::Json {
-        //     println!(
-        //         indoc::indoc! {r#"
-        //         {{
-        //             "ok": true,
-        //             "project": "{}",
-        //             "image_uri": "{}",
-        //             "summary": "Image built and pushed successfully.",
-        //             "messages": ["Image is ready for deployment."],
-        //             "next_action": "deploy",
-        //             "requires_confirmation": false,
-        //             "next_action_tool": "neptune-deploy",
-        //             "next_action_params": {{
-        //                 "image_uri": "{}"
-        //             }},
-        //             "next_action_non_tool": "Run 'neptune deploy' to deploy the built image to your infrastructure."
-        //         }}"#
-        //         },
-        //         name, final_image_uri, final_image_uri
-        //     );
-        // } else if self.global_args.verbose {
-        //     println!(
-        //         indoc::indoc! {r#"
-        //         ✅ Build completed successfully!
-
-        //         Project: {}
-        //         Image URI: {}
-
-        //         Your application has been built and pushed to the container registry.
-        //         The image is now ready for deployment to your infrastructure.
-
-        //         Next step: Run 'neptune deploy' to deploy your application.
-        //         "#
-        //         },
-        //         name, final_image_uri
-        //     );
-        // } else {
-        //     println!("✅ Build successful: {}", final_image_uri);
-        //     println!("Next: neptune deploy");
-        // }
-        Ok(Some(final_image_uri))
+        Ok(Some(String::from(image_with_digest)))
     }
 }

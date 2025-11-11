@@ -3,10 +3,12 @@ use bytes::Bytes;
 use impulse_common::types::project::{CreateDeploymentRequest, CreateProjectRequest, ProjectKind};
 use impulse_common::types::ProjectSpec;
 use impulse_common::types::ProjectStatusResponse;
-use reqwest::multipart::Form;
-use reqwest::multipart::Part;
 
 use crate::{
+    neptune_types::{
+        CheckCompatibilityRequest, CompatibilityReport, GenerateRequest, GenerateResponse,
+        PlatformSpecDoc,
+    },
     util::{ParsedJson, ToBodyContent},
     ShuttleApiClient,
 };
@@ -98,27 +100,69 @@ impl NeptuneClient {
             .await
     }
 
-    pub async fn generate_spec(&self, payload: Vec<u8>) -> Result<Bytes> {
+    pub async fn generate_spec(
+        &self,
+        payload: Vec<u8>,
+        project_name: &str,
+    ) -> Result<PlatformSpecDoc> {
         let url = format!("{}/v1/generate/spec", self.ai_service_client.api_url);
 
         let mut builder = self.ai_service_client.client.post(url);
         builder = self.ai_service_client.set_auth_bearer(builder);
-        let form = Form::new()
-            .part(
-                "project",
-                Part::bytes(payload)
-                    .file_name("project.zip")
-                    .mime_str("application/octet-stream")?,
-            )
-            .text("project_name", "hickyblue");
+        let form = GenerateRequest::from((payload, project_name)).into_multipart()?;
 
         builder = builder.multipart(form);
-        builder = builder.header("Accept", "application/json");
-        builder = builder.header("Content-Type", "multipart/from-data");
 
         let res = builder.send().await?;
         match res.error_for_status_ref() {
-            Ok(_) => Ok(res.bytes().await?),
+            Ok(_) => Ok(res.json::<PlatformSpecDoc>().await?),
+            Err(e) => {
+                tracing::error!(
+                    "{:?}: {:?}",
+                    e,
+                    str::from_utf8(&res.bytes().await?.to_vec())?
+                );
+                Err(e.into())
+            }
+        }
+    }
+
+    pub async fn generate(&self, payload: Vec<u8>, project_name: &str) -> Result<GenerateResponse> {
+        let url = format!("{}/v1/generate", self.ai_service_client.api_url);
+
+        let mut builder = self.ai_service_client.client.post(url);
+        builder = self.ai_service_client.set_auth_bearer(builder);
+
+        let form = GenerateRequest::from((payload, project_name)).into_multipart()?;
+
+        builder = builder.multipart(form);
+
+        let res = builder.send().await?;
+        match res.error_for_status_ref() {
+            Ok(_) => Ok(res.json::<GenerateResponse>().await?),
+            Err(e) => {
+                tracing::error!(
+                    "{:?}: {:?}",
+                    e,
+                    str::from_utf8(&res.bytes().await?.to_vec())?
+                );
+                Err(e.into())
+            }
+        }
+    }
+
+    pub async fn check_compatibility(&self, payload: Vec<u8>) -> Result<CompatibilityReport> {
+        let url = format!("{}/v1/check/compatibility", self.ai_service_client.api_url);
+
+        let mut builder = self.ai_service_client.client.post(url);
+        builder = self.ai_service_client.set_auth_bearer(builder);
+
+        let form = CheckCompatibilityRequest::from(payload).into_multipart()?;
+
+        let res = builder.multipart(form).send().await?;
+
+        match res.error_for_status_ref() {
+            Ok(_) => Ok(res.json::<CompatibilityReport>().await?),
             Err(e) => {
                 tracing::error!(
                     "{:?}: {:?}",

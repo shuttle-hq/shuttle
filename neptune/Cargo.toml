@@ -8,7 +8,9 @@ description = "CLI for the Neptune platform (neptune.dev)"
 homepage = "https://www.neptune.dev"
 
 [dependencies]
-shuttle-api-client = { workspace = true, default-features = true, features = ["neptune"] }
+shuttle-api-client = { workspace = true, default-features = true, features = [
+  "neptune",
+] }
 # shuttle-builder = { workspace = true }
 shuttle-common = { workspace = true, features = ["config"] }
 # shuttle-ifc = { workspace = true }
@@ -41,7 +43,7 @@ http = { workspace = true }
 # hyper = { workspace = true, features = ["http1", "server"] }
 # hyper-util = { workspace = true }
 ignore = { workspace = true }
-# indicatif = { workspace = true }
+indicatif = { workspace = true }
 indoc = { workspace = true }
 nixpacks = { workspace = true }
 # portpicker = { workspace = true }
@@ -72,6 +74,8 @@ tracing-subscriber = { workspace = true, features = [
 walkdir = { workspace = true }
 # webbrowser = { workspace = true }
 zip = { workspace = true }
+pretty_assertions = "1.4.1"
+comfy-table = "7.2.1"
 
 # [dev-dependencies]
 # assert_cmd = { workspace = true }

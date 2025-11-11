@@ -36,7 +36,7 @@ impl NeptuneClient {
 
     pub async fn get_project_by_id(&self, id: &str) -> Result<ParsedJson<ProjectStatusResponse>> {
         self.api_client
-            .get(format!("/project/{id}"), Option::<()>::None)
+            .get(format!("/projects/{id}"), Option::<()>::None)
             .await?
             .to_json()
             .await

@@ -74,6 +74,8 @@ tracing-subscriber = { workspace = true, features = [
 walkdir = { workspace = true }
 # webbrowser = { workspace = true }
 zip = { workspace = true }
+pretty_assertions = "1.4.1"
+comfy-table = "7.2.1"
 
 # [dev-dependencies]
 # assert_cmd = { workspace = true }

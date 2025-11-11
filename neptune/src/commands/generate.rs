@@ -9,8 +9,10 @@ use cargo_shuttle::args::OutputMode;
 use clap::CommandFactory;
 use clap_complete::{generate, Shell};
 use clap_mangen::Man;
+use comfy_table::{presets::UTF8_FULL, Attribute, Cell, Color, ContentArrangement, Table};
 use crossterm::style::Stylize;
 use indicatif::{ProgressBar, ProgressStyle};
+use pretty_assertions::StrComparison;
 use shuttle_api_client::neptune_types::GenerateResponse;
 
 use crate::{args::NeptuneArgs, Neptune, NeptuneCommandOutput};
@@ -197,33 +199,22 @@ impl Neptune {
                     eprintln!("neptune.json is up to date");
                 }
                 if changed && self.global_args.output_mode != OutputMode::Json {
-                    eprintln!("Updating neptune.json");
-                    // Show a small colored diff preview (up to first 60 lines), highlighting only changed lines
-                    let old_lines: Vec<&str> = normalized_existing.lines().collect();
-                    let new_lines: Vec<&str> = new_spec_pretty.lines().collect();
+                    eprintln!("Updating neptune.json... (changes shown below)");
                     eprintln!();
-                    eprintln!("--- neptune.json diff (preview) ---");
+                    eprintln!("--- neptune.json ---");
+                    // Use pretty_assertions to render a formatted, colored diff of the full JSON
+                    let diff = format!(
+                        "{}",
+                        StrComparison::new(&normalized_existing, &new_spec_pretty)
+                    );
+                    // Show only the first 60 lines as a preview
                     let max_lines = 60usize;
-                    let mut shown = 0usize;
-                    let max_len = old_lines.len().max(new_lines.len());
-                    for i in 0..max_len {
-                        if shown >= max_lines {
+                    for (i, line) in diff.lines().enumerate() {
+                        if i >= max_lines {
                             eprintln!("... (truncated preview)");
                             break;
                         }
-                        let old = old_lines.get(i).copied().unwrap_or("");
-                        let new = new_lines.get(i).copied().unwrap_or("");
-                        if old == new {
-                            continue;
-                        }
-                        if !old.is_empty() {
-                            eprintln!("{} {}", "-".red().bold(), old.red());
-                            shown += 1;
-                        }
-                        if !new.is_empty() {
-                            eprintln!("{} {}", "+".green().bold(), new.green());
-                            shown += 1;
-                        }
+                        eprintln!("{}", line);
                     }
                     eprintln!();
                     eprintln!(
@@ -245,7 +236,7 @@ impl Neptune {
                     "messages": [
                         "Created neptune.json at the project root.",
                     ],
-                    "next_action": "validate_then_deploy",
+                    "next_action": "deploy",
                     "requires_confirmation": false,
                     "next_action_tool": "neptune deploy",
                     "next_action_params": {{}},
@@ -279,14 +270,43 @@ impl Neptune {
                 let report_json = serde_json::to_string_pretty(&gen_res.compatibility_report)?;
                 eprintln!("{}", report_json);
             } else {
-                eprintln!("{}", "Possible compatibility issues detected:".yellow());
                 eprintln!();
+                eprintln!("{}", "Possible compatibility issues detected:".yellow());
+                let mut table = Table::new();
+                table
+                    .load_preset(UTF8_FULL)
+                    .set_content_arrangement(ContentArrangement::Dynamic)
+                    .set_header(vec![
+                        Cell::new("Category").add_attribute(Attribute::Bold),
+                        Cell::new("Message").add_attribute(Attribute::Bold),
+                        Cell::new("Path").add_attribute(Attribute::Bold),
+                        Cell::new("Suggestion").add_attribute(Attribute::Bold),
+                    ]);
                 for err in gen_res.compatibility_report.errors.iter() {
-                    eprintln!();
-                    eprintln!("{}", err.message.as_str());
-                    if let Some(suggestion) = &err.suggestion {
-                        eprintln!("{} {}", "Suggestion:".green(), suggestion.as_str().white());
-                    }
+                    let category = match err.category {
+                        shuttle_api_client::neptune_types::ErrorCategory::Architecture => {
+                            "Architecture"
+                        }
+                        shuttle_api_client::neptune_types::ErrorCategory::ResourceSupport => {
+                            "Resource Support"
+                        }
+                        shuttle_api_client::neptune_types::ErrorCategory::WorkloadSupport => {
+                            "Workload Support"
+                        }
+                        shuttle_api_client::neptune_types::ErrorCategory::ConfigurationInvalid => {
+                            "Configuration Invalid"
+                        }
+                        shuttle_api_client::neptune_types::ErrorCategory::Unknown => "Other",
+                    };
+                    table.add_row(vec![
+                        Cell::new(category).fg(Color::White),
+                        Cell::new(err.message.as_str()).fg(Color::Red),
+                        Cell::new(err.path.as_deref().unwrap_or("-")).fg(Color::White),
+                        Cell::new(err.suggestion.as_deref().unwrap_or("-")).fg(Color::White),
+                    ]);
+                }
+                if table.row_count() > 1 {
+                    eprintln!("{}", table);
                 }
                 eprintln!();
             }

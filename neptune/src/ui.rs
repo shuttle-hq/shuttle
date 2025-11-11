@@ -35,7 +35,7 @@ impl AiUi {
 
     pub fn info<M: AsRef<str>>(&self, message: M) {
         if self.is_human() {
-            eprintln!("  ℹ️ {}", message.as_ref());
+            eprintln!("   ℹ️  {}", message.as_ref());
         }
     }
 
@@ -47,7 +47,7 @@ impl AiUi {
 
     pub fn warn<M: AsRef<str>>(&self, message: M) {
         if self.is_human() {
-            eprintln!("  ⚠️ {}", message.as_ref().yellow());
+            eprintln!("   ⚠️  {}", message.as_ref().yellow());
         }
     }
 

@@ -1,7 +1,6 @@
 use chrono::{DateTime, Utc};
 use reqwest::multipart::{Form, Part};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GenerateResponse {
@@ -92,7 +91,7 @@ impl GenerateRequest {
         let fname = self.file_name.unwrap_or_else(|| "proj.zip".to_string());
         let file_part = Part::bytes(self.project_zip)
             .file_name(fname)
-            .mime_str("application/zip")?;
+            .mime_str("application/octet-stream")?;
         Ok(Form::new()
             .part("project", file_part)
             .text("project_name", self.project_name))

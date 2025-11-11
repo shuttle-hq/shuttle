@@ -160,8 +160,16 @@ impl Neptune {
         Ok(NeptuneCommandOutput::None)
     }
 
-    pub async fn generate_spec(&self, dir: impl AsRef<Path>) -> Result<NeptuneCommandOutput> {
-        let bytes: Vec<u8> = self.create_build_context(&dir, super::build::ArchiveType::Zip)?;
+    pub async fn generate_spec(
+        &self,
+        dir: impl AsRef<Path> + Sync,
+    ) -> Result<NeptuneCommandOutput> {
+        let bytes: Vec<u8> = self.create_build_context(
+            &dir,
+            super::build::ArchiveType::Zip,
+            None::<Vec<&Path>>,
+            true,
+        )?;
 
         // Spinner only for non-JSON output
         let spinner = if self.global_args.output_mode != OutputMode::Json {

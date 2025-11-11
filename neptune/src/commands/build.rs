@@ -6,7 +6,7 @@ use std::io::{Cursor, Seek, Write};
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
 use bollard::{auth::DockerCredentials, Docker};
 use futures::TryStreamExt;
 use ignore::{gitignore::GitignoreBuilder, Match};

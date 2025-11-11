@@ -3572,13 +3572,16 @@ dependencies = [
  "clap",
  "clap_complete",
  "clap_mangen",
+ "comfy-table",
  "crossterm 0.28.1",
  "dialoguer",
  "futures",
  "http 1.3.1",
  "ignore",
+ "indicatif",
  "indoc 2.0.7",
  "nixpacks",
+ "pretty_assertions",
  "regex",
  "serde",
  "serde_json",
@@ -5144,6 +5147,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "bytes",
+ "chrono",
  "headers",
  "http 1.3.1",
  "percent-encoding",
@@ -5184,7 +5188,7 @@ dependencies = [
 [[package]]
 name = "shuttle-common"
 version = "0.0.1"
-source = "git+ssh://git@github.com/shuttle-hq/shuttle-impulse.git#55959430d8e097fd251340f902501dd2d2abfcb1"
+source = "git+https://github.com/shuttle-hq/shuttle-impulse.git#3bfc386906f0ea4694b9f4c05550453da448f399"
 dependencies = [
  "anyhow",
  "async-trait",

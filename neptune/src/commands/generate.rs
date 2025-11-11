@@ -74,6 +74,13 @@ impl Neptune {
         }
         let dir = dir.canonicalize()?;
         let file = dir.join("AGENTS.md");
+        let mut changed = false;
+
+        // User-facing progress output (avoid in JSON mode)
+        if self.global_args.output_mode != OutputMode::Json {
+            eprintln!("Generating or updating {}", file.display());
+            eprintln!("Fetching latest Neptune agent instructions...");
+        }
 
         let re = regex::Regex::new(
             r"(?s)<!-- neptune: agents\.md version ([^>]+) -->.*?<!-- neptune end -->",
@@ -93,31 +100,56 @@ impl Neptune {
 
         tracing::debug!("checking {} for existing neptune rules", file.display());
         if file.exists() && file.is_file() {
+            if self.global_args.output_mode != OutputMode::Json {
+                eprintln!("Found existing {}", file.display());
+            }
             let mut content = fs::read_to_string(&file).context("reading existing AGENTS.md")?;
             if let Some(cap) = re.captures(&content) {
                 let mat = cap.get(0).unwrap();
                 let version = cap.get(1).unwrap().as_str();
                 if version < agents_version {
                     tracing::debug!("updating agents.md neptune section");
+                    if self.global_args.output_mode != OutputMode::Json {
+                        eprintln!(
+                            "Updating Neptune instructions in AGENTS.md ({} -> {})",
+                            version, agents_version
+                        );
+                    }
                     let before = &content[0..mat.start()];
                     let after = &content[mat.end()..];
                     content = format!("{before}{agents}{after}");
                     fs::write(&file, content.as_bytes()).context("writing AGENTS.md")?;
+                    changed = true;
                 } else {
                     tracing::info!("AGENTS.md instructions are up to date");
+                    if self.global_args.output_mode != OutputMode::Json {
+                        eprintln!("AGENTS.md instructions are up to date");
+                    }
                 }
             } else {
                 // append
+                if self.global_args.output_mode != OutputMode::Json {
+                    eprintln!("Appending Neptune instructions to AGENTS.md");
+                }
                 content.push('\n');
                 content.push('\n');
                 content.push_str(&agents);
                 fs::write(&file, content.as_bytes()).context("writing AGENTS.md")?;
+                changed = true;
             }
         } else {
             tracing::debug!("not found, creating");
+            if self.global_args.output_mode != OutputMode::Json {
+                eprintln!("Creating {}", file.display());
+            }
             let mut f = fs::File::create(&file).context("creating AGENTS.md")?;
             f.write_all(agents.as_bytes())
                 .context("writing AGENTS.md")?;
+            changed = true;
+        }
+
+        if changed && self.global_args.output_mode != OutputMode::Json {
+            eprintln!("Done");
         }
 
         Ok(NeptuneCommandOutput::None)

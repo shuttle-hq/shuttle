@@ -9,11 +9,15 @@ use std::collections::HashMap;
 
 use crate::{
     args::{LoginArgs, LogoutArgs},
+    ui::AiUi,
     Neptune, NeptuneCommandOutput,
 };
 
 impl Neptune {
     pub async fn login(&mut self, login_args: LoginArgs) -> Result<NeptuneCommandOutput> {
+        // Persona UI (after prompt to avoid cluttering the password input)
+        let ui = AiUi::new(&self.config.config().output_mode, self.global_args.verbose);
+        ui.header("Login");
         let api_key = match login_args.api_key {
             Some(api_key) => api_key,
             None => {
@@ -33,6 +37,8 @@ impl Neptune {
                 // }
             }
         };
+
+        ui.step("", "Validating API key");
 
         // Verify API key without persisting it yet
         let cfg = self.config.config();
@@ -76,9 +82,9 @@ impl Neptune {
         match self.config.config().output_mode {
             OutputMode::Normal => {
                 if let Some(id) = user_id {
-                    println!("Logged in as {}", id.bold());
+                    ui.success(format!("✅ Logged in as {}", id.bold()));
                 } else {
-                    println!("Logged in.");
+                    ui.success("✅ Logged in");
                 }
             }
             OutputMode::Json => {

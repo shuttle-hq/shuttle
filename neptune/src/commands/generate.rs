@@ -15,7 +15,7 @@ use indicatif::{ProgressBar, ProgressStyle};
 use pretty_assertions::StrComparison;
 use shuttle_api_client::neptune_types::GenerateResponse;
 
-use crate::{args::NeptuneArgs, Neptune, NeptuneCommandOutput};
+use crate::{args::NeptuneArgs, ui::AiUi, Neptune, NeptuneCommandOutput};
 
 impl Neptune {
     pub async fn generate_completions(
@@ -81,11 +81,11 @@ impl Neptune {
         let file = dir.join("AGENTS.md");
         let mut changed = false;
 
-        // User-facing progress output (avoid in JSON mode)
-        if self.global_args.output_mode != OutputMode::Json {
-            eprintln!("Generating or updating {}", file.display());
-            eprintln!("Fetching latest Neptune agent instructions...");
-        }
+        // Persona UI
+        let ui = AiUi::new(&self.global_args.output_mode, self.global_args.verbose);
+        ui.header("AGENTS.md");
+        ui.step("", format!("Generating/updating {}", file.display()));
+        ui.step("", "Fetching latest Neptune agent instructions...");
 
         let re = regex::Regex::new(
             r"(?s)<!-- neptune: agents\.md version ([^>]+) -->.*?<!-- neptune end -->",
@@ -105,21 +105,21 @@ impl Neptune {
 
         tracing::debug!("checking {} for existing neptune rules", file.display());
         if file.exists() && file.is_file() {
-            if self.global_args.output_mode != OutputMode::Json {
-                eprintln!("Found existing {}", file.display());
-            }
+            ui.step("", format!("Found existing {}", file.display()));
             let mut content = fs::read_to_string(&file).context("reading existing AGENTS.md")?;
             if let Some(cap) = re.captures(&content) {
                 let mat = cap.get(0).unwrap();
                 let version = cap.get(1).unwrap().as_str();
                 if version < agents_version {
                     tracing::debug!("updating agents.md neptune section");
-                    if self.global_args.output_mode != OutputMode::Json {
-                        eprintln!(
-                            "Updating Neptune instructions in AGENTS.md ({} -> {})",
-                            version, agents_version
-                        );
-                    }
+                    ui.step(
+                        "",
+                        format!(
+                            "Updating Neptune instructions version (Current: {}, New: {})",
+                            version.to_string().yellow(),
+                            agents_version.to_string().green()
+                        ),
+                    );
                     let before = &content[0..mat.start()];
                     let after = &content[mat.end()..];
                     content = format!("{before}{agents}{after}");
@@ -127,15 +127,11 @@ impl Neptune {
                     changed = true;
                 } else {
                     tracing::info!("AGENTS.md instructions are up to date");
-                    if self.global_args.output_mode != OutputMode::Json {
-                        eprintln!("AGENTS.md instructions are up to date");
-                    }
+                    ui.success("✅ AGENTS.md up to date");
                 }
             } else {
                 // append
-                if self.global_args.output_mode != OutputMode::Json {
-                    eprintln!("Appending Neptune instructions to AGENTS.md");
-                }
+                ui.step("", "Appending Neptune instructions to AGENTS.md");
                 content.push('\n');
                 content.push('\n');
                 content.push_str(&agents);
@@ -144,9 +140,7 @@ impl Neptune {
             }
         } else {
             tracing::debug!("not found, creating");
-            if self.global_args.output_mode != OutputMode::Json {
-                eprintln!("Creating {}", file.display());
-            }
+            ui.step("", format!("Creating {}", file.display()));
             let mut f = fs::File::create(&file).context("creating AGENTS.md")?;
             f.write_all(agents.as_bytes())
                 .context("writing AGENTS.md")?;
@@ -154,7 +148,7 @@ impl Neptune {
         }
 
         if changed && self.global_args.output_mode != OutputMode::Json {
-            eprintln!("Done");
+            ui.success("✅ AGENTS.md updated");
         }
 
         Ok(NeptuneCommandOutput::None)
@@ -164,6 +158,11 @@ impl Neptune {
         &self,
         dir: impl AsRef<Path> + Sync,
     ) -> Result<NeptuneCommandOutput> {
+        // Persona UI
+        let ui = AiUi::new(&self.global_args.output_mode, self.global_args.verbose);
+        ui.header("neptune.json");
+        let mut printed_up_to_date = false;
+
         let bytes: Vec<u8> = self.create_build_context(
             &dir,
             super::build::ArchiveType::Zip,
@@ -204,10 +203,11 @@ impl Neptune {
                     .unwrap_or(existing.clone());
                 let changed = normalized_existing != new_spec_pretty;
                 if !changed && self.global_args.output_mode != OutputMode::Json {
-                    eprintln!("neptune.json is up to date");
+                    ui.success("✅ neptune.json up to date");
+                    printed_up_to_date = true;
                 }
                 if changed && self.global_args.output_mode != OutputMode::Json {
-                    eprintln!("Updating neptune.json... (changes shown below)");
+                    ui.step("", "Updating neptune.json...");
                     eprintln!();
                     eprintln!("--- neptune.json ---");
                     // Use pretty_assertions to render a formatted, colored diff of the full JSON
@@ -231,7 +231,23 @@ impl Neptune {
                 }
             }
         } else if self.global_args.output_mode != OutputMode::Json {
-            eprintln!("Creating neptune.json");
+            ui.step("", "Creating neptune.json...");
+            eprintln!();
+            eprintln!("--- neptune.json ---");
+            // Show a diff from an empty file to highlight additions
+            let diff = format!("{}", StrComparison::new("", &new_spec_pretty));
+            let max_lines = 60usize;
+            for (i, line) in diff.lines().enumerate() {
+                if i >= max_lines {
+                    eprintln!("... (truncated preview)");
+                    break;
+                }
+                eprintln!("{}", line);
+            }
+            eprintln!();
+            eprintln!(
+                "(Tip: run `git --no-pager diff -- neptune.json` after saving to see full changes)"
+            );
         }
         tokio::fs::write(&spec_path, new_spec_pretty.as_bytes()).await?;
 
@@ -270,6 +286,11 @@ impl Neptune {
                 follows Shuttle's best practices for resource provisioning.
                 "#
             });
+        } else {
+            if !printed_up_to_date {
+                eprintln!();
+                ui.success("✅ Generated neptune.json");
+            }
         }
 
         // Handle compatibility report: print if incompatible
@@ -278,6 +299,8 @@ impl Neptune {
                 let report_json = serde_json::to_string_pretty(&gen_res.compatibility_report)?;
                 eprintln!("{}", report_json);
             } else {
+                eprintln!();
+                ui.header("Compatibility Report");
                 eprintln!();
                 eprintln!("{}", "Possible compatibility issues detected:".yellow());
                 let mut table = Table::new();

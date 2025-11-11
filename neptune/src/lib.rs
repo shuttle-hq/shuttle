@@ -1,6 +1,7 @@
 pub mod args;
 pub mod commands;
 pub mod config;
+pub mod ui;
 
 use anyhow::Result;
 use cargo_shuttle::reload_env_filter;

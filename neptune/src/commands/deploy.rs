@@ -9,7 +9,7 @@ use serde::Serialize;
 use std::time::Duration;
 use tokio::time::sleep;
 
-use crate::{args::DeployArgs, Neptune, NeptuneCommandOutput};
+use crate::{args::DeployArgs, ui::AiUi, Neptune, NeptuneCommandOutput};
 
 #[derive(Serialize)]
 struct BuildSummary {
@@ -59,6 +59,11 @@ impl Neptune {
             .workdir_name()
             .unwrap_or_else(|| String::from("project"));
 
+        // Persona UI for spec stage to mirror `generate spec`
+        let ui = AiUi::new(&self.global_args.output_mode, self.global_args.verbose);
+        ui.header("neptune.json");
+        let mut _printed_up_to_date = false;
+
         // In JSON mode, we collect a single consolidated result to print at the end
         let mut json_out = if self.global_args.output_mode == OutputMode::Json {
             Some(DeployJsonOutput {
@@ -82,7 +87,7 @@ impl Neptune {
                     .unwrap()
                     .tick_chars("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"),
             );
-            pb.set_message("Analyzing project and generating configuration preview...");
+            pb.set_message("Analyzing project and generating configuration...");
             pb.enable_steady_tick(std::time::Duration::from_millis(80));
             Some(pb)
         } else {
@@ -111,10 +116,11 @@ impl Neptune {
                     .unwrap_or(existing.clone());
                 let changed = normalized_existing != new_spec_pretty;
                 if !changed && self.global_args.output_mode != OutputMode::Json {
-                    eprintln!("neptune.json is up to date");
+                    ui.success("✅ neptune.json up to date");
+                    _printed_up_to_date = true;
                 }
                 if changed && self.global_args.output_mode != OutputMode::Json {
-                    eprintln!("Updating neptune.json... (changes shown below)");
+                    ui.step("", "Updating neptune.json...");
                     eprintln!();
                     eprintln!("--- neptune.json ---");
                     let diff = format!(
@@ -139,7 +145,25 @@ impl Neptune {
                 }
             }
         } else if self.global_args.output_mode != OutputMode::Json {
-            eprintln!("Creating neptune.json");
+            ui.step("", "Creating neptune.json...");
+            eprintln!();
+            eprintln!("--- neptune.json ---");
+            let diff = format!(
+                "{}",
+                pretty_assertions::StrComparison::new("", &new_spec_pretty)
+            );
+            let max_lines = 60usize;
+            for (i, line) in diff.lines().enumerate() {
+                if i >= max_lines {
+                    eprintln!("... (truncated preview)");
+                    break;
+                }
+                eprintln!("{}", line);
+            }
+            eprintln!();
+            eprintln!(
+                "(Tip: run `git --no-pager diff -- neptune.json` after saving to see full changes)"
+            );
         }
         tokio::fs::write(&spec_path, new_spec_pretty.as_bytes()).await?;
 
@@ -152,6 +176,8 @@ impl Neptune {
         if !gen_res.compatibility_report.compatible
             && self.global_args.output_mode != OutputMode::Json
         {
+            eprintln!();
+            ui.header("Compatibility Report");
             eprintln!();
             eprintln!("{}", "Possible compatibility issues detected:".yellow());
             let mut table = Table::new();
@@ -221,14 +247,15 @@ impl Neptune {
         }
 
         // Build and push image (logs are streamed directly; no spinner)
+        ui.header("Build");
         let build_result = match self.build(&project_spec.name, deploy_args).await {
             Ok(v) => v,
             Err(e) => {
                 if self.global_args.output_mode != OutputMode::Json {
-                    eprintln!("❌ Build failed - unable to create container image");
-                    eprintln!("📋 Project: {}", project_spec.name);
-                    eprintln!("🧾 Error: {}", e);
-                    eprintln!("💡 Check build logs for errors and retry");
+                    ui.warn("❌ Build failed - unable to create container image");
+                    ui.step("", format!("Project: {}", project_spec.name));
+                    ui.step("", format!("Error: {}", e));
+                    ui.step("", "Check build logs for errors and retry");
                 } else if let Some(ref mut out) = json_out {
                     out.ok = false;
                     out.error = Some(ErrorPayload {
@@ -256,6 +283,7 @@ impl Neptune {
                 });
             }
             // Ensure project exists
+            ui.header("Deploy");
             let ensure_spinner = if self.global_args.output_mode != OutputMode::Json {
                 let pb = ProgressBar::new_spinner();
                 pb.set_style(
@@ -319,14 +347,15 @@ impl Neptune {
                     });
                 }
             } else {
-                println!("✅ Deployment created.");
-                println!("📦 Project: {}", project_spec.name);
-                println!("🚀 Deployment ID: {}", deployment.id);
-                println!("⏳ Monitoring status until the project is ready...");
+                ui.success("✅ Deployment created");
+                ui.step("", format!("Project: {}", project_spec.name));
+                ui.step("", format!("Deployment ID: {}", deployment.id));
+                ui.step("", "Monitoring status until the project is ready...");
             }
         }
 
         // Poll project status with per-dimension spinners (project/resources/workload)
+        ui.header("Status");
         let (mp, pb_project, pb_resources, pb_workload) =
             if self.global_args.output_mode != OutputMode::Json {
                 let mp = MultiProgress::new();

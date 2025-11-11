@@ -1,7 +1,11 @@
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use cargo_shuttle::args::OutputMode;
 use crossterm::style::Stylize;
 use dialoguer::{theme::ColorfulTheme, Password};
+use http::HeaderMap;
+use shuttle_api_client::ShuttleApiClient;
+use shuttle_common::constants::headers::X_CARGO_SHUTTLE_VERSION;
+use std::collections::HashMap;
 
 use crate::{
     args::{LoginArgs, LogoutArgs},
@@ -30,22 +34,41 @@ impl Neptune {
             }
         };
 
-        // Save global config and reload API client
-        self.config
-            .modify_global(|g| g.api_key = Some(api_key.clone()))?;
-        self.refresh_api_client()?;
-
-        // Verify API key using the API; be lenient with response schema
-        let response = self
-            .client
-            .api_client
+        // Verify API key without persisting it yet
+        let cfg = self.config.config();
+        let headers = HeaderMap::try_from(&HashMap::from([(
+            X_CARGO_SHUTTLE_VERSION.clone(),
+            crate::VERSION.to_owned(),
+        )]))
+        .unwrap();
+        let temp_client = ShuttleApiClient::new(
+            cfg.api_url.clone(),
+            Some(api_key.clone()),
+            Some(headers),
+            None,
+        );
+        let response = temp_client
             .get("/users/me", Option::<()>::None)
             .await
             .context("failed to check API key validity")?;
+        let status = response.status();
+        if status.as_u16() != 200 {
+            // Read body for a helpful error, but don't fail if body can't be read
+            let body = response.text().await.unwrap_or_default();
+            if body.contains("unauthorized") {
+                bail!("login failed - invalid API key");
+            } else {
+                bail!("login failed - {}", body);
+            }
+        }
         let raw_json = response
             .text()
             .await
             .context("failed to read user response")?;
+        // Only now that the key has been validated, persist it and refresh the client
+        self.config
+            .modify_global(|g| g.api_key = Some(api_key.clone()))?;
+        self.refresh_api_client()?;
         let user_id = serde_json::from_str::<serde_json::Value>(&raw_json)
             .ok()
             .and_then(|v| v.get("id").and_then(|s| s.as_str()).map(|s| s.to_string()));

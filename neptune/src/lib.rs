@@ -6,6 +6,7 @@ pub mod ui;
 
 use anyhow::Result;
 use cargo_shuttle::reload_env_filter;
+use dialoguer::Select;
 use impulse_common::types::{AggregateProjectCondition, ProjectSpec};
 use serde::de::Error;
 use shuttle_api_client::neptune::NeptuneClient;
@@ -91,6 +92,7 @@ impl Neptune {
             },
             Upgrade { preview } => self.self_upgrade(preview).await,
             Status => self.status().await,
+            Delete => self.delete().await,
         }
     }
 
@@ -102,8 +104,8 @@ impl Neptune {
     pub(crate) async fn fetch_local_state(
         &self,
     ) -> std::result::Result<ProjectSpec, std::io::Error> {
-        if tokio::fs::try_exists("shuttle.json").await? {
-            let bytes = tokio::fs::read("shuttle.json").await?;
+        if tokio::fs::try_exists("neptune.json").await? {
+            let bytes = tokio::fs::read("neptune.json").await?;
             let root: serde_json::Value = serde_json::from_slice(&bytes)?;
             if let Some(spec) = root.get("spec") {
                 Ok(serde_json::from_value(spec.clone())?)
@@ -115,8 +117,48 @@ impl Neptune {
         } else {
             Err(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
-                "Missing 'shuttle.json'",
+                "Missing 'neptune.json'",
             ))
+        }
+    }
+
+    pub(crate) async fn resolve_project_name(&self) -> Result<String> {
+        let dir = &self.global_args.working_directory;
+        let mut from_spec: Option<String> = None;
+        if let Ok(spec) = self.fetch_local_state().await {
+            from_spec = Some(spec.name);
+        }
+
+        let meta_name_path = dir.join(".neptune").join("project_name");
+        let from_meta: Option<String> = match tokio::fs::read_to_string(&meta_name_path).await {
+            Ok(s) => Some(s.trim().to_string()),
+            Err(_) => None,
+        };
+
+        match (from_spec, from_meta) {
+            (Some(a), Some(b)) => {
+                if a == b {
+                    Ok(a)
+                } else {
+                    if self.global_args.output_mode != cargo_shuttle::args::OutputMode::Json {
+                        let options = vec![a.clone(), b.clone()];
+                        let idx = Select::new()
+                            .with_prompt("Multiple projects found. Select project name")
+                            .items(&options)
+                            .default(0)
+                            .interact()?;
+                        Ok(options[idx].clone())
+                    } else {
+                        Ok(a)
+                    }
+                }
+            }
+            (Some(a), None) => Ok(a),
+            (None, Some(b)) => Ok(b),
+            (None, None) => self
+                .global_args
+                .workdir_name()
+                .ok_or_else(|| anyhow::anyhow!("Could not determine project name")),
         }
     }
 }

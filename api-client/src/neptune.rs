@@ -44,6 +44,14 @@ impl NeptuneClient {
             .await
     }
 
+    pub async fn delete_project_by_id(&self, id: &str) -> Result<ParsedJson<()>> {
+        self.api_client
+            .delete(format!("/projects/{id}"), Option::<()>::None)
+            .await?
+            .to_json()
+            .await
+    }
+
     pub async fn registry_auth(&self) -> std::result::Result<Bytes, anyhow::Error> {
         self.api_client
             .post("/registry_auth", Option::<()>::None)

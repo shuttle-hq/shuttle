@@ -356,7 +356,7 @@ impl Neptune {
 
         // Poll project status with per-dimension spinners (project/resources/workload)
         ui.header("Status");
-        let (mp, pb_project, pb_resources, pb_workload) =
+        let (_mp, pb_project, pb_resources, pb_workload) =
             if self.global_args.output_mode != OutputMode::Json {
                 let mp = MultiProgress::new();
                 let style = ProgressStyle::with_template("{spinner:.green} {msg}")

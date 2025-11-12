@@ -123,6 +123,9 @@ pub enum NeptuneCommand {
     // Mcp(McpCommand),
     #[command(visible_alias = "s")]
     Status,
+    /// Delete a project
+    #[command(visible_alias = "del")]
+    Delete,
 }
 
 #[derive(Args, Debug, Default)]

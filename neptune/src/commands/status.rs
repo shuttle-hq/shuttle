@@ -31,7 +31,7 @@ impl Neptune {
             }
         }
 
-        // Look up project on Shuttle by name
+        // Look up project on Platform by name
         if let Some(project_id) = self.client.get_project_id_from_name(&project_name).await? {
             let status = self
                 .client

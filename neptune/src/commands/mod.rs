@@ -1,5 +1,6 @@
 pub mod account;
 pub mod build;
+pub mod common;
 pub mod delete;
 pub mod deploy;
 pub mod generate;

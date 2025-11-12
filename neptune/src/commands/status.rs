@@ -1,8 +1,20 @@
 use anyhow::Result;
 use cargo_shuttle::args::OutputMode;
 use impulse_common::types::{ProjectState, ResourcesState, WorkloadState};
+use serde::Serialize;
 
 use crate::{ui::AiUi, Neptune, NeptuneCommandOutput};
+
+#[derive(Serialize)]
+struct StatusJsonOutput {
+    ok: bool,
+    project: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    messages: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    condition: Option<impulse_common::types::AggregateProjectCondition>,
+    next_action_command: String,
+}
 
 impl Neptune {
     pub async fn status(&self) -> Result<NeptuneCommandOutput> {
@@ -10,6 +22,19 @@ impl Neptune {
         ui.header("Status");
 
         let project_name = self.resolve_project_name().await?;
+
+        // Prepare consolidated JSON output if in JSON mode
+        let mut json_out = if self.global_args.output_mode == OutputMode::Json {
+            Some(StatusJsonOutput {
+                ok: false,
+                project: project_name.clone(),
+                messages: None,
+                condition: None,
+                next_action_command: String::new(),
+            })
+        } else {
+            None
+        };
 
         // Look up project on Platform by name
         if let Some(project_id) = self.client.get_project_id_from_name(&project_name).await? {
@@ -19,8 +44,11 @@ impl Neptune {
                 .await?
                 .into_inner()
                 .condition;
-            if self.global_args.output_mode == OutputMode::Json {
-                println!("{}", serde_json::to_string_pretty(&status)?);
+            if let Some(ref mut out) = json_out {
+                out.ok = true;
+                out.condition = Some(status);
+                out.next_action_command = "neptune status".to_string();
+                println!("{}", serde_json::to_string_pretty(&out)?);
             } else {
                 ui.step("", format!("Project: {}", project_name));
                 // Project
@@ -55,19 +83,15 @@ impl Neptune {
             }
             Ok(NeptuneCommandOutput::None)
         } else {
-            if self.global_args.output_mode == OutputMode::Json {
-                eprintln!(
-                    indoc::indoc! {r#"
-                    {{
-                        "error": "project_not_found",
-                        "message": "The project '{}' was not found on the Shuttle platform",
-                        "suggestion": "Run 'neptune deploy' to create and deploy this project to Shuttle",
-                        "next_action": "deploy_project",
-                        "project_name": "{}"
-                    }}"#
-                    },
-                    project_name, project_name
-                );
+            if let Some(ref mut out) = json_out {
+                out.ok = false;
+                out.messages = Some(vec![
+                    "Project not found".to_string(),
+                    format!("Project: {}", project_name),
+                    "Run 'neptune deploy' to create and deploy this project to Shuttle".to_string(),
+                ]);
+                out.next_action_command = "neptune deploy".to_string();
+                println!("{}", serde_json::to_string_pretty(&out)?);
             } else {
                 ui.warn("Project not found");
                 ui.step("", format!("Project: {}", project_name));

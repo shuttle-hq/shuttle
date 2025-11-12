@@ -15,9 +15,9 @@ use crate::{
 
 impl Neptune {
     pub async fn login(&mut self, login_args: LoginArgs) -> Result<NeptuneCommandOutput> {
-        // Persona UI (after prompt to avoid cluttering the password input)
         let ui = AiUi::new(&self.config.config().output_mode, self.global_args.verbose);
         ui.header("Login");
+
         let api_key = match login_args.api_key {
             Some(api_key) => api_key,
             None => {
@@ -103,13 +103,16 @@ impl Neptune {
         //     eprintln!("Successfully reset the API key.");
         // }
 
+        let ui = AiUi::new(&self.config.config().output_mode, self.global_args.verbose);
+        ui.header("Logout");
+
         // Save global config and reload API client
         self.config.modify_global(|g| g.api_key = None)?;
         // TODO: clear the key from local configs too?
         self.refresh_api_client()?;
 
-        eprintln!("Successfully logged out.");
-        eprintln!(" -> Use `neptune login` to log in again.");
+        ui.success("Successfully logged out.");
+        ui.info("Use `neptune login` to log in again.");
 
         Ok(NeptuneCommandOutput::None)
     }

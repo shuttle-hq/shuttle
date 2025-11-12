@@ -1,7 +1,6 @@
 use anyhow::Result;
 use cargo_shuttle::args::OutputMode;
-use comfy_table::{presets::UTF8_FULL, Attribute, Cell, Color, ContentArrangement, Table};
-use crossterm::style::Stylize;
+use chrono::Utc;
 use dialoguer::Confirm;
 use impulse_common::types::{ProjectState, ResourcesState, WorkloadState};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
@@ -10,6 +9,11 @@ use std::time::Duration;
 use tokio::time::sleep;
 
 use crate::{args::DeployArgs, ui::AiUi, Neptune, NeptuneCommandOutput};
+
+use super::common::{
+    generate_platform_spec, make_spinner, preview_spec_changes,
+    print_compatibility_report_if_needed, write_start_command, SpecPreviewStatus,
+};
 
 #[derive(Serialize)]
 struct BuildSummary {
@@ -20,25 +24,16 @@ struct BuildSummary {
 struct DeploymentSummary {
     project: String,
     deployment_id: String,
-    summary: String,
     messages: Vec<String>,
-    next_action: String,
-    requires_confirmation: bool,
-}
-
-#[derive(Serialize)]
-struct ErrorPayload {
-    code: String,
-    message: String,
-    details: serde_json::Value,
-    next_action: Option<String>,
-    requires_confirmation: bool,
 }
 
 #[derive(Serialize)]
 struct DeployJsonOutput {
     ok: bool,
     project: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    messages: Option<Vec<String>>,
+    next_action_command: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     compatibility: Option<shuttle_api_client::neptune_types::CompatibilityReport>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -47,19 +42,12 @@ struct DeployJsonOutput {
     deployment: Option<DeploymentSummary>,
     #[serde(skip_serializing_if = "Option::is_none")]
     final_condition: Option<impulse_common::types::AggregateProjectCondition>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    error: Option<ErrorPayload>,
 }
 
 impl Neptune {
     pub async fn deploy(&self, deploy_args: DeployArgs) -> Result<NeptuneCommandOutput> {
-        // Determine project name for /v1/generate from working directory
-        let project_name = self
-            .global_args
-            .workdir_name()
-            .unwrap_or_else(|| String::from("project"));
+        let project_name = self.resolve_project_name().await?;
 
-        // Persona UI for spec stage to mirror `generate spec`
         let ui = AiUi::new(&self.global_args.output_mode, self.global_args.verbose);
         ui.header("neptune.json");
         let mut _printed_up_to_date = false;
@@ -69,37 +57,44 @@ impl Neptune {
             Some(DeployJsonOutput {
                 ok: false,
                 project: project_name.clone(),
+                messages: None,
+                next_action_command: String::new(),
                 compatibility: None,
                 build: None,
                 deployment: None,
                 final_condition: None,
-                error: None,
             })
         } else {
             None
         };
 
-        // Run spec generation preview (same flow as `generate spec`) and ask for confirmation
-        let gen_spinner = if self.global_args.output_mode != OutputMode::Json {
-            let pb = ProgressBar::new_spinner();
-            pb.set_style(
-                ProgressStyle::with_template("{spinner:.green} {msg}")
-                    .unwrap()
-                    .tick_chars("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"),
-            );
-            pb.set_message("Analyzing project and generating configuration...");
-            pb.enable_steady_tick(std::time::Duration::from_millis(80));
-            Some(pb)
-        } else {
-            None
-        };
-        let bytes: Vec<u8> = self.create_build_context(
-            &self.global_args.working_directory,
-            crate::commands::build::ArchiveType::Zip,
-            None::<Vec<std::path::PathBuf>>,
-            true,
-        )?;
-        let gen_res = self.client.generate(bytes, &project_name).await?;
+        let gen_spinner = make_spinner(
+            &self.global_args.output_mode,
+            "Analyzing project and generating configuration...",
+        );
+
+        let gen_res =
+            match generate_platform_spec(self, &self.global_args.working_directory, &project_name)
+                .await
+            {
+                Ok(v) => v,
+                Err(e) => {
+                    if let Some(ref mut out) = json_out {
+                        out.ok = false;
+                        out.messages = Some(vec![
+                            "Failed to analyze project and generate configuration".to_string(),
+                            format!("Project: {}", project_name),
+                            format!("Error: {}", e),
+                        ]);
+                        out.next_action_command = "neptune deploy".to_string();
+                        println!("{}", serde_json::to_string_pretty(&out)?);
+                        return Ok(NeptuneCommandOutput::None);
+                    } else {
+                        return Err(e);
+                    }
+                }
+            };
+
         if let Some(pb) = gen_spinner.as_ref() {
             pb.finish_and_clear();
         }
@@ -108,63 +103,16 @@ impl Neptune {
         let dir = &self.global_args.working_directory;
         let spec_path = dir.join("neptune.json");
         let new_spec_pretty = serde_json::to_string_pretty(&gen_res.platform_spec)?;
-        if spec_path.exists() && spec_path.is_file() {
-            if let Ok(existing) = tokio::fs::read_to_string(&spec_path).await {
-                let normalized_existing = serde_json::from_str::<serde_json::Value>(&existing)
-                    .ok()
-                    .and_then(|v| serde_json::to_string_pretty(&v).ok())
-                    .unwrap_or(existing.clone());
-                let changed = normalized_existing != new_spec_pretty;
-                if !changed && self.global_args.output_mode != OutputMode::Json {
-                    ui.success("✅ neptune.json up to date");
-                    _printed_up_to_date = true;
-                }
-                if changed && self.global_args.output_mode != OutputMode::Json {
-                    ui.step("", "Updating neptune.json...");
-                    eprintln!();
-                    eprintln!("--- neptune.json ---");
-                    let diff = format!(
-                        "{}",
-                        pretty_assertions::StrComparison::new(
-                            &normalized_existing,
-                            &new_spec_pretty
-                        )
-                    );
-                    let max_lines = 60usize;
-                    for (i, line) in diff.lines().enumerate() {
-                        if i >= max_lines {
-                            eprintln!("... (truncated preview)");
-                            break;
-                        }
-                        eprintln!("{}", line);
-                    }
-                    eprintln!();
-                    eprintln!(
-                        "(Tip: run `git --no-pager diff -- neptune.json` to see full changes)"
-                    );
-                }
-            }
-        } else if self.global_args.output_mode != OutputMode::Json {
-            ui.step("", "Creating neptune.json...");
-            eprintln!();
-            eprintln!("--- neptune.json ---");
-            let diff = format!(
-                "{}",
-                pretty_assertions::StrComparison::new("", &new_spec_pretty)
-            );
-            let max_lines = 60usize;
-            for (i, line) in diff.lines().enumerate() {
-                if i >= max_lines {
-                    eprintln!("... (truncated preview)");
-                    break;
-                }
-                eprintln!("{}", line);
-            }
-            eprintln!();
-            eprintln!(
-                "(Tip: run `git --no-pager diff -- neptune.json` after saving to see full changes)"
-            );
-        }
+        match preview_spec_changes(
+            &spec_path,
+            &new_spec_pretty,
+            &ui,
+            &self.global_args.output_mode,
+        )? {
+            SpecPreviewStatus::UpToDate => _printed_up_to_date = true,
+            _ => {}
+        };
+
         tokio::fs::write(&spec_path, new_spec_pretty.as_bytes()).await?;
 
         // Convert generated spec into ProjectSpec for subsequent API calls
@@ -172,51 +120,15 @@ impl Neptune {
             serde_json::from_value(serde_json::to_value(&gen_res.platform_spec.spec)?)?;
         tracing::info!("Spec: {:?}", project_spec);
 
-        // Print compatibility report (colored comfy-table) if incompatible
+        // Print compatibility report if incompatible
         if !gen_res.compatibility_report.compatible
             && self.global_args.output_mode != OutputMode::Json
         {
-            eprintln!();
-            ui.header("Compatibility Report");
-            eprintln!();
-            eprintln!("{}", "Possible compatibility issues detected:".yellow());
-            let mut table = Table::new();
-            table
-                .load_preset(UTF8_FULL)
-                .set_content_arrangement(ContentArrangement::Dynamic)
-                .set_header(vec![
-                    Cell::new("Category").add_attribute(Attribute::Bold),
-                    Cell::new("Message").add_attribute(Attribute::Bold),
-                    Cell::new("Path").add_attribute(Attribute::Bold),
-                    Cell::new("Suggestion").add_attribute(Attribute::Bold),
-                ]);
-            for err in gen_res.compatibility_report.errors.iter() {
-                let category = match err.category {
-                    shuttle_api_client::neptune_types::ErrorCategory::Architecture => {
-                        "Architecture"
-                    }
-                    shuttle_api_client::neptune_types::ErrorCategory::ResourceSupport => {
-                        "Resource Support"
-                    }
-                    shuttle_api_client::neptune_types::ErrorCategory::WorkloadSupport => {
-                        "Workload Support"
-                    }
-                    shuttle_api_client::neptune_types::ErrorCategory::ConfigurationInvalid => {
-                        "Configuration Invalid"
-                    }
-                    shuttle_api_client::neptune_types::ErrorCategory::Unknown => "Other",
-                };
-                table.add_row(vec![
-                    Cell::new(category).fg(Color::White),
-                    Cell::new(err.message.as_str()).fg(Color::Red),
-                    Cell::new(err.path.as_deref().unwrap_or("-")).fg(Color::White),
-                    Cell::new(err.suggestion.as_deref().unwrap_or("-")).fg(Color::White),
-                ]);
-            }
-            if table.row_count() > 1 {
-                eprintln!("{}", table);
-            }
-            eprintln!();
+            print_compatibility_report_if_needed(
+                &ui,
+                &gen_res.compatibility_report,
+                &self.global_args.output_mode,
+            );
         } else if self.global_args.output_mode == OutputMode::Json {
             // Defer printing; include in consolidated JSON
             if let Some(ref mut out) = json_out {
@@ -225,13 +137,7 @@ impl Neptune {
         }
 
         // Save start_command for build usage, .neptune/start_command
-        let start_file = dir.join(".neptune").join("start_command");
-        if let Some(parent) = start_file.parent() {
-            if !parent.exists() {
-                tokio::fs::create_dir_all(parent).await?;
-            }
-        }
-        tokio::fs::write(&start_file, gen_res.start_command.as_bytes()).await?;
+        write_start_command(dir, &gen_res.start_command).await?;
 
         // Ask for confirmation (interactive only in non-JSON mode)
         if self.global_args.output_mode != OutputMode::Json {
@@ -258,18 +164,13 @@ impl Neptune {
                     ui.step("", "Check build logs for errors and retry");
                 } else if let Some(ref mut out) = json_out {
                     out.ok = false;
-                    out.error = Some(ErrorPayload {
-                        code: "BUILD_FAILED".to_string(),
-                        message: "Build process failed to produce a container image".to_string(),
-                        details: serde_json::json!({
-                            "stage": "build",
-                            "project_name": project_spec.name,
-                            "raw_error": e.to_string(),
-                        }),
-                        next_action: Some("check_build_logs_then_retry".to_string()),
-                        requires_confirmation: false,
-                    });
-                    // Print a single consolidated JSON error and exit
+                    out.messages = Some(vec![
+                        "Build failed - unable to create container image".to_string(),
+                        format!("Project: {}", project_spec.name),
+                        format!("Error: {}", e),
+                        "Check build logs for errors and retry".to_string(),
+                    ]);
+                    out.next_action_command = "neptune deploy".to_string();
                     println!("{}", serde_json::to_string_pretty(&out)?);
                 }
                 return Ok(NeptuneCommandOutput::None);
@@ -284,52 +185,79 @@ impl Neptune {
             }
             // Ensure project exists
             ui.header("Deploy");
-            let ensure_spinner = if self.global_args.output_mode != OutputMode::Json {
-                let pb = ProgressBar::new_spinner();
-                pb.set_style(
-                    ProgressStyle::with_template("{spinner:.green} {msg}")
-                        .unwrap()
-                        .tick_chars("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"),
-                );
-                pb.set_message("Ensuring project exists...");
-                pb.enable_steady_tick(std::time::Duration::from_millis(80));
-                Some(pb)
-            } else {
-                None
-            };
-            let project = if let Some(project_id) = self
-                .client
-                .get_project_id_from_name(&project_spec.name)
-                .await?
-            {
-                self.client.get_project_by_id(&project_id).await?
-            } else {
-                self.client.create_project(&project_spec).await?
+            let ensure_spinner =
+                make_spinner(&self.global_args.output_mode, "Ensuring project exists...");
+            let project = match async {
+                if let Some(project_id) = self
+                    .client
+                    .get_project_id_from_name(&project_spec.name)
+                    .await?
+                {
+                    self.client.get_project_by_id(&project_id).await
+                } else {
+                    self.client.create_project(&project_spec).await
+                }
             }
-            .into_inner();
+            .await
+            {
+                Ok(resp) => resp.into_inner(),
+                Err(e) => {
+                    if let Some(ref mut out) = json_out {
+                        out.ok = false;
+                        out.messages = Some(vec![
+                            "Failed to ensure project exists".to_string(),
+                            format!("Project: {}", project_spec.name),
+                            format!("Error: {}", e),
+                        ]);
+                        out.next_action_command = "neptune deploy".to_string();
+                        println!("{}", serde_json::to_string_pretty(&out)?);
+                        if let Some(pb) = ensure_spinner.as_ref() {
+                            pb.finish_and_clear();
+                        }
+                        return Ok(NeptuneCommandOutput::None);
+                    } else {
+                        if let Some(pb) = ensure_spinner.as_ref() {
+                            pb.finish_and_clear();
+                        }
+                        return Err(e.into());
+                    }
+                }
+            };
             if let Some(pb) = ensure_spinner.as_ref() {
                 pb.finish_and_clear();
             }
 
             // Create deployment
-            let deploy_spinner = if self.global_args.output_mode != OutputMode::Json {
-                let pb = ProgressBar::new_spinner();
-                pb.set_style(
-                    ProgressStyle::with_template("{spinner:.green} {msg}")
-                        .unwrap()
-                        .tick_chars("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"),
-                );
-                pb.set_message("Creating deployment...");
-                pb.enable_steady_tick(std::time::Duration::from_millis(80));
-                Some(pb)
-            } else {
-                None
-            };
-            let deployment = self
+            let deploy_spinner =
+                make_spinner(&self.global_args.output_mode, "Creating deployment...");
+            let deployment = match self
                 .client
                 .create_deployment(&project_spec, &project.id, &image_name)
-                .await?
-                .into_inner();
+                .await
+            {
+                Ok(resp) => resp.into_inner(),
+                Err(e) => {
+                    if let Some(ref mut out) = json_out {
+                        out.ok = false;
+                        out.messages = Some(vec![
+                            "Failed to create deployment".to_string(),
+                            format!("Project: {}", project_spec.name),
+                            format!("Error: {}", e),
+                        ]);
+                        out.next_action_command = "neptune deploy".to_string();
+                        println!("{}", serde_json::to_string_pretty(&out)?);
+                        if let Some(pb) = deploy_spinner.as_ref() {
+                            pb.finish_and_clear();
+                        }
+                        return Ok(NeptuneCommandOutput::None);
+                    } else {
+                        if let Some(pb) = deploy_spinner.as_ref() {
+                            pb.finish_and_clear();
+                        }
+                        return Err(e.into());
+                    }
+                }
+            };
             if let Some(pb) = deploy_spinner.as_ref() {
                 pb.finish_and_clear();
             }
@@ -340,11 +268,12 @@ impl Neptune {
                     out.deployment = Some(DeploymentSummary {
                         project: project_spec.name.clone(),
                         deployment_id: deployment.id.clone(),
-                        summary: "Deployment created. Monitoring status until ready.".to_string(),
-                        messages: vec!["This may take a few minutes.".to_string()],
-                        next_action: "poll_status".to_string(),
-                        requires_confirmation: false,
+                        messages: vec![
+                            format!("Deployment created at {}", Utc::now().to_string()),
+                            "This may take a few minutes.".to_string(),
+                        ],
                     });
+                    out.next_action_command = "neptune status".to_string();
                 }
             } else {
                 ui.success("✅ Deployment created");

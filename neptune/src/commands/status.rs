@@ -1,7 +1,6 @@
 use anyhow::Result;
 use cargo_shuttle::args::OutputMode;
 use impulse_common::types::{ProjectState, ResourcesState, WorkloadState};
-use serde_json::Value;
 
 use crate::{ui::AiUi, Neptune, NeptuneCommandOutput};
 
@@ -10,26 +9,7 @@ impl Neptune {
         let ui = AiUi::new(&self.global_args.output_mode, self.global_args.verbose);
         ui.header("Status");
 
-        // Determine project name: prefer neptune.json's spec.name, fallback to working directory name
-        let dir = &self.global_args.working_directory;
-        let spec_path = dir.join("neptune.json");
-        let mut project_name = self
-            .global_args
-            .workdir_name()
-            .unwrap_or_else(|| "project".to_string());
-        if spec_path.exists() && spec_path.is_file() {
-            if let Ok(content) = tokio::fs::read_to_string(&spec_path).await {
-                if let Ok(v) = serde_json::from_str::<Value>(&content) {
-                    if let Some(name) = v
-                        .get("spec")
-                        .and_then(|s| s.get("name"))
-                        .and_then(|n| n.as_str())
-                    {
-                        project_name = name.to_string();
-                    }
-                }
-            }
-        }
+        let project_name = self.resolve_project_name().await?;
 
         // Look up project on Platform by name
         if let Some(project_id) = self.client.get_project_id_from_name(&project_name).await? {

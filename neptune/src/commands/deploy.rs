@@ -5,6 +5,8 @@ use dialoguer::Confirm;
 use impulse_common::types::{ProjectState, ResourcesState, WorkloadState};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use serde::Serialize;
+use std::collections::BTreeMap;
+use std::process::Command;
 use std::time::Duration;
 use tokio::time::sleep;
 
@@ -42,6 +44,26 @@ struct DeployJsonOutput {
     deployment: Option<DeploymentSummary>,
     #[serde(skip_serializing_if = "Option::is_none")]
     final_condition: Option<impulse_common::types::AggregateProjectCondition>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    final_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    final_env: Option<BTreeMap<String, String>>,
+}
+
+fn docker_installed() -> bool {
+    Command::new("docker")
+        .arg("--version")
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
+}
+
+fn docker_running() -> bool {
+    Command::new("docker")
+        .arg("info")
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
 }
 
 impl Neptune {
@@ -63,6 +85,8 @@ impl Neptune {
                 build: None,
                 deployment: None,
                 final_condition: None,
+                final_url: None,
+                final_env: None,
             })
         } else {
             None
@@ -151,6 +175,43 @@ impl Neptune {
                 return Ok(NeptuneCommandOutput::None);
             }
         }
+
+        // Preflight: Docker availability
+        ui.header("Preflight");
+        if !docker_installed() {
+            let install_link = "https://docs.docker.com/get-docker/";
+            if self.global_args.output_mode != OutputMode::Json {
+                ui.warn("Docker is not installed or not found in PATH");
+                ui.info(format!("Install Docker: {}", install_link));
+            } else if let Some(ref mut out) = json_out {
+                out.ok = false;
+                out.messages = Some(vec![
+                    "Docker is not installed or not found in PATH".to_string(),
+                    format!("Install Docker: {}", install_link),
+                ]);
+                out.next_action_command = "neptune deploy".to_string();
+                println!("{}", serde_json::to_string_pretty(&out)?);
+            }
+            return Ok(NeptuneCommandOutput::None);
+        }
+        if !docker_running() {
+            let help_msg =
+                "Docker daemon is not running. Start Docker (e.g., Docker Desktop) and retry.";
+            if self.global_args.output_mode != OutputMode::Json {
+                ui.warn(help_msg);
+                ui.info("If you don't have Docker yet, install it from: https://docs.docker.com/get-docker/");
+            } else if let Some(ref mut out) = json_out {
+                out.ok = false;
+                out.messages = Some(vec![
+                    help_msg.to_string(),
+                    "If you don't have Docker yet, install it from: https://docs.docker.com/get-docker/".to_string(),
+                ]);
+                out.next_action_command = "neptune deploy".to_string();
+                println!("{}", serde_json::to_string_pretty(&out)?);
+            }
+            return Ok(NeptuneCommandOutput::None);
+        }
+        ui.step("🐳", "Docker is installed and running");
 
         // Build and push image (logs are streamed directly; no spinner)
         ui.header("Build");
@@ -321,6 +382,8 @@ impl Neptune {
             let max_attempts = 60u32; // ~5 min at 5s intervals
             let mut final_condition: Option<impulse_common::types::AggregateProjectCondition> =
                 None;
+            let mut final_url: Option<String> = None;
+            let mut final_env: Option<BTreeMap<String, String>> = None;
             let mut proj_done = false;
             let mut res_done = false;
             let mut work_done = false;
@@ -331,6 +394,8 @@ impl Neptune {
                     .await?
                     .into_inner();
                 let cond = status.condition;
+                final_url = status.url.clone();
+                final_env = status.env.clone();
                 let is_success = cond.project == ProjectState::Available
                     && matches!(cond.workload, WorkloadState::Running)
                     && cond.resources == ResourcesState::Available;
@@ -426,7 +491,21 @@ impl Neptune {
             if let Some(cond) = final_condition {
                 if let Some(ref mut out) = json_out {
                     out.final_condition = Some(cond);
+                    out.final_url = final_url;
+                    out.final_env = final_env.clone();
                     out.ok = true;
+                } else {
+                    if let Some(url) = final_url {
+                        ui.step("", format!("URL: {}", url));
+                    }
+                    if let Some(env) = final_env {
+                        if !env.is_empty() {
+                            ui.step("", "Environment variables:");
+                            for (k, v) in env {
+                                ui.step("", format!("{}={}", k, v));
+                            }
+                        }
+                    }
                 }
             }
         }

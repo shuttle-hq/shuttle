@@ -2,8 +2,9 @@ use anyhow::Result;
 use cargo_shuttle::args::OutputMode;
 use impulse_common::types::{ProjectState, ResourcesState, WorkloadState};
 use serde::Serialize;
+use std::collections::BTreeMap;
 
-use crate::{ui::AiUi, Neptune, NeptuneCommandOutput};
+use crate::{args::StatusArgs, ui::AiUi, Neptune, NeptuneCommandOutput};
 
 #[derive(Serialize)]
 struct StatusJsonOutput {
@@ -13,15 +14,23 @@ struct StatusJsonOutput {
     messages: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     condition: Option<impulse_common::types::AggregateProjectCondition>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    env: Option<BTreeMap<String, String>>,
     next_action_command: String,
 }
 
 impl Neptune {
-    pub async fn status(&self) -> Result<NeptuneCommandOutput> {
+    pub async fn status(&self, status_args: StatusArgs) -> Result<NeptuneCommandOutput> {
         let ui = AiUi::new(&self.global_args.output_mode, self.global_args.verbose);
         ui.header("Status");
 
-        let project_name = self.resolve_project_name().await?;
+        let project_name = if let Some(name) = status_args.project_name {
+            name
+        } else {
+            self.resolve_project_name().await?
+        };
 
         // Prepare consolidated JSON output if in JSON mode
         let mut json_out = if self.global_args.output_mode == OutputMode::Json {
@@ -30,6 +39,8 @@ impl Neptune {
                 project: project_name.clone(),
                 messages: None,
                 condition: None,
+                url: None,
+                env: None,
                 next_action_command: String::new(),
             })
         } else {
@@ -38,15 +49,22 @@ impl Neptune {
 
         // Look up project on Platform by name
         if let Some(project_id) = self.client.get_project_id_from_name(&project_name).await? {
-            let status = self
+            let response = self
                 .client
                 .get_project_by_id(&project_id)
                 .await?
-                .into_inner()
-                .condition;
+                .into_inner();
+            let impulse_common::types::ProjectStatusResponse {
+                condition: status,
+                url,
+                env,
+                ..
+            } = response;
             if let Some(ref mut out) = json_out {
                 out.ok = true;
                 out.condition = Some(status);
+                out.url = url.clone();
+                out.env = env.clone();
                 out.next_action_command = "neptune status".to_string();
                 println!("{}", serde_json::to_string_pretty(&out)?);
             } else {
@@ -79,6 +97,17 @@ impl Neptune {
                     && matches!(status.workload, WorkloadState::Running)
                 {
                     ui.success("✅ All systems operational");
+                }
+                if let Some(url) = url {
+                    ui.step("", format!("URL: {}", url));
+                }
+                if let Some(env) = env {
+                    if !env.is_empty() {
+                        ui.step("", "Environment variables:");
+                        for (k, v) in env {
+                            ui.step("", format!("{}={}", k, v));
+                        }
+                    }
                 }
             }
             Ok(NeptuneCommandOutput::None)

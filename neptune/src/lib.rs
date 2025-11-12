@@ -70,7 +70,7 @@ impl Neptune {
         match command {
             Init(init_args) => self.init(init_args).await,
             // Build(build_args) => self.build(build_args).await,
-            Run(run_args) => self.local_run(run_args).await,
+            // Run(run_args) => self.local_run(run_args).await,
             Deploy(deploy_args) => self.deploy(deploy_args).await,
             Login(login_args) => self.login(login_args).await,
             Logout(logout_args) => self.logout(logout_args).await,
@@ -91,7 +91,8 @@ impl Neptune {
                 }
             },
             Upgrade { preview } => self.self_upgrade(preview).await,
-            Status => self.status().await,
+            List(list_args) => self.list(list_args).await,
+            Status(status_args) => self.status(status_args).await,
             Delete => self.delete().await,
         }
     }

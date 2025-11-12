@@ -5,7 +5,7 @@ use cargo_shuttle::args::{
 };
 use clap::{
     builder::{OsStringValueParser, TypedValueParser},
-    Args, Parser, Subcommand,
+    Args, Parser, Subcommand, ValueEnum,
 };
 use clap_complete::Shell;
 
@@ -93,9 +93,9 @@ pub enum NeptuneCommand {
     /// Generate an Neptune project from a template
     #[command(visible_alias = "i")]
     Init(InitArgs),
-    /// Run a project locally
-    #[command(visible_alias = "r")]
-    Run(RunArgs),
+    // /// Run a project locally
+    // #[command(visible_alias = "r")]
+    // Run(RunArgs),
     /// Build a project
     // #[command(visible_alias = "b")]
     // Build(BuildArgs),
@@ -118,25 +118,36 @@ pub enum NeptuneCommand {
         #[arg(long, hide = true)]
         preview: bool,
     },
+    /// List things in your Neptune account
+    #[command(visible_alias = "ls")]
+    List(ListArgs),
     // /// Commands for the Shuttle MCP server
     // #[command(subcommand)]
     // Mcp(McpCommand),
+    /// Get the status of a project
     #[command(visible_alias = "s")]
-    Status,
+    Status(StatusArgs),
     /// Delete a project
     #[command(visible_alias = "del")]
     Delete,
 }
 
-#[derive(Args, Debug, Default)]
-pub struct RunArgs {
-    /// Port to start service on
-    #[arg(long, short = 'p', default_value = "8000")]
-    pub port: u16,
-    /// Use 0.0.0.0 instead of localhost
+#[derive(Args, Clone, Debug, Default)]
+pub struct StatusArgs {
+    /// Explicit project name to fetch status for
     #[arg(long)]
-    pub external: bool,
+    pub project_name: Option<String>,
 }
+
+// #[derive(Args, Debug, Default)]
+// pub struct RunArgs {
+//     /// Port to start service on
+//     #[arg(long, short = 'p', default_value = "8000")]
+//     pub port: u16,
+//     /// Use 0.0.0.0 instead of localhost
+//     #[arg(long)]
+//     pub external: bool,
+// }
 
 #[derive(Args, Clone, Debug, Default)]
 pub struct InitArgs {
@@ -216,6 +227,18 @@ pub struct LogoutArgs {
     // /// Reset the API key before logging out
     // #[arg(long)]
     // pub reset_api_key: bool,
+}
+
+#[derive(Args, Clone, Debug)]
+pub struct ListArgs {
+    /// What to list (e.g., projects)
+    #[arg(value_enum)]
+    pub what: ListWhat,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum ListWhat {
+    Projects,
 }
 
 #[derive(Subcommand)]

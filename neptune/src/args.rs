@@ -192,6 +192,9 @@ pub struct DeployArgs {
     /// Tag for the docker image
     #[arg(long)]
     pub tag: Option<String>,
+    /// Emit the generated Dockerfile to the working directory
+    #[arg(long)]
+    pub emit_dockerfile: bool,
     /// Provide environment variables to your build
     #[arg(long, short)]
     pub env: Vec<String>,

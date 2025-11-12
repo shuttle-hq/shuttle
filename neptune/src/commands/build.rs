@@ -15,6 +15,7 @@ use nixpacks::nixpacks::{
     builder::docker::DockerBuilderOptions,
     plan::{generator::GeneratePlanOptions, phase::StartPhase, BuildPlan},
 };
+use std::io::Read;
 use tar::Builder;
 use zip::write::FileOptions;
 use zip::ZipWriter;
@@ -238,22 +239,72 @@ impl Neptune {
                 }
             }
 
-            nixpacks::create_docker_image(
-                rel_path,
-                build_args.env.iter().map(|e| e.as_str()).collect(),
-                &GeneratePlanOptions {
-                    plan: Some(build_plan),
-                    config_file: None,
-                },
-                &DockerBuilderOptions {
-                    name: Some(image_name.clone()),
-                    // print_dockerfile: build_args.print_dockerfile,
-                    tags: vec![String::from(&unique_tag)],
-                    no_error_without_start: true,
-                    ..Default::default()
-                },
-            )
-            .await?;
+            // If emitting, capture stdout while nixpacks prints the Dockerfile
+            let dockerfile_path = self.global_args.working_directory.join("Dockerfile");
+            let want_emit = build_args.emit_dockerfile && !dockerfile_path.exists();
+            if want_emit {
+                let mut redirect = gag::BufferRedirect::stdout()?;
+                let res = nixpacks::create_docker_image(
+                    rel_path,
+                    build_args.env.iter().map(|e| e.as_str()).collect(),
+                    &GeneratePlanOptions {
+                        plan: Some(build_plan),
+                        config_file: None,
+                    },
+                    &DockerBuilderOptions {
+                        name: Some(image_name.clone()),
+                        print_dockerfile: true,
+                        tags: vec![String::from(&unique_tag)],
+                        no_error_without_start: true,
+                        ..Default::default()
+                    },
+                )
+                .await;
+                let mut captured = String::new();
+                redirect.read_to_string(&mut captured)?;
+                res?;
+
+                // Extract Dockerfile content heuristically from captured output
+                let mut start_idx = None;
+                let mut collected = Vec::new();
+                for (i, line) in captured.lines().enumerate() {
+                    if line.trim_start().starts_with("FROM ") {
+                        start_idx = Some(i);
+                        break;
+                    }
+                }
+                if let Some(start) = start_idx {
+                    collected.extend(captured.lines().skip(start));
+                    let dockerfile_text = collected.join("\n");
+                    if !dockerfile_text.trim().is_empty() {
+                        fs::write(&dockerfile_path, dockerfile_text)?;
+                        tracing::info!("Wrote generated Dockerfile to {:?}", dockerfile_path);
+                    } else {
+                        tracing::warn!("Nixpacks printed no Dockerfile content; skipping write");
+                    }
+                } else {
+                    tracing::warn!(
+                        "Could not detect Dockerfile in nixpacks output; skipping write"
+                    );
+                }
+            } else {
+                nixpacks::create_docker_image(
+                    rel_path,
+                    build_args.env.iter().map(|e| e.as_str()).collect(),
+                    &GeneratePlanOptions {
+                        plan: Some(build_plan),
+                        config_file: None,
+                    },
+                    &DockerBuilderOptions {
+                        name: Some(image_name.clone()),
+                        print_dockerfile: build_args.emit_dockerfile,
+                        tags: vec![String::from(&unique_tag)],
+                        no_error_without_start: true,
+                        ..Default::default()
+                    },
+                )
+                .await?;
+            }
         }
 
         // Fetch a registry token

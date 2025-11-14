@@ -105,13 +105,14 @@ pub enum Command {
         limit: u32,
     },
 
-    /// Delete a user
     DeleteUser {
         user_id: String,
     },
 
-    /// Suspend a user
     SuspendUser {
+        user_id: String,
+    },
+    UnsuspendUser {
         user_id: String,
     },
 

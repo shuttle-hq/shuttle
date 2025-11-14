@@ -16,7 +16,7 @@ async fn basic_init() {
     tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
     let temp_dir_path = temp_dir.path().to_owned();
 
-    let bin_path = assert_cmd::cargo::cargo_bin("shuttle");
+    let bin_path = assert_cmd::cargo::cargo_bin!("shuttle");
     let mut command = Command::new(bin_path);
     command
         .args([
@@ -47,7 +47,7 @@ async fn rocket_init() {
     tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
     let temp_dir_path = temp_dir.path().to_owned();
 
-    let bin_path = assert_cmd::cargo::cargo_bin("shuttle");
+    let bin_path = assert_cmd::cargo::cargo_bin!("shuttle");
     let mut command = Command::new(bin_path);
     command
         .args([
@@ -76,7 +76,7 @@ async fn init_with_from_url() {
     tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
     let temp_dir_path = temp_dir.path().to_owned();
 
-    let bin_path = assert_cmd::cargo::cargo_bin("shuttle");
+    let bin_path = assert_cmd::cargo::cargo_bin!("shuttle");
     let mut command = Command::new(bin_path);
     command
         .args([
@@ -109,7 +109,7 @@ async fn init_with_from_gh() {
     tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
     let temp_dir_path = temp_dir.path().to_owned();
 
-    let bin_path = assert_cmd::cargo::cargo_bin("shuttle");
+    let bin_path = assert_cmd::cargo::cargo_bin!("shuttle");
     let mut command = Command::new(bin_path);
     command
         .args([
@@ -142,7 +142,7 @@ async fn init_with_from_repo_name() {
     tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
     let temp_dir_path = temp_dir.path().to_owned();
 
-    let bin_path = assert_cmd::cargo::cargo_bin("shuttle");
+    let bin_path = assert_cmd::cargo::cargo_bin!("shuttle");
     let mut command = Command::new(bin_path);
     command
         .args([
@@ -175,7 +175,7 @@ async fn init_with_from_local_path() {
     tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
     let temp_dir_path = temp_dir.path().to_owned();
 
-    let bin_path = assert_cmd::cargo::cargo_bin("shuttle");
+    let bin_path = assert_cmd::cargo::cargo_bin!("shuttle");
     let mut command = Command::new(bin_path);
     command
         .args([
@@ -208,7 +208,7 @@ async fn init_from_local_path_with_workspace() {
     tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
     let temp_dir_path = temp_dir.path().to_owned();
 
-    let bin_path = assert_cmd::cargo::cargo_bin("shuttle");
+    let bin_path = assert_cmd::cargo::cargo_bin!("shuttle");
     let mut command = Command::new(bin_path);
     command
         .args([
@@ -243,7 +243,7 @@ fn interactive_rocket_init() -> Result<(), Box<dyn std::error::Error>> {
     std::thread::sleep(std::time::Duration::from_millis(500));
     let temp_dir_path = temp_dir.path().to_owned();
 
-    let bin_path = assert_cmd::cargo::cargo_bin("shuttle");
+    let bin_path = assert_cmd::cargo::cargo_bin!("shuttle");
     let mut command = Command::new(bin_path);
     command
         .args(["--offline", "init", "--force-name"])
@@ -275,7 +275,7 @@ fn interactive_rocket_init_manually_choose_template() -> Result<(), Box<dyn std:
     std::thread::sleep(std::time::Duration::from_millis(500));
     let temp_dir_path = temp_dir.path().to_owned();
 
-    let bin_path = assert_cmd::cargo::cargo_bin("shuttle");
+    let bin_path = assert_cmd::cargo::cargo_bin!("shuttle");
     let mut command = Command::new(bin_path);
     command
         .args(["--offline", "init", "--force-name"])
@@ -307,7 +307,7 @@ fn interactive_rocket_init_dont_prompt_framework() -> Result<(), Box<dyn std::er
     std::thread::sleep(std::time::Duration::from_millis(500));
     let temp_dir_path = temp_dir.path().to_owned();
 
-    let bin_path = assert_cmd::cargo::cargo_bin("shuttle");
+    let bin_path = assert_cmd::cargo::cargo_bin!("shuttle");
     let mut command = Command::new(bin_path);
     command
         .args(["--offline", "init", "--force-name", "--template", "rocket"])
@@ -337,7 +337,7 @@ fn interactive_rocket_init_dont_prompt_name() -> Result<(), Box<dyn std::error::
     std::thread::sleep(std::time::Duration::from_millis(500));
     let temp_dir_path = temp_dir.path().to_owned();
 
-    let bin_path = assert_cmd::cargo::cargo_bin("shuttle");
+    let bin_path = assert_cmd::cargo::cargo_bin!("shuttle");
     let mut command = Command::new(bin_path);
     command
         .args(["--offline", "init", "--force-name", "--name", "my-project"])
@@ -369,7 +369,7 @@ fn interactive_rocket_init_prompt_path_dirty_dir() -> Result<(), Box<dyn std::er
 
     std::fs::write(temp_dir_path.join("minion"), "🍌").unwrap();
 
-    let bin_path = assert_cmd::cargo::cargo_bin("shuttle");
+    let bin_path = assert_cmd::cargo::cargo_bin!("shuttle");
     let mut command = Command::new(bin_path);
     command
         .args([

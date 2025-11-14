@@ -4,7 +4,7 @@ mod run;
 
 #[tokio::test]
 async fn fails_if_working_directory_does_not_exist() {
-    let bin_path = assert_cmd::cargo::cargo_bin("shuttle");
+    let bin_path = assert_cmd::cargo::cargo_bin!("shuttle");
     let mut command = std::process::Command::new(bin_path);
     command.args(["--wd", "/path_that_does_not_exist", "account"]);
     let mut session = rexpect::session::spawn_command(command, Some(500)).unwrap();
@@ -17,7 +17,7 @@ async fn fails_if_working_directory_does_not_exist() {
 
 #[tokio::test]
 async fn fails_if_local_project_name_in_root() {
-    let bin_path = assert_cmd::cargo::cargo_bin("shuttle");
+    let bin_path = assert_cmd::cargo::cargo_bin!("shuttle");
     let mut command = std::process::Command::new(bin_path);
     command.args(["--wd", "/", "run"]);
     let mut session = rexpect::session::spawn_command(command, Some(500)).unwrap();
@@ -29,7 +29,7 @@ async fn fails_if_local_project_name_in_root() {
 
 #[tokio::test]
 async fn fails_if_no_project_id_found() {
-    let bin_path = assert_cmd::cargo::cargo_bin("shuttle");
+    let bin_path = assert_cmd::cargo::cargo_bin!("shuttle");
     let mut command = std::process::Command::new(bin_path);
     command.args(["--api-url", "http://shuttle.invalid", "--wd", "/", "logs"]);
     let mut session = rexpect::session::spawn_command(command, Some(500)).unwrap();
@@ -39,7 +39,7 @@ async fn fails_if_no_project_id_found() {
 
 #[tokio::test]
 async fn requests_explicit_project_id_in_non_cargo_workspace() {
-    let bin_path = assert_cmd::cargo::cargo_bin("shuttle");
+    let bin_path = assert_cmd::cargo::cargo_bin!("shuttle");
     let mut command = std::process::Command::new(bin_path);
     command.args([
         "--api-url",
@@ -57,7 +57,7 @@ async fn requests_explicit_project_id_in_non_cargo_workspace() {
 
 #[tokio::test]
 async fn requests_project_list_in_non_cargo_workspace() {
-    let bin_path = assert_cmd::cargo::cargo_bin("shuttle");
+    let bin_path = assert_cmd::cargo::cargo_bin!("shuttle");
     let mut command = std::process::Command::new(bin_path);
     command.args([
         "--api-url",

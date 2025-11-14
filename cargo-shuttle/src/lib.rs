@@ -1,3 +1,4 @@
+mod ai;
 pub mod args;
 pub mod builder;
 pub mod config;
@@ -372,6 +373,12 @@ impl Shuttle {
                 McpCommand::Start => shuttle_mcp::run_mcp_server()
                     .await
                     .map(|_| CommandOutput::None),
+            },
+            Command::Ai(ai_cmd) => match ai_cmd {
+                args::AiCommand::Rules(ai_args) => {
+                    ai::handle_ai_rules(&ai_args, &args.project_args.working_directory)?;
+                    Ok(CommandOutput::None)
+                }
             },
         }
     }

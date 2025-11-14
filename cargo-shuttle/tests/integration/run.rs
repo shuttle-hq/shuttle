@@ -13,7 +13,7 @@ async fn shuttle_run(working_directory: &str, external: bool) -> (String, std::p
         format!("http://0.0.0.0:{port}")
     };
 
-    let bin_path = assert_cmd::cargo::cargo_bin("shuttle");
+    let bin_path = assert_cmd::cargo::cargo_bin!("shuttle");
     let mut command = std::process::Command::new(bin_path);
     command.args([
         "shuttle",

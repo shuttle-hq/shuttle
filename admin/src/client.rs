@@ -175,7 +175,21 @@ impl Client {
 
     pub async fn suspend_user(&self, user_id: &str) -> Result<()> {
         self.inner
-            .put(format!("/admin/users/{user_id}"), Option::<()>::None)
+            .put(
+                format!("/admin/users/{user_id}/suspend"),
+                Option::<()>::None,
+            )
+            .await?
+            .to_empty()
+            .await
+    }
+
+    pub async fn unsuspend_user(&self, user_id: &str) -> Result<()> {
+        self.inner
+            .delete(
+                format!("/admin/users/{user_id}/suspend"),
+                Option::<()>::None,
+            )
             .await?
             .to_empty()
             .await

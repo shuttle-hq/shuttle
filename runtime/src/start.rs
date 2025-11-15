@@ -29,12 +29,15 @@ pub async fn start(
         return;
     }
 
-    println!(
-        "{} starting: {} {}",
-        crate::VERSION_STRING,
-        crate_name,
-        package_version
-    );
+    let quiet = std::env::var("SHUTTLE_QUIET").is_ok();
+    if !quiet {
+        println!(
+            "{} starting: {} {}",
+            crate::VERSION_STRING,
+            crate_name,
+            package_version
+        );
+    }
 
     if let Err(e) = initial_args_and_env_check() {
         eprintln!("ERROR: Runtime failed to parse args: {e}");
@@ -58,17 +61,21 @@ pub async fn start(
                 }),
             )
             .init();
-        tracing::warn!(
-            "Default tracing subscriber initialized (https://docs.shuttle.dev/docs/logs)"
-        );
+        if !quiet {
+            tracing::warn!(
+                "Default tracing subscriber initialized (https://docs.shuttle.dev/docs/logs)"
+            );
+        }
     }
 
     #[cfg(feature = "setup-otel-exporter")]
     let _guard = {
         let guard = crate::telemetry::init_tracing_subscriber(crate_name, package_version);
-        tracing::warn!(
-            "Default tracing subscriber with otel exporter initialized (https://docs.shuttle.dev/docs/telemetry)"
-        );
+        if !quiet {
+            tracing::warn!(
+                "Default tracing subscriber with otel exporter initialized (https://docs.shuttle.dev/docs/telemetry)"
+            );
+        }
         guard
     };
 

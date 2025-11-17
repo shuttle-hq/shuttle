@@ -11,6 +11,7 @@ use bollard::{auth::DockerCredentials, Docker};
 use futures::TryStreamExt;
 use ignore::DirEntry;
 use ignore::WalkBuilder;
+use impulse_common::types::auth::RegistryAuthResponse;
 use nixpacks::nixpacks::{
     builder::docker::DockerBuilderOptions,
     plan::{generator::GeneratePlanOptions, phase::StartPhase, BuildPlan},
@@ -142,7 +143,7 @@ impl Neptune {
         Ok(manifest_data.into_inner())
     }
 
-    pub async fn build(&self, name: &str, build_args: DeployArgs) -> Result<Option<String>> {
+    pub async fn build(&self, project_id: &str, build_args: DeployArgs) -> Result<Option<String>> {
         let wd = &self.global_args.working_directory;
 
         let docker = Docker::connect_with_local_defaults()?;
@@ -164,12 +165,13 @@ impl Neptune {
         timestamp.hash(&mut hasher);
         let unique_tag = format!("{:x}", hasher.finish())[..12].to_string();
 
-        let uri = format!(
-            "europe-west2-docker.pkg.dev/dev-shuttlebox/cloud-run-deploy-public/{}",
-            name
-        );
+        // Fetch a registry token
+        let RegistryAuthResponse { token, url } =
+            self.client.registry_auth(project_id).await?.into_inner();
 
-        let image_with_tag = format!("{}:{}", &uri, unique_tag);
+        tracing::debug!("Registry auth token: {}", token);
+
+        let image_with_tag = format!("{}:{}", &url, unique_tag);
 
         if tokio::fs::try_exists("Dockerfile").await? {
             tracing::info!("Using local Dockerfile...");
@@ -307,17 +309,11 @@ impl Neptune {
             }
         }
 
-        // Fetch a registry token
-        let token = self.client.registry_auth().await?;
-        let token_string = String::from_utf8_lossy(&token).to_string();
-
-        tracing::debug!("Registry auth token: {}", token_string);
-
         docker
             .tag_image(
                 &image_name,
                 Some(bollard::image::TagImageOptions {
-                    repo: String::from(&uri),
+                    repo: String::from(&url),
                     tag: String::from(&unique_tag),
                 }),
             )
@@ -339,7 +335,7 @@ impl Neptune {
                 }),
                 Some(DockerCredentials {
                     username: Some(String::from("_token")),
-                    password: Some(token_string),
+                    password: Some(token),
                     serveraddress: Some(String::from("europe-west2-docker.pkg.dev")),
                     ..Default::default()
                 }),

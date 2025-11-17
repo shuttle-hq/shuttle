@@ -1,5 +1,5 @@
 use anyhow::Result;
-use bytes::Bytes;
+use impulse_common::types::auth::RegistryAuthResponse;
 use impulse_common::types::project::{CreateDeploymentRequest, CreateProjectRequest, ProjectKind};
 use impulse_common::types::ProjectSpec;
 use impulse_common::types::ProjectStatusResponse;
@@ -52,13 +52,15 @@ impl NeptuneClient {
             .await
     }
 
-    pub async fn registry_auth(&self) -> std::result::Result<Bytes, anyhow::Error> {
+    pub async fn registry_auth(
+        &self,
+        id: &str,
+    ) -> std::result::Result<ParsedJson<RegistryAuthResponse>, anyhow::Error> {
         self.api_client
-            .post("/registry_auth", Option::<()>::None)
+            .post(format!("/projects/{id}/registry_auth"), Option::<()>::None)
             .await?
-            .bytes()
+            .to_json()
             .await
-            .map_err(Into::into)
     }
 
     pub async fn get_project_id_from_name(&self, name: &str) -> Result<Option<String>> {

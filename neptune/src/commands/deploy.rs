@@ -176,6 +176,48 @@ impl Neptune {
             }
         }
 
+        let ensure_spinner =
+            make_spinner(&self.global_args.output_mode, "Ensuring project exists...");
+        let project = match async {
+            if let Some(project_id) = self
+                .client
+                .get_project_id_from_name(&project_spec.name)
+                .await?
+            {
+                self.client.get_project_by_id(&project_id).await
+            } else {
+                self.client.create_project(&project_spec).await
+            }
+        }
+        .await
+        {
+            Ok(resp) => resp.into_inner(),
+            Err(e) => {
+                if let Some(ref mut out) = json_out {
+                    out.ok = false;
+                    out.messages = Some(vec![
+                        "Failed to ensure project exists".to_string(),
+                        format!("Project: {}", project_spec.name),
+                        format!("Error: {}", e),
+                    ]);
+                    out.next_action_command = "neptune deploy".to_string();
+                    println!("{}", serde_json::to_string_pretty(&out)?);
+                    if let Some(pb) = ensure_spinner.as_ref() {
+                        pb.finish_and_clear();
+                    }
+                    return Ok(NeptuneCommandOutput::None);
+                } else {
+                    if let Some(pb) = ensure_spinner.as_ref() {
+                        pb.finish_and_clear();
+                    }
+                    return Err(e.into());
+                }
+            }
+        };
+        if let Some(pb) = ensure_spinner.as_ref() {
+            pb.finish_and_clear();
+        }
+
         // Preflight: Docker availability
         ui.header("Preflight");
         if !docker_installed() {
@@ -215,7 +257,7 @@ impl Neptune {
 
         // Build and push image (logs are streamed directly; no spinner)
         ui.header("Build");
-        let build_result = match self.build(&project_spec.name, deploy_args).await {
+        let build_result = match self.build(&project.id, deploy_args).await {
             Ok(v) => v,
             Err(e) => {
                 if self.global_args.output_mode != OutputMode::Json {
@@ -246,48 +288,6 @@ impl Neptune {
             }
             // Ensure project exists
             ui.header("Deploy");
-            let ensure_spinner =
-                make_spinner(&self.global_args.output_mode, "Ensuring project exists...");
-            let project = match async {
-                if let Some(project_id) = self
-                    .client
-                    .get_project_id_from_name(&project_spec.name)
-                    .await?
-                {
-                    self.client.get_project_by_id(&project_id).await
-                } else {
-                    self.client.create_project(&project_spec).await
-                }
-            }
-            .await
-            {
-                Ok(resp) => resp.into_inner(),
-                Err(e) => {
-                    if let Some(ref mut out) = json_out {
-                        out.ok = false;
-                        out.messages = Some(vec![
-                            "Failed to ensure project exists".to_string(),
-                            format!("Project: {}", project_spec.name),
-                            format!("Error: {}", e),
-                        ]);
-                        out.next_action_command = "neptune deploy".to_string();
-                        println!("{}", serde_json::to_string_pretty(&out)?);
-                        if let Some(pb) = ensure_spinner.as_ref() {
-                            pb.finish_and_clear();
-                        }
-                        return Ok(NeptuneCommandOutput::None);
-                    } else {
-                        if let Some(pb) = ensure_spinner.as_ref() {
-                            pb.finish_and_clear();
-                        }
-                        return Err(e.into());
-                    }
-                }
-            };
-            if let Some(pb) = ensure_spinner.as_ref() {
-                pb.finish_and_clear();
-            }
-
             // Create deployment
             let deploy_spinner =
                 make_spinner(&self.global_args.output_mode, "Creating deployment...");

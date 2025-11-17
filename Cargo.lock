@@ -3620,6 +3620,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "neptune-common"
+version = "0.57.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "strum",
+]
+
+[[package]]
 name = "nix"
 version = "0.30.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5211,7 +5220,7 @@ dependencies = [
 [[package]]
 name = "shuttle-common"
 version = "0.0.1"
-source = "git+https://github.com/shuttle-hq/shuttle-impulse.git#3bfc386906f0ea4694b9f4c05550453da448f399"
+source = "git+ssh://git@github.com/shuttle-hq/shuttle-impulse.git#2336efe823071b9cd57fd7b11d1a978086d196c7"
 dependencies = [
  "anyhow",
  "async-trait",

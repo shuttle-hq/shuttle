@@ -10,6 +10,7 @@ members = [
   "ifc",
   "mcp",
   "neptune",
+  "neptune-common",
   "runtime",
   "service",
 ]

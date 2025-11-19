@@ -329,7 +329,7 @@ impl Neptune {
                 &image_with_tag
             };
 
-        docker
+        if let Err(e) = docker
             .push_image(
                 &image_with_tag,
                 Some(bollard::image::PushImageOptions {
@@ -343,7 +343,27 @@ impl Neptune {
                 }),
             )
             .try_collect::<Vec<_>>()
-            .await?;
+            .await
+        {
+            match e {
+                bollard::errors::Error::DockerStreamError { error, .. } => {
+                    return Err(anyhow::anyhow!("Docker push failed: {}", error));
+                }
+                bollard::errors::Error::DockerResponseServerError {
+                    status_code,
+                    message,
+                } => {
+                    return Err(anyhow::anyhow!(
+                        "Docker push failed (status {}): {}",
+                        status_code,
+                        message
+                    ));
+                }
+                other => {
+                    return Err(other.into());
+                }
+            }
+        }
 
         Ok(Some(String::from(image_with_digest)))
     }

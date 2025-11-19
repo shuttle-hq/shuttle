@@ -68,7 +68,9 @@ impl Neptune {
             let out = ListJsonOutput {
                 ok: true,
                 projects,
-                messages: None,
+                messages: Some(vec![
+                    "For more details, run 'neptune status --project-name <name>'".to_string(),
+                ]),
                 next_action_command: "neptune status --project-name <name>".to_string(),
             };
             println!("{}", serde_json::to_string_pretty(&out)?);

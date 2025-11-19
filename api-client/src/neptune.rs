@@ -6,8 +6,7 @@ use impulse_common::types::ProjectStatusResponse;
 
 use crate::{
     neptune_types::{
-        CheckCompatibilityRequest, CompatibilityReport, GenerateRequest, GenerateResponse,
-        PlatformSpecDoc,
+        CheckCompatibilityRequest, CompatibilityReport, GenerateRequest, GenerateResponse, Spec,
     },
     util::{ParsedJson, ToBodyContent},
     ShuttleApiClient,
@@ -110,11 +109,7 @@ impl NeptuneClient {
             .await
     }
 
-    pub async fn generate_spec(
-        &self,
-        payload: Vec<u8>,
-        project_name: &str,
-    ) -> Result<PlatformSpecDoc> {
+    pub async fn generate_spec(&self, payload: Vec<u8>, project_name: &str) -> Result<Spec> {
         let url = format!("{}/v1/generate/spec", self.ai_service_client.api_url);
 
         let mut builder = self.ai_service_client.client.post(url);
@@ -125,7 +120,7 @@ impl NeptuneClient {
 
         let res = builder.send().await?;
         match res.error_for_status_ref() {
-            Ok(_) => Ok(res.json::<PlatformSpecDoc>().await?),
+            Ok(_) => Ok(res.json::<Spec>().await?),
             Err(e) => {
                 tracing::error!(
                     "{:?}: {:?}",

@@ -4,14 +4,9 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GenerateResponse {
-    pub platform_spec: PlatformSpecDoc,
+    pub platform_spec: Spec,
     pub compatibility_report: CompatibilityReport,
     pub start_command: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PlatformSpecDoc {
-    pub spec: Spec,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

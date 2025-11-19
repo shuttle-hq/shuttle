@@ -1,8 +1,8 @@
 //! Shared constants used across Shuttle crates
 
 // URLs
-pub const NEPTUNE_API_URL: &str = "https://api.neptune.dev";
-pub const NEPTUNE_AI_URL: &str = "https://ai.neptune.dev";
+pub const NEPTUNE_API_URL: &str = "https://api-demo.impulse.shuttle.dev";
+pub const NEPTUNE_AI_URL: &str = "https://tooling-demo.impulse.shuttle.dev";
 pub const SHUTTLE_API_URL: &str = "https://api.shuttle.dev";
 pub const SHUTTLE_CONSOLE_URL: &str = "https://console.shuttle.dev";
 

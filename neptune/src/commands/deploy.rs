@@ -141,7 +141,7 @@ impl Neptune {
 
         // Convert generated spec into ProjectSpec for subsequent API calls
         let project_spec: impulse_common::types::ProjectSpec =
-            serde_json::from_value(serde_json::to_value(&gen_res.platform_spec.spec)?)?;
+            serde_json::from_value(serde_json::to_value(&gen_res.platform_spec)?)?;
         tracing::info!("Spec: {:?}", project_spec);
 
         // Print compatibility report if incompatible

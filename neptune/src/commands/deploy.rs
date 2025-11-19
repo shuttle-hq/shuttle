@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use cargo_shuttle::args::OutputMode;
 use chrono::Utc;
 use dialoguer::Confirm;
@@ -12,6 +12,7 @@ use tokio::time::sleep;
 
 use crate::{args::DeployArgs, ui::AiUi, Neptune, NeptuneCommandOutput};
 
+use super::build::ArchiveType;
 use super::common::{
     generate_platform_spec, make_spinner, preview_spec_changes,
     print_compatibility_report_if_needed, write_start_command, SpecPreviewStatus,
@@ -92,14 +93,83 @@ impl Neptune {
             None
         };
 
-        let gen_spinner = make_spinner(
-            &self.global_args.output_mode,
-            "Analyzing project and generating configuration...",
-        );
+        let dir = &self.global_args.working_directory;
+        let spec_path = dir.join("neptune.json");
 
-        let gen_res =
-            match generate_platform_spec(self, &self.global_args.working_directory, &project_name)
-                .await
+        let project_spec: impulse_common::types::ProjectSpec;
+        let compatibility_report: shuttle_api_client::neptune_types::CompatibilityReport;
+        let mut start_command: Option<String> = None;
+
+        if deploy_args.skip_spec {
+            if !spec_path.exists() {
+                let message = format!(
+                    "Cannot skip spec generation because {} does not exist",
+                    spec_path.display()
+                );
+                if let Some(ref mut out) = json_out {
+                    out.ok = false;
+                    out.messages = Some(vec![
+                        message.clone(),
+                        "Run `neptune generate spec` first to create the file.".to_string(),
+                    ]);
+                    out.next_action_command = "neptune generate spec".to_string();
+                    println!("{}", serde_json::to_string_pretty(&out)?);
+                    return Ok(NeptuneCommandOutput::None);
+                } else {
+                    return Err(anyhow!(message));
+                }
+            }
+
+            let existing_spec_bytes = tokio::fs::read(&spec_path).await?;
+            let stored_spec: serde_json::Value = serde_json::from_slice(&existing_spec_bytes)?;
+            project_spec = serde_json::from_value(stored_spec)?;
+
+            let compat_spinner =
+                make_spinner(&self.global_args.output_mode, "Checking compatibility...");
+            let bytes: Vec<u8> = self.create_build_context(
+                dir,
+                ArchiveType::Zip,
+                None::<Vec<&std::path::Path>>,
+                true,
+            )?;
+            let compat_res = match self.client.check_compatibility(bytes).await {
+                Ok(report) => report,
+                Err(e) => {
+                    if let Some(pb) = compat_spinner.as_ref() {
+                        pb.finish_and_clear();
+                    }
+                    if let Some(ref mut out) = json_out {
+                        out.ok = false;
+                        out.messages = Some(vec![
+                            "Failed to analyze project for compatibility".to_string(),
+                            format!("Project: {}", project_name),
+                            format!("Error: {}", e),
+                        ]);
+                        out.next_action_command = "neptune deploy --skip-spec".to_string();
+                        println!("{}", serde_json::to_string_pretty(&out)?);
+                        return Ok(NeptuneCommandOutput::None);
+                    } else {
+                        return Err(e);
+                    }
+                }
+            };
+            if let Some(pb) = compat_spinner.as_ref() {
+                pb.finish_and_clear();
+            }
+
+            compatibility_report = compat_res;
+        } else {
+            let gen_spinner = make_spinner(
+                &self.global_args.output_mode,
+                "Analyzing project and generating configuration...",
+            );
+
+            let gen_res = match generate_platform_spec(
+                self,
+                &self.global_args.working_directory,
+                &project_name,
+            )
+            .await
             {
                 Ok(v) => v,
                 Err(e) => {
@@ -119,49 +189,44 @@ impl Neptune {
                 }
             };
 
-        if let Some(pb) = gen_spinner.as_ref() {
-            pb.finish_and_clear();
+            if let Some(pb) = gen_spinner.as_ref() {
+                pb.finish_and_clear();
+            }
+
+            let new_spec_pretty = serde_json::to_string_pretty(&gen_res.platform_spec)?;
+            match preview_spec_changes(
+                &spec_path,
+                &new_spec_pretty,
+                &ui,
+                &self.global_args.output_mode,
+            )? {
+                SpecPreviewStatus::UpToDate => _printed_up_to_date = true,
+                _ => {}
+            };
+
+            tokio::fs::write(&spec_path, new_spec_pretty.as_bytes()).await?;
+
+            project_spec = serde_json::from_value(serde_json::to_value(&gen_res.platform_spec)?)?;
+            compatibility_report = gen_res.compatibility_report.clone();
+            start_command = Some(gen_res.start_command.clone());
         }
-
-        // Write neptune.json with change detection and small preview if updated
-        let dir = &self.global_args.working_directory;
-        let spec_path = dir.join("neptune.json");
-        let new_spec_pretty = serde_json::to_string_pretty(&gen_res.platform_spec)?;
-        match preview_spec_changes(
-            &spec_path,
-            &new_spec_pretty,
-            &ui,
-            &self.global_args.output_mode,
-        )? {
-            SpecPreviewStatus::UpToDate => _printed_up_to_date = true,
-            _ => {}
-        };
-
-        tokio::fs::write(&spec_path, new_spec_pretty.as_bytes()).await?;
-
-        // Convert generated spec into ProjectSpec for subsequent API calls
-        let project_spec: impulse_common::types::ProjectSpec =
-            serde_json::from_value(serde_json::to_value(&gen_res.platform_spec)?)?;
         tracing::info!("Spec: {:?}", project_spec);
 
-        // Print compatibility report if incompatible
-        if !gen_res.compatibility_report.compatible
-            && self.global_args.output_mode != OutputMode::Json
-        {
-            print_compatibility_report_if_needed(
-                &ui,
-                &gen_res.compatibility_report,
-                &self.global_args.output_mode,
-            );
-        } else if self.global_args.output_mode == OutputMode::Json {
-            // Defer printing; include in consolidated JSON
-            if let Some(ref mut out) = json_out {
-                out.compatibility = Some(gen_res.compatibility_report.clone());
-            }
+        if let Some(cmd) = start_command {
+            write_start_command(dir, &cmd).await?;
         }
 
-        // Save start_command for build usage, .neptune/start_command
-        write_start_command(dir, &gen_res.start_command).await?;
+        if self.global_args.output_mode == OutputMode::Json {
+            if let Some(ref mut out) = json_out {
+                out.compatibility = Some(compatibility_report.clone());
+            }
+        } else {
+            print_compatibility_report_if_needed(
+                &ui,
+                &compatibility_report,
+                &self.global_args.output_mode,
+            );
+        }
 
         // Ask for confirmation (interactive only in non-JSON mode)
         if self.global_args.output_mode != OutputMode::Json {

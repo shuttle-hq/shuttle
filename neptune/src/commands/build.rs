@@ -53,13 +53,15 @@ impl<'a, W: Write + Seek> Archiver<'a, W> {
         path: impl AsRef<Path>,
         rel_path: impl AsRef<Path>,
     ) -> std::result::Result<(), std::io::Error> {
+        let path = path.as_ref();
+        let rel_path = rel_path.as_ref();
         match &mut self.inner {
             ArchiverType::Tar(ref mut manifest) => manifest.append_path_with_name(path, rel_path),
             ArchiverType::Zip(ref mut manifest) => {
                 let options: FileOptions<'_, zip::write::ExtendedFileOptions> =
                     FileOptions::default().compression_method(zip::CompressionMethod::Deflated);
-                manifest.start_file_from_path(path, options)?;
-                let mut f = std::fs::File::open(rel_path)?;
+                manifest.start_file_from_path(rel_path, options)?;
+                let mut f = std::fs::File::open(path)?;
                 std::io::copy(&mut f, manifest)?;
                 Ok(())
             }

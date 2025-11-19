@@ -195,6 +195,9 @@ pub struct DeployArgs {
     /// Emit the generated Dockerfile to the working directory
     #[arg(long)]
     pub emit_dockerfile: bool,
+    /// Skip spec generation and reuse the existing neptune.json
+    #[arg(long = "skip-spec")]
+    pub skip_spec: bool,
     /// Provide environment variables to your build
     #[arg(long, short)]
     pub env: Vec<String>,

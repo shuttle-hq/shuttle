@@ -6,6 +6,6 @@ pub mod deploy;
 pub mod generate;
 pub mod init;
 // pub mod run;
+pub mod list;
 pub mod status;
 pub mod upgrade;
-pub mod list;

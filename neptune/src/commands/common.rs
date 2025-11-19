@@ -6,7 +6,9 @@ use cargo_shuttle::args::OutputMode;
 use comfy_table::{presets::UTF8_FULL, Attribute, Cell, Color, ContentArrangement, Table};
 use indicatif::{ProgressBar, ProgressStyle};
 use pretty_assertions::StrComparison;
-use shuttle_api_client::neptune_types::{CompatibilityReport, GenerateResponse};
+use shuttle_api_client::neptune_types::{
+    AiLintCategory, AiLintFinding, AiLintReport, GenerateResponse,
+};
 
 use crate::{ui::AiUi, Neptune};
 
@@ -122,48 +124,111 @@ pub async fn write_start_command(root_dir: &Path, start_command: &str) -> Result
     Ok(())
 }
 
-/// Print a compatibility report table if incompatible and not in JSON mode.
-pub fn print_compatibility_report_if_needed(
-    ui: &AiUi,
-    report: &CompatibilityReport,
-    output_mode: &OutputMode,
-) {
-    if *output_mode == OutputMode::Json || report.compatible {
+/// Render the AI lint report in human-readable form when not in JSON mode.
+pub fn print_ai_lint_report(ui: &AiUi, report: &AiLintReport, output_mode: &OutputMode) {
+    if *output_mode == OutputMode::Json {
+        return;
+    }
+    if report.errors.is_empty() && report.warnings.is_empty() && report.suppressed.is_empty() {
         return;
     }
     eprintln!();
-    ui.header("Compatibility Report");
+    ui.header("AI Lint Report");
     eprintln!();
-    ui.warn("Possible compatibility issues detected");
+    if report.summary.blocking {
+        ui.warn("Blocking AI lint findings detected");
+    } else {
+        ui.step("", "No blocking findings detected");
+    }
+    render_section(ui, "Errors", &report.errors, Color::Red);
+    render_section(ui, "Warnings", &report.warnings, Color::Yellow);
+    render_section(ui, "Suppressed", &report.suppressed, Color::Cyan);
+    if report.config.block_on_warnings {
+        ui.step(
+            "",
+            "Repo config is set to block on warnings (block_on_warnings = true)",
+        );
+    }
+    if !report.config.suppressed_codes.is_empty() {
+        ui.step(
+            "",
+            format!(
+                "Suppressed rules: {}",
+                report.config.suppressed_codes.join(", ")
+            ),
+        );
+    }
+    eprintln!();
+}
+
+fn render_section(ui: &AiUi, label: &str, findings: &[AiLintFinding], color: Color) {
+    if findings.is_empty() {
+        return;
+    }
+    ui.step("", format!("{label} ({})", findings.len()));
     let mut table = Table::new();
     table
         .load_preset(UTF8_FULL)
         .set_content_arrangement(ContentArrangement::Dynamic)
         .set_header(vec![
             Cell::new("Category").add_attribute(Attribute::Bold),
+            Cell::new("Code").add_attribute(Attribute::Bold),
             Cell::new("Message").add_attribute(Attribute::Bold),
             Cell::new("Path").add_attribute(Attribute::Bold),
             Cell::new("Suggestion").add_attribute(Attribute::Bold),
         ]);
-    for err in report.errors.iter() {
-        let category = match err.category {
-            shuttle_api_client::neptune_types::ErrorCategory::Architecture => "Architecture",
-            shuttle_api_client::neptune_types::ErrorCategory::ResourceSupport => "Resource Support",
-            shuttle_api_client::neptune_types::ErrorCategory::WorkloadSupport => "Workload Support",
-            shuttle_api_client::neptune_types::ErrorCategory::ConfigurationInvalid => {
-                "Configuration Invalid"
-            }
-            shuttle_api_client::neptune_types::ErrorCategory::Unknown => "Other",
-        };
+    for finding in findings {
         table.add_row(vec![
-            Cell::new(category).fg(Color::White),
-            Cell::new(err.message.as_str()).fg(Color::Red),
-            Cell::new(err.path.as_deref().unwrap_or("-")).fg(Color::White),
-            Cell::new(err.suggestion.as_deref().unwrap_or("-")).fg(Color::White),
+            Cell::new(category_label(&finding.category)),
+            Cell::new(finding.code.as_str()),
+            Cell::new(finding.message.as_str()).fg(color),
+            Cell::new(finding.path.as_deref().unwrap_or("-")),
+            Cell::new(finding.suggestion.as_deref().unwrap_or("-")),
         ]);
     }
-    if table.row_count() > 1 {
-        eprintln!("{}", table);
-    }
+    eprintln!("{}", table);
     eprintln!();
+}
+
+fn category_label(category: &AiLintCategory) -> &'static str {
+    match category {
+        AiLintCategory::Architecture => "Architecture",
+        AiLintCategory::ResourceSupport => "Resource Support",
+        AiLintCategory::WorkloadSupport => "Workload Support",
+        AiLintCategory::ConfigurationInvalid => "Configuration Invalid",
+        AiLintCategory::Unknown => "Other",
+    }
+}
+
+#[derive(Debug, Default, Clone)]
+pub struct LintGateAssessment {
+    pub blocking: bool,
+    pub reasons: Vec<String>,
+}
+
+pub fn assess_lint_gate(
+    report: &AiLintReport,
+    allow_ai_errors: bool,
+    allow_ai_warnings: bool,
+) -> LintGateAssessment {
+    let mut reasons = Vec::new();
+    let error_count = report.errors.len();
+    if error_count > 0 && !allow_ai_errors {
+        reasons.push(format!(
+            "{error_count} blocking error{} reported by AI lint",
+            if error_count == 1 { "" } else { "s" }
+        ));
+    }
+    let warning_count = report.warnings.len();
+    if report.config.block_on_warnings && warning_count > 0 && !allow_ai_warnings {
+        reasons.push(format!(
+            "{warning_count} warning{} with block_on_warnings enabled",
+            if warning_count == 1 { "" } else { "s" }
+        ));
+    }
+
+    LintGateAssessment {
+        blocking: !reasons.is_empty(),
+        reasons,
+    }
 }

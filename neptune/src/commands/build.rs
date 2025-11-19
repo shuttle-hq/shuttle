@@ -1,9 +1,9 @@
-use std::collections::hash_map::DefaultHasher;
+use std::collections::{hash_map::DefaultHasher, HashSet};
 use std::env;
 use std::fs;
 use std::hash::{Hash, Hasher};
 use std::io::{Cursor, Seek, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result};
@@ -87,6 +87,7 @@ impl Neptune {
         ignore_files: Option<Vec<impl AsRef<Path>>>,
         standard_filters: bool,
     ) -> Result<Vec<u8>> {
+        let root = context_root.as_ref();
         let mut manifest_data = Cursor::new(Vec::new());
         {
             let mut manifest = match archive_type {
@@ -94,7 +95,7 @@ impl Neptune {
                 ArchiveType::Zip => Archiver::zip(&mut manifest_data),
             };
 
-            let mut walk_builder = WalkBuilder::new(&context_root);
+            let mut walk_builder = WalkBuilder::new(root);
 
             if let Some(files) = ignore_files {
                 for file in files {
@@ -109,12 +110,10 @@ impl Neptune {
                 walk_builder.standard_filters(standard_filters);
             }
 
-            tracing::debug!(
-                "Creating build context tar from {:?}",
-                context_root.as_ref()
-            );
+            tracing::debug!("Creating build context archive from {:?}", root);
 
             let mut total_size: u64 = 0;
+            let mut included_paths: HashSet<PathBuf> = HashSet::new();
             const MAX_ARCHIVE_SIZE: u64 = 200 * 1024 * 1024; // 200MB in bytes
 
             for entry in walk_builder.build() {
@@ -133,9 +132,21 @@ impl Neptune {
                         ));
                     }
 
-                    let rel_path = path.strip_prefix(&context_root)?;
+                    let rel_path = path.strip_prefix(root)?;
                     tracing::debug!("Adding entry: {:?}", rel_path);
                     manifest.add_file(path, rel_path)?;
+                    included_paths.insert(rel_path.to_path_buf());
+                }
+            }
+
+            const LINT_CONFIG_FILES: [&str; 2] = [".neptune-lint.toml", "neptune-lint.toml"];
+            for lint_file in LINT_CONFIG_FILES {
+                let abs_path = root.join(lint_file);
+                if abs_path.is_file() {
+                    let rel_path = PathBuf::from(lint_file);
+                    if !included_paths.contains(&rel_path) {
+                        manifest.add_file(&abs_path, &rel_path)?;
+                    }
                 }
             }
 

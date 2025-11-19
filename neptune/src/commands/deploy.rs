@@ -14,8 +14,8 @@ use crate::{args::DeployArgs, ui::AiUi, Neptune, NeptuneCommandOutput};
 
 use super::build::ArchiveType;
 use super::common::{
-    generate_platform_spec, make_spinner, preview_spec_changes,
-    print_compatibility_report_if_needed, write_start_command, SpecPreviewStatus,
+    assess_lint_gate, generate_platform_spec, make_spinner, preview_spec_changes,
+    print_ai_lint_report, write_start_command, SpecPreviewStatus,
 };
 
 #[derive(Serialize)]
@@ -38,7 +38,8 @@ struct DeployJsonOutput {
     messages: Option<Vec<String>>,
     next_action_command: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    compatibility: Option<shuttle_api_client::neptune_types::CompatibilityReport>,
+    #[serde(rename = "ai_lint_report")]
+    ai_lint_report: Option<shuttle_api_client::neptune_types::AiLintReport>,
     #[serde(skip_serializing_if = "Option::is_none")]
     build: Option<BuildSummary>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -82,7 +83,7 @@ impl Neptune {
                 project: project_name.clone(),
                 messages: None,
                 next_action_command: String::new(),
-                compatibility: None,
+                ai_lint_report: None,
                 build: None,
                 deployment: None,
                 final_condition: None,
@@ -97,7 +98,7 @@ impl Neptune {
         let spec_path = dir.join("neptune.json");
 
         let project_spec: impulse_common::types::ProjectSpec;
-        let compatibility_report: shuttle_api_client::neptune_types::CompatibilityReport;
+        let ai_lint_report: shuttle_api_client::neptune_types::AiLintReport;
         let mut start_command: Option<String> = None;
 
         if deploy_args.skip_spec {
@@ -124,24 +125,23 @@ impl Neptune {
             let stored_spec: serde_json::Value = serde_json::from_slice(&existing_spec_bytes)?;
             project_spec = serde_json::from_value(stored_spec)?;
 
-            let compat_spinner =
-                make_spinner(&self.global_args.output_mode, "Checking compatibility...");
+            let lint_spinner = make_spinner(&self.global_args.output_mode, "Running AI lint...");
             let bytes: Vec<u8> = self.create_build_context(
                 dir,
                 ArchiveType::Zip,
                 None::<Vec<&std::path::Path>>,
                 true,
             )?;
-            let compat_res = match self.client.check_compatibility(bytes).await {
+            let lint_res = match self.client.ai_lint(bytes).await {
                 Ok(report) => report,
                 Err(e) => {
-                    if let Some(pb) = compat_spinner.as_ref() {
+                    if let Some(pb) = lint_spinner.as_ref() {
                         pb.finish_and_clear();
                     }
                     if let Some(ref mut out) = json_out {
                         out.ok = false;
                         out.messages = Some(vec![
-                            "Failed to analyze project for compatibility".to_string(),
+                            "Failed to analyze project with AI lint".to_string(),
                             format!("Project: {}", project_name),
                             format!("Error: {}", e),
                         ]);
@@ -153,11 +153,11 @@ impl Neptune {
                     }
                 }
             };
-            if let Some(pb) = compat_spinner.as_ref() {
+            if let Some(pb) = lint_spinner.as_ref() {
                 pb.finish_and_clear();
             }
 
-            compatibility_report = compat_res;
+            ai_lint_report = lint_res;
         } else {
             let gen_spinner = make_spinner(
                 &self.global_args.output_mode,
@@ -207,7 +207,7 @@ impl Neptune {
             tokio::fs::write(&spec_path, new_spec_pretty.as_bytes()).await?;
 
             project_spec = serde_json::from_value(serde_json::to_value(&gen_res.platform_spec)?)?;
-            compatibility_report = gen_res.compatibility_report.clone();
+            ai_lint_report = gen_res.ai_lint_report.clone();
             start_command = Some(gen_res.start_command.clone());
         }
         tracing::info!("Spec: {:?}", project_spec);
@@ -218,14 +218,37 @@ impl Neptune {
 
         if self.global_args.output_mode == OutputMode::Json {
             if let Some(ref mut out) = json_out {
-                out.compatibility = Some(compatibility_report.clone());
+                out.ai_lint_report = Some(ai_lint_report.clone());
             }
         } else {
-            print_compatibility_report_if_needed(
-                &ui,
-                &compatibility_report,
-                &self.global_args.output_mode,
-            );
+            print_ai_lint_report(&ui, &ai_lint_report, &self.global_args.output_mode);
+        }
+
+        let lint_assessment = assess_lint_gate(
+            &ai_lint_report,
+            self.global_args.allow_ai_errors,
+            self.global_args.allow_ai_warnings,
+        );
+        if lint_assessment.blocking {
+            if let Some(mut out) = json_out.take() {
+                let mut msgs = out.messages.unwrap_or_default();
+                msgs.extend(lint_assessment.reasons.clone());
+                msgs.push("Deployment aborted before build due to AI lint findings.".to_string());
+                out.messages = Some(msgs);
+                out.ok = false;
+                if out.ai_lint_report.is_none() {
+                    out.ai_lint_report = Some(ai_lint_report.clone());
+                }
+                out.next_action_command = "neptune lint".to_string();
+                println!("{}", serde_json::to_string_pretty(&out)?);
+            } else {
+                for reason in &lint_assessment.reasons {
+                    ui.warn(format!("Blocking: {}", reason));
+                }
+                ui.info("Use --allow-ai-errors / --allow-ai-warnings to override.");
+                ui.info("Deployment aborted before build; resolve findings or override to continue.");
+            }
+            return Ok(NeptuneCommandOutput::None);
         }
 
         // Ask for confirmation (interactive only in non-JSON mode)

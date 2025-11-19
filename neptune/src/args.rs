@@ -55,6 +55,12 @@ pub struct NeptuneGlobalArgs {
 
     #[arg(global = true, long, short = 'v', env = "NEPTUNE_VERBOSE")]
     pub verbose: bool,
+    /// Ignore blocking AI lint errors (not recommended)
+    #[arg(global = true, long)]
+    pub allow_ai_errors: bool,
+    /// Ignore blocking AI lint warnings even if block_on_warnings is set
+    #[arg(global = true, long)]
+    pub allow_ai_warnings: bool,
 }
 
 impl NeptuneGlobalArgs {
@@ -130,6 +136,8 @@ pub enum NeptuneCommand {
     /// Delete a project
     #[command(visible_alias = "del")]
     Delete,
+    /// Run the AI linter against the current project
+    Lint,
 }
 
 #[derive(Args, Clone, Debug, Default)]

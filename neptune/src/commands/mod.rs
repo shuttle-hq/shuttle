@@ -5,6 +5,7 @@ pub mod delete;
 pub mod deploy;
 pub mod generate;
 pub mod init;
+pub mod lint;
 // pub mod run;
 pub mod list;
 pub mod status;

@@ -6,7 +6,7 @@ use impulse_common::types::ProjectStatusResponse;
 
 use crate::{
     neptune_types::{
-        CheckCompatibilityRequest, CompatibilityReport, GenerateRequest, GenerateResponse, Spec,
+        AiLintReport, AiLintRequest, AiLintResponse, GenerateRequest, GenerateResponse, Spec,
     },
     util::{ParsedJson, ToBodyContent},
     ShuttleApiClient,
@@ -156,18 +156,20 @@ impl NeptuneClient {
         }
     }
 
-    pub async fn check_compatibility(&self, payload: Vec<u8>) -> Result<CompatibilityReport> {
-        let url = format!("{}/v1/check/compatibility", self.ai_service_client.api_url);
+    pub async fn ai_lint(&self, payload: Vec<u8>) -> Result<AiLintReport> {
+        let url = format!("{}/v1/lint", self.ai_service_client.api_url);
 
         let mut builder = self.ai_service_client.client.post(url);
         builder = self.ai_service_client.set_auth_bearer(builder);
 
-        let form = CheckCompatibilityRequest::from(payload).into_multipart()?;
+        let form = AiLintRequest::from(payload).into_multipart()?;
 
         let res = builder.multipart(form).send().await?;
-
         match res.error_for_status_ref() {
-            Ok(_) => Ok(res.json::<CompatibilityReport>().await?),
+            Ok(_) => {
+                let lint_res = res.json::<AiLintResponse>().await?;
+                Ok(lint_res.into_report())
+            }
             Err(e) => {
                 tracing::error!(
                     "{:?}: {:?}",

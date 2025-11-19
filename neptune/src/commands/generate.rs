@@ -16,8 +16,8 @@ use shuttle_api_client::neptune_types::GenerateResponse;
 use crate::{args::NeptuneArgs, ui::AiUi, Neptune, NeptuneCommandOutput};
 
 use super::common::{
-    generate_platform_spec, make_spinner, preview_spec_changes,
-    print_compatibility_report_if_needed, write_start_command, SpecPreviewStatus,
+    assess_lint_gate, generate_platform_spec, make_spinner, preview_spec_changes,
+    print_ai_lint_report, write_start_command, LintGateAssessment, SpecPreviewStatus,
 };
 
 #[derive(Serialize)]
@@ -28,7 +28,8 @@ struct GenerateJsonOutput {
     messages: Option<Vec<String>>,
     next_action_command: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    compatibility: Option<shuttle_api_client::neptune_types::CompatibilityReport>,
+    #[serde(rename = "ai_lint_report")]
+    ai_lint_report: Option<shuttle_api_client::neptune_types::AiLintReport>,
 }
 
 impl Neptune {
@@ -184,7 +185,7 @@ impl Neptune {
                 spec_path: String::new(),
                 messages: None,
                 next_action_command: String::new(),
-                compatibility: None,
+                ai_lint_report: None,
             })
         } else {
             None
@@ -251,16 +252,31 @@ impl Neptune {
             }
         }
 
-        // Handle compatibility report: print if incompatible
-        if !gen_res.compatibility_report.compatible {
+        let lint_report = gen_res.ai_lint_report.clone();
+        if let Some(ref mut out) = json_out {
+            out.ai_lint_report = Some(lint_report.clone());
+        } else {
+            print_ai_lint_report(&ui, &lint_report, &self.global_args.output_mode);
+        }
+        let LintGateAssessment {
+            blocking: lint_blocking,
+            reasons: lint_reasons,
+        } = assess_lint_gate(
+            &lint_report,
+            self.global_args.allow_ai_errors,
+            self.global_args.allow_ai_warnings,
+        );
+        if lint_blocking {
             if let Some(ref mut out) = json_out {
-                out.compatibility = Some(gen_res.compatibility_report.clone());
+                let mut msgs = out.messages.take().unwrap_or_default();
+                msgs.extend(lint_reasons.clone());
+                out.messages = Some(msgs);
+                out.next_action_command = "neptune lint".to_string();
             } else {
-                print_compatibility_report_if_needed(
-                    &ui,
-                    &gen_res.compatibility_report,
-                    &self.global_args.output_mode,
-                );
+                for reason in &lint_reasons {
+                    ui.warn(format!("Blocking: {}", reason));
+                }
+                ui.info("Use --allow-ai-errors / --allow-ai-warnings to override.");
             }
         }
 

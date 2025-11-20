@@ -8,6 +8,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result};
 use bollard::{auth::DockerCredentials, Docker};
+use cargo_shuttle::args::OutputMode;
 use futures::TryStreamExt;
 use ignore::DirEntry;
 use ignore::WalkBuilder;
@@ -342,38 +343,65 @@ impl Neptune {
                 &image_with_tag
             };
 
-        if let Err(e) = docker
-            .push_image(
-                &image_with_tag,
-                Some(bollard::image::PushImageOptions {
-                    tag: String::from(unique_tag),
-                }),
-                Some(DockerCredentials {
-                    username: Some(String::from("_token")),
-                    password: Some(token),
-                    serveraddress: Some(String::from("europe-west2-docker.pkg.dev")),
-                    ..Default::default()
-                }),
-            )
-            .try_collect::<Vec<_>>()
-            .await
-        {
-            match e {
-                bollard::errors::Error::DockerStreamError { error, .. } => {
-                    return Err(anyhow::anyhow!("Docker push failed: {}", error));
+        let mut push_stream = docker.push_image(
+            &image_with_tag,
+            Some(bollard::image::PushImageOptions {
+                tag: String::from(unique_tag),
+            }),
+            Some(DockerCredentials {
+                username: Some(String::from("_token")),
+                password: Some(token),
+                serveraddress: Some(String::from("europe-west2-docker.pkg.dev")),
+                ..Default::default()
+            }),
+        );
+
+        // Show Docker push output in all modes, including JSON
+        let show_push_stream = true;
+        loop {
+            match push_stream.try_next().await {
+                Ok(Some(info)) => {
+                    if let Some(error) = info.error {
+                        if show_push_stream {
+                            eprintln!("Docker push error: {}", error);
+                        }
+                        return Err(anyhow::anyhow!("Docker push failed: {}", error));
+                    }
+
+                    if show_push_stream {
+                        if let Some(status) = info.status.as_deref() {
+                            if let Some(progress) = info.progress.as_deref() {
+                                println!("{} {}", status.trim(), progress.trim());
+                            } else if let Some(detail) = info.progress_detail.as_ref() {
+                                let current = detail.current.unwrap_or_default();
+                                let total = detail.total.unwrap_or_default();
+                                if total > 0 {
+                                    println!("{} [{}/{}]", status.trim(), current, total);
+                                } else {
+                                    println!("{} {}", status.trim(), current);
+                                }
+                            } else {
+                                println!("{}", status.trim());
+                            }
+                        }
+                    }
                 }
-                bollard::errors::Error::DockerResponseServerError {
-                    status_code,
-                    message,
-                } => {
-                    return Err(anyhow::anyhow!(
-                        "Docker push failed (status {}): {}",
-                        status_code,
-                        message
-                    ));
-                }
-                other => {
-                    return Err(other.into());
+                Ok(None) => break,
+                Err(e) => {
+                    return Err(match e {
+                        bollard::errors::Error::DockerStreamError { error, .. } => {
+                            anyhow::anyhow!("Docker push failed: {}", error)
+                        }
+                        bollard::errors::Error::DockerResponseServerError {
+                            status_code,
+                            message,
+                        } => anyhow::anyhow!(
+                            "Docker push failed (status {}): {}",
+                            status_code,
+                            message
+                        ),
+                        other => other.into(),
+                    });
                 }
             }
         }

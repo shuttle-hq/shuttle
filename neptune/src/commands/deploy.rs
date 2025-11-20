@@ -510,7 +510,10 @@ impl Neptune {
                 final_env = status.env.clone();
                 let is_success = cond.project == ProjectState::Available
                     && matches!(cond.workload, WorkloadState::Running)
-                    && cond.resources == ResourcesState::Available;
+                    && matches!(cond.resources, ResourcesState::Available);
+                let is_created_ready = cond.project == ProjectState::Created
+                    && matches!(cond.resources, ResourcesState::Available)
+                    && matches!(cond.workload, WorkloadState::Running);
                 let is_failure = matches!(cond.workload, WorkloadState::Failing(_))
                     || matches!(cond.resources, ResourcesState::Failing(_));
 
@@ -530,7 +533,11 @@ impl Neptune {
                         other => format!("Workload: {:?}", other),
                     };
                     if !proj_done {
-                        if cond.project == ProjectState::Available || is_success || is_failure {
+                        if cond.project == ProjectState::Available
+                            || is_success
+                            || is_failure
+                            || is_created_ready
+                        {
                             pb_p.finish_with_message(format!("{} ✅", proj_text));
                             proj_done = true;
                         } else {
@@ -580,7 +587,7 @@ impl Neptune {
                     }
                 }
 
-                if is_success || is_failure {
+                if is_success || is_failure || is_created_ready {
                     final_condition = Some(cond);
                     break;
                 }

@@ -8,5 +8,6 @@ pub mod init;
 pub mod lint;
 // pub mod run;
 pub mod list;
+pub mod schema;
 pub mod status;
 pub mod upgrade;

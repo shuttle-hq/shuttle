@@ -98,7 +98,7 @@ impl Neptune {
         let spec_path = dir.join("neptune.json");
 
         let project_spec: impulse_common::types::ProjectSpec;
-        let ai_lint_report: shuttle_api_client::neptune_types::AiLintReport;
+        let mut ai_lint_report: Option<shuttle_api_client::neptune_types::AiLintReport> = None;
         let mut start_command: Option<String> = None;
 
         if deploy_args.skip_spec {
@@ -125,39 +125,46 @@ impl Neptune {
             let stored_spec: serde_json::Value = serde_json::from_slice(&existing_spec_bytes)?;
             project_spec = serde_json::from_value(stored_spec)?;
 
-            let lint_spinner = make_spinner(&self.global_args.output_mode, "Running AI lint...");
-            let bytes: Vec<u8> = self.create_build_context(
-                dir,
-                ArchiveType::Zip,
-                None::<Vec<&std::path::Path>>,
-                true,
-            )?;
-            let lint_res = match self.client.ai_lint(bytes).await {
-                Ok(report) => report,
-                Err(e) => {
-                    if let Some(pb) = lint_spinner.as_ref() {
-                        pb.finish_and_clear();
-                    }
-                    if let Some(ref mut out) = json_out {
-                        out.ok = false;
-                        out.messages = Some(vec![
-                            "Failed to analyze project with AI lint".to_string(),
-                            format!("Project: {}", project_name),
-                            format!("Error: {}", e),
-                        ]);
-                        out.next_action_command = "neptune deploy --skip-spec".to_string();
-                        println!("{}", serde_json::to_string_pretty(&out)?);
-                        return Ok(NeptuneCommandOutput::None);
-                    } else {
-                        return Err(e);
-                    }
+            if deploy_args.skip_lint {
+                if self.global_args.output_mode != OutputMode::Json {
+                    ui.step("", "Skipping AI lint (--skip-lint)");
                 }
-            };
-            if let Some(pb) = lint_spinner.as_ref() {
-                pb.finish_and_clear();
-            }
+            } else {
+                let lint_spinner =
+                    make_spinner(&self.global_args.output_mode, "Running AI lint...");
+                let bytes: Vec<u8> = self.create_build_context(
+                    dir,
+                    ArchiveType::Zip,
+                    None::<Vec<&std::path::Path>>,
+                    true,
+                )?;
+                let lint_res = match self.client.ai_lint(bytes).await {
+                    Ok(report) => report,
+                    Err(e) => {
+                        if let Some(pb) = lint_spinner.as_ref() {
+                            pb.finish_and_clear();
+                        }
+                        if let Some(ref mut out) = json_out {
+                            out.ok = false;
+                            out.messages = Some(vec![
+                                "Failed to analyze project with AI lint".to_string(),
+                                format!("Project: {}", project_name),
+                                format!("Error: {}", e),
+                            ]);
+                            out.next_action_command = "neptune deploy --skip-spec".to_string();
+                            println!("{}", serde_json::to_string_pretty(&out)?);
+                            return Ok(NeptuneCommandOutput::None);
+                        } else {
+                            return Err(e);
+                        }
+                    }
+                };
+                if let Some(pb) = lint_spinner.as_ref() {
+                    pb.finish_and_clear();
+                }
 
-            ai_lint_report = lint_res;
+                ai_lint_report = Some(lint_res);
+            }
         } else {
             let gen_spinner = make_spinner(
                 &self.global_args.output_mode,
@@ -207,7 +214,18 @@ impl Neptune {
             tokio::fs::write(&spec_path, new_spec_pretty.as_bytes()).await?;
 
             project_spec = serde_json::from_value(serde_json::to_value(&gen_res.platform_spec)?)?;
-            ai_lint_report = gen_res.ai_lint_report.clone();
+            if deploy_args.skip_lint {
+                if self.global_args.output_mode != OutputMode::Json {
+                    ui.step("", "Skipping AI lint (--skip-lint)");
+                }
+            } else {
+                ai_lint_report = Some(
+                    gen_res
+                        .ai_lint_report
+                        .clone()
+                        .ok_or_else(|| anyhow!("AI lint report missing from generate response"))?,
+                );
+            }
             start_command = Some(gen_res.start_command.clone());
         }
         tracing::info!("Spec: {:?}", project_spec);
@@ -216,39 +234,45 @@ impl Neptune {
             write_start_command(dir, &cmd).await?;
         }
 
-        if self.global_args.output_mode == OutputMode::Json {
-            if let Some(ref mut out) = json_out {
-                out.ai_lint_report = Some(ai_lint_report.clone());
-            }
-        } else {
-            print_ai_lint_report(&ui, &ai_lint_report, &self.global_args.output_mode);
-        }
-
-        let lint_assessment = assess_lint_gate(
-            &ai_lint_report,
-            self.global_args.allow_ai_errors,
-            self.global_args.allow_ai_warnings,
-        );
-        if lint_assessment.blocking {
-            if let Some(mut out) = json_out.take() {
-                let mut msgs = out.messages.unwrap_or_default();
-                msgs.extend(lint_assessment.reasons.clone());
-                msgs.push("Deployment aborted before build due to AI lint findings.".to_string());
-                out.messages = Some(msgs);
-                out.ok = false;
-                if out.ai_lint_report.is_none() {
-                    out.ai_lint_report = Some(ai_lint_report.clone());
+        if let Some(ref report) = ai_lint_report {
+            if self.global_args.output_mode == OutputMode::Json {
+                if let Some(ref mut out) = json_out {
+                    out.ai_lint_report = Some(report.clone());
                 }
-                out.next_action_command = "neptune lint".to_string();
-                println!("{}", serde_json::to_string_pretty(&out)?);
             } else {
-                for reason in &lint_assessment.reasons {
-                    ui.warn(format!("Blocking: {}", reason));
-                }
-                ui.info("Use --allow-ai-errors / --allow-ai-warnings to override.");
-                ui.info("Deployment aborted before build; resolve findings or override to continue.");
+                print_ai_lint_report(&ui, report, &self.global_args.output_mode);
             }
-            return Ok(NeptuneCommandOutput::None);
+
+            let lint_assessment = assess_lint_gate(
+                report,
+                self.global_args.allow_ai_errors,
+                self.global_args.allow_ai_warnings,
+            );
+            if lint_assessment.blocking {
+                if let Some(mut out) = json_out.take() {
+                    let mut msgs = out.messages.unwrap_or_default();
+                    msgs.extend(lint_assessment.reasons.clone());
+                    msgs.push(
+                        "Deployment aborted before build due to AI lint findings.".to_string(),
+                    );
+                    out.messages = Some(msgs);
+                    out.ok = false;
+                    if out.ai_lint_report.is_none() {
+                        out.ai_lint_report = Some(report.clone());
+                    }
+                    out.next_action_command = "neptune lint".to_string();
+                    println!("{}", serde_json::to_string_pretty(&out)?);
+                } else {
+                    for reason in &lint_assessment.reasons {
+                        ui.warn(format!("Blocking: {}", reason));
+                    }
+                    ui.info("Use --allow-ai-errors / --allow-ai-warnings to override.");
+                    ui.info(
+                        "Deployment aborted before build; resolve findings or override to continue.",
+                    );
+                }
+                return Ok(NeptuneCommandOutput::None);
+            }
         }
 
         // Ask for confirmation (interactive only in non-JSON mode)

@@ -3,6 +3,7 @@ use std::path::Path;
 use anyhow::{anyhow, Result};
 use cargo_shuttle::args::OutputMode;
 use serde::Serialize;
+use serde_json::Value;
 
 use crate::{ui::AiUi, Neptune, NeptuneCommandOutput};
 
@@ -33,6 +34,29 @@ impl Neptune {
         let ui = AiUi::new(&self.global_args.output_mode, self.global_args.verbose);
         if self.global_args.output_mode != OutputMode::Json {
             ui.header("AI Lint");
+        }
+
+        let spec_path = self.global_args.working_directory.join("neptune.json");
+        if !spec_path.exists() {
+            let missing_spec_message = format!(
+                "Missing {}. Run `neptune generate spec` before linting.",
+                spec_path.display()
+            );
+            if self.global_args.output_mode == OutputMode::Json {
+                let payload = serde_json::json!({
+                    "ok": false,
+                    "project": project_name.clone(),
+                    "ai_lint_report": Value::Null,
+                    "messages": [missing_spec_message.clone()],
+                    "next_action_command": "neptune generate spec",
+                });
+                println!("{}", serde_json::to_string_pretty(&payload)?);
+            } else {
+                ui.warn("neptune.json not found in the current workspace");
+                ui.info(format!("Expected to find {}", spec_path.display()));
+                ui.info("Run `neptune generate spec` to create it before linting.");
+            }
+            return Err(anyhow!(missing_spec_message));
         }
 
         let spinner = make_spinner(

@@ -36,9 +36,21 @@ pub async fn generate_platform_spec(
     dir: &Path,
     project_name: &str,
 ) -> Result<GenerateResponse> {
-    let bytes: Vec<u8> =
+    let project_archive: Vec<u8> =
         neptune.create_build_context(dir, ArchiveType::Zip, None::<Vec<&Path>>, true)?;
-    let gen_res = neptune.client.generate(bytes, project_name).await?;
+    let mut gen_res = neptune
+        .client
+        .generate(project_archive.clone(), project_name)
+        .await?;
+
+    if gen_res.ai_lint_report.is_none() {
+        tracing::warn!(
+            "AI lint report missing from /v1/generate response, running dedicated lint request"
+        );
+        let lint_report = neptune.client.ai_lint(project_archive).await?;
+        gen_res.ai_lint_report = Some(lint_report);
+    }
+
     Ok(gen_res)
 }
 

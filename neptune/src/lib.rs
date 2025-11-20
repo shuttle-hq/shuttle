@@ -95,6 +95,7 @@ impl Neptune {
             Status(status_args) => self.status(status_args).await,
             Delete => self.delete().await,
             Lint => self.lint().await,
+            Schema => self.project_schema().await,
         }
     }
 

@@ -138,6 +138,8 @@ pub enum NeptuneCommand {
     Delete,
     /// Run the AI linter against the current project
     Lint,
+    /// Fetch the ProjectSpec JSON schema
+    Schema,
 }
 
 #[derive(Args, Clone, Debug, Default)]
@@ -206,6 +208,9 @@ pub struct DeployArgs {
     /// Skip spec generation and reuse the existing neptune.json
     #[arg(long = "skip-spec")]
     pub skip_spec: bool,
+    /// Skip AI lint before deploying
+    #[arg(long = "skip-lint")]
+    pub skip_lint: bool,
     /// Provide environment variables to your build
     #[arg(long, short)]
     pub env: Vec<String>,

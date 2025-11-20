@@ -4,7 +4,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use cargo_shuttle::args::OutputMode;
 use clap::CommandFactory;
 use clap_complete::{generate, Shell};
@@ -252,7 +252,10 @@ impl Neptune {
             }
         }
 
-        let lint_report = gen_res.ai_lint_report.clone();
+        let lint_report = gen_res
+            .ai_lint_report
+            .clone()
+            .ok_or_else(|| anyhow!("AI lint report missing from generate response"))?;
         if let Some(ref mut out) = json_out {
             out.ai_lint_report = Some(lint_report.clone());
         } else {

@@ -6,7 +6,7 @@ use serde_json::Value;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GenerateResponse {
     pub platform_spec: Spec,
-    pub ai_lint_report: AiLintReport,
+    pub ai_lint_report: Option<AiLintReport>,
     pub start_command: String,
 }
 

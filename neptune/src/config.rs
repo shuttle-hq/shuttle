@@ -164,30 +164,26 @@ impl ConfigHandler {
     /// Create a new API client based on this config's values
     pub fn make_api_client(&self) -> Result<NeptuneClient> {
         let config = self.config();
+        let default_headers = Some(
+            HeaderMap::try_from(&HashMap::from([(
+                X_CARGO_SHUTTLE_VERSION.clone(),
+                crate::VERSION.to_owned(),
+            )]))
+            .unwrap(),
+        );
+
         Ok(NeptuneClient {
             api_client: ShuttleApiClient::new(
                 config.api_url.clone(),
                 config.api_key.clone(),
-                Some(
-                    HeaderMap::try_from(&HashMap::from([(
-                        X_CARGO_SHUTTLE_VERSION.clone(),
-                        crate::VERSION.to_owned(),
-                    )]))
-                    .unwrap(),
-                ),
+                default_headers.clone(),
                 None,
             ),
             ai_service_client: ShuttleApiClient::new(
-                config.ai_url.clone(), // TODO
+                config.ai_url.clone(),
                 config.api_key.clone(),
-                Some(
-                    HeaderMap::try_from(&HashMap::from([(
-                        X_CARGO_SHUTTLE_VERSION.clone(),
-                        crate::VERSION.to_owned(),
-                    )]))
-                    .unwrap(),
-                ),
-                None,
+                default_headers,
+                Some(300),
             ),
         })
     }

@@ -269,6 +269,7 @@ impl Neptune {
                     &DockerBuilderOptions {
                         name: Some(image_name.clone()),
                         print_dockerfile: true,
+                        platform: vec![String::from("linux/amd64")],
                         tags: vec![String::from(&unique_tag)],
                         no_error_without_start: true,
                         ..Default::default()

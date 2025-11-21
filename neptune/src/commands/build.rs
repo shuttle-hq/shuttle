@@ -192,7 +192,7 @@ impl Neptune {
             let tar: Vec<u8> = self.create_build_context(
                 wd,
                 ArchiveType::Tar,
-                Some(vec![Path::new(".dockerfile")]),
+                Some(vec![Path::new("Dockerfile")]),
                 false,
             )?;
             let mut logs = vec![];
@@ -200,6 +200,7 @@ impl Neptune {
                 .build_image(
                     bollard::image::BuildImageOptions {
                         dockerfile: String::from("Dockerfile"),
+                        platform: String::from("linux/amd64"),
                         t: String::from(&image_with_tag),
                         ..Default::default()
                     },

@@ -276,18 +276,15 @@ impl LocalProvisioner {
                             let state =
                                 container.state.as_ref().context("container has no state")?;
 
-                            if state.running.unwrap_or(false) {
-                                sleep(Duration::from_millis(RETRY_DELAY_MS)).await;
-                                continue;
-                            } else if state.status.as_deref() == Some("exited")
+                            if state.status.as_deref() == Some("exited")
                                 || state.status.as_deref() == Some("dead")
                             {
                                 bail!("container '{container_name}' has stopped unexpectedly with status: {:?}, exit code: {:?}", 
                                       state.status, state.exit_code);
-                            } else {
-                                sleep(Duration::from_millis(RETRY_DELAY_MS)).await;
-                                continue;
                             }
+
+                            sleep(Duration::from_millis(RETRY_DELAY_MS)).await;
+                            continue;
                         }
                         Err(e) => {
                             bail!("failed to inspect container '{container_name}': {e}");

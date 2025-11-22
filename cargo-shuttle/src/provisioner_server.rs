@@ -276,9 +276,7 @@ impl LocalProvisioner {
                             let state =
                                 container.state.as_ref().context("container has no state")?;
 
-                            if state.status.as_deref() == Some("exited")
-                                || state.status.as_deref() == Some("dead")
-                            {
+                            if !state.running.unwrap_or(false) {
                                 bail!("container '{container_name}' has stopped unexpectedly with status: {:?}, exit code: {:?}", 
                                       state.status, state.exit_code);
                             }

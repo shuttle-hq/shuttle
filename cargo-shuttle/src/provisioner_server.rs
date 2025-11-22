@@ -246,9 +246,13 @@ impl LocalProvisioner {
     async fn wait_for_ready(&self, container_name: &str, is_ready_cmd: Vec<String>) -> Result<()> {
         const MAX_RETRIES: u32 = 60;
         const RETRY_DELAY_MS: u64 = 500;
-        
+
         for attempt in 0..MAX_RETRIES {
-            trace!("waiting for '{container_name}' to be ready for connections (attempt {}/{})", attempt + 1, MAX_RETRIES);
+            trace!(
+                "waiting for '{container_name}' to be ready for connections (attempt {}/{})",
+                attempt + 1,
+                MAX_RETRIES
+            );
 
             let config = CreateExecOptions {
                 cmd: Some(is_ready_cmd.clone()),
@@ -258,21 +262,26 @@ impl LocalProvisioner {
             };
 
             let exec_result = self.docker.create_exec(container_name, config).await;
-            
+
             let exec_id = match exec_result {
                 Ok(CreateExecResults { id }) => id,
-                Err(bollard::errors::Error::DockerResponseServerError { status_code: 409, message }) => {
+                Err(bollard::errors::Error::DockerResponseServerError {
+                    status_code: 409,
+                    message,
+                }) => {
                     trace!("container '{container_name}' not ready yet: {message}");
-                    
+
                     match self.docker.inspect_container(container_name, None).await {
                         Ok(container) => {
-                            let state = container.state.as_ref().context("container has no state")?;
-                            
+                            let state =
+                                container.state.as_ref().context("container has no state")?;
+
                             if state.running.unwrap_or(false) {
                                 sleep(Duration::from_millis(RETRY_DELAY_MS)).await;
                                 continue;
-                            } else if state.status.as_deref() == Some("exited") || 
-                                      state.status.as_deref() == Some("dead") {
+                            } else if state.status.as_deref() == Some("exited")
+                                || state.status.as_deref() == Some("dead")
+                            {
                                 bail!("container '{container_name}' has stopped unexpectedly with status: {:?}, exit code: {:?}", 
                                       state.status, state.exit_code);
                             } else {
@@ -310,7 +319,7 @@ impl LocalProvisioner {
 
             sleep(Duration::from_millis(RETRY_DELAY_MS)).await;
         }
-        
+
         bail!(
             "container '{container_name}' did not become ready within {} seconds",
             (MAX_RETRIES as u64 * RETRY_DELAY_MS) / 1000

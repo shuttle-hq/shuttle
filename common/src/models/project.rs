@@ -115,7 +115,9 @@ pub struct ProjectUpdateRequest {
     pub config: Option<serde_json::Value>,
 }
 
-#[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize, EnumString)]
+#[derive(
+    Debug, Default, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, EnumString,
+)]
 #[serde(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]

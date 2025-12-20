@@ -173,12 +173,44 @@ pub enum Command {
     /// Commands for the Shuttle MCP server
     #[command(subcommand)]
     Mcp(McpCommand),
+    /// AI assistant commands
+    #[command(subcommand)]
+    Ai(AiCommand),
 }
 
 #[derive(Subcommand)]
 pub enum McpCommand {
     /// Start the Shuttle MCP server
     Start,
+}
+
+#[derive(Subcommand, Clone, Debug)]
+pub enum AiCommand {
+    /// Generate AI coding assistant rules for your project
+    Rules(AiRulesArgs),
+}
+
+#[derive(Parser, Clone, Debug)]
+pub struct AiRulesArgs {
+    /// Generate rules for Cursor AI
+    #[arg(long, conflicts_with_all = ["claude", "windsurf", "gemini", "codex"])]
+    pub cursor: bool,
+
+    /// Generate rules for Claude Code
+    #[arg(long, conflicts_with_all = ["cursor", "windsurf", "gemini", "codex"])]
+    pub claude: bool,
+
+    /// Generate rules for Windsurf AI
+    #[arg(long, conflicts_with_all = ["cursor", "claude", "gemini", "codex"])]
+    pub windsurf: bool,
+
+    /// Generate rules for Gemini CLI
+    #[arg(long, conflicts_with_all = ["cursor", "claude", "windsurf", "codex"])]
+    pub gemini: bool,
+
+    /// Generate rules for Codex CLI
+    #[arg(long, conflicts_with_all = ["cursor", "claude", "windsurf", "gemini"])]
+    pub codex: bool,
 }
 
 #[derive(Subcommand)]

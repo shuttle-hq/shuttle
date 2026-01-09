@@ -397,6 +397,9 @@ pub struct RunArgs {
     /// Don't display timestamps and log origin tags
     #[arg(long)]
     pub raw: bool,
+    /// Suppress non-error output
+    #[arg(long, short = 'q')]
+    pub quiet: bool,
 
     #[command(flatten)]
     pub secret_args: SecretsArgs,

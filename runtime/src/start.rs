@@ -14,6 +14,11 @@ fn initial_args_and_env_check() -> anyhow::Result<()> {
         anyhow::bail!("SHUTTLE_ENV is required to be set on shuttle.dev");
     }
 
+    // Server-side authentication check to prevent login bypass
+    if std::env::var("SHUTTLE_AUTH_TOKEN").is_err() {
+        anyhow::bail!("Authentication required. Please login with `shuttle login`");
+    }
+
     Ok(())
 }
 
